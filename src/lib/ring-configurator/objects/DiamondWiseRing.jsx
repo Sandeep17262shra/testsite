@@ -114,11 +114,12 @@ function rampHeadScale(carat, ramp, scaleAt) {
 
   const start = scaleAt(fromCarat);
   const end = scaleAt(toCarat);
-  const capped = Math.min(weight, toCarat);
   const span = Math.cbrt(toCarat) - Math.cbrt(fromCarat);
   if (span <= 0) return start;
 
-  const progress = (Math.cbrt(capped) - Math.cbrt(fromCarat)) / span;
+  // No cap: continue the same cube-root ramp past toCarat so the head
+  // keeps growing when the user selects carats above 5.
+  const progress = (Math.cbrt(weight) - Math.cbrt(fromCarat)) / span;
   return start + (end - start) * progress;
 }
 
