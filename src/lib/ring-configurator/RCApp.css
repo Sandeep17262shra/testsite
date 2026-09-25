@@ -358,7 +358,7 @@ button {
   padding: 8px 14px;
 }
 
-.gb-metal-option span {
+.gb-metal-option span:not(.gb-delta-label) {
   width: 20px;
   height: 20px;
   border-radius: 50%;
@@ -1239,7 +1239,7 @@ button:focus{
   background-color: #575757 !important;
 }
 .cnfm-btn{
-  background-color: #575757 !important;
+  background-color: #303030 !important;
 }
 
 .summary-button-section .summary-button img{
@@ -3912,7 +3912,7 @@ img.rotate-minus-90{
 }
 
 .theme3-ring-type-price {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 700;
   color: #111111;
   letter-spacing: -0.2px;
@@ -4675,7 +4675,7 @@ img.rotate-minus-90{
   justify-content: center;
 }
 
-.theme3-root .gb-metal-option span {
+.theme3-root .gb-metal-option span:not(.gb-delta-label) {
   width: 16px;
   height: 16px;
 }
@@ -6024,11 +6024,25 @@ img.rotate-minus-90{
 }
 
 .gb-carat-slider-tick {
-  font-size: 12px;
-  color: #222222;
+  font-size: 13px;
+  color: #444444;
   font-weight: 400;
   white-space: nowrap;
   line-height: 1;
+}
+
+.gb-carat-slider-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #999999;
+  display: block;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.gb-carat-slider-tick-item:hover .gb-carat-slider-dot {
+  background: #333333;
+  transform: scale(1.4);
 }
 
 /* Order Summary Card */

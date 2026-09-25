@@ -36,7 +36,7 @@ export const getStoreKey = (parentUrl) => {
 };
 
 const FALLBACK_OPTIONS = {
-  metalColors: ["White Gold", "Yellow Gold", "Rose Gold", "Platinum", "Titanium", "Silver"],
+  metalColors: ["White Gold", "Yellow Gold", "Rose Gold", "Platinum", "Titanium", "Sterling Silver"],
   metalPurities: ["9K", "10K", "14K", "18K"],
   shankStyles: ["PLAIN", "PLATE-PRONG", "KNIFE-EDGE", "CHANNEL", "CATHEDRAL", "SPLIT", "TWISTED", "WIDE-PLAIN", "FRENCH-PAVE", "PAVE-STONES", "8-STONES", "MULTI-ROW", "TWISTED-2", "FLUTED", "BRAIDED", "CATHEDRAL-SIDE-STONE", "SIDE-BEZEL-STONES"],
   headStyles: ["4-PRONG", "6-PRONG", "HIDDEN-HALO", "DOUBLE-HALO", "BEZEL", "HALO", "OVAL", "TULIP", "TWO-STONE"],
@@ -75,7 +75,7 @@ const BAND_BY_NAME = {
 const apiName = (name) => String(name ?? "").trim().toUpperCase().replace(/[ÉÈÊ]/g, "E");
 const active = (item) => String(item?.status ?? "active").toLowerCase() === "active";
 
-const emptyConfig = () => ({ metalPrices: { Titanium: 0, Silver: 0 }, shankPrices: {}, headPrices: {}, matchingBandPrices: {}, shapePrices: {}, labDiamondPrices: {}, naturalDiamondPrices: {}, coloredDiamondExtraPrices: {}, gemstoneExtraPrices: {}, engravingPrice: 0, ringSizePrices: {}, availableOptions: FALLBACK_OPTIONS });
+const emptyConfig = () => ({ metalPrices: { Titanium: 0, "Sterling Silver": 0, Silver: 0 }, shankPrices: {}, headPrices: {}, matchingBandPrices: {}, shapePrices: {}, labDiamondPrices: {}, naturalDiamondPrices: {}, coloredDiamondExtraPrices: {}, gemstoneExtraPrices: {}, engravingPrice: 0, ringSizePrices: {}, availableOptions: FALLBACK_OPTIONS });
 
 const catalogueToConfig = (catalogue) => {
   const config = emptyConfig();
@@ -107,7 +107,7 @@ const catalogueToConfig = (catalogue) => {
     const purity = String(item.name ?? "").match(/\b(9K|10K|14K|18K)\b/i)?.[1]?.toUpperCase()
       || (/platinum/i.test(item.name ?? "") ? "Platinum" : "")
       || (/titanium/i.test(item.name ?? "") ? "Titanium" : "")
-      || (/silver/i.test(item.name ?? "") ? "Silver" : "");
+      || (/silver/i.test(item.name ?? "") ? "Sterling Silver" : "");
     if (purity && config.metalPrices[purity] === undefined) config.metalPrices[purity] = Number(item.price) || 0;
   });
 
@@ -119,7 +119,7 @@ const catalogueToConfig = (catalogue) => {
   if (metalNames.some((n) => /rose\s*gold/i.test(n))) activeMetals.push("Rose Gold");
   if (metalNames.some((n) => /platinum/i.test(n))) activeMetals.push("Platinum");
   if (metalNames.some((n) => /titanium/i.test(n))) activeMetals.push("Titanium");
-  if (metalNames.some((n) => /silver/i.test(n))) activeMetals.push("Silver");
+  if (metalNames.some((n) => /silver/i.test(n))) activeMetals.push("Sterling Silver");
 
   // Visibility is controlled solely by API status. Compatibility is evaluated
   // by the picker after this step and may disable an otherwise active option.
@@ -127,7 +127,7 @@ const catalogueToConfig = (catalogue) => {
   options.headStyles = heads.map(({ value }) => value);
   options.shankStyles = shanks.map(({ value }) => value);
   options.matchingBandStyles = bands.map(({ value }) => value);
-  options.metalPurities = Object.keys(config.metalPrices).filter((value) => !["Platinum", "Titanium", "Silver"].includes(value));
+  options.metalPurities = Object.keys(config.metalPrices).filter((value) => !["Platinum", "Titanium", "Silver", "Sterling Silver"].includes(value));
 
   const rawRules = Array.isArray(catalogue?.stones)
     ? catalogue.stones

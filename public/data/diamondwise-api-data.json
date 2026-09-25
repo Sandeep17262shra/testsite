@@ -84,7 +84,7 @@
       "product_type": "head",
       "product_id": "H011",
       "name": "Amelie",
-      "price": 0,
+      "price": 1250,
       "currency": "USD",
       "status": "active"
     },
@@ -92,7 +92,7 @@
       "product_type": "head",
       "product_id": "H012",
       "name": "Elan",
-      "price": 0,
+      "price": 1600,
       "currency": "USD",
       "status": "active"
     },
@@ -100,7 +100,7 @@
       "product_type": "head",
       "product_id": "H013",
       "name": "Elanora",
-      "price": 0,
+      "price": 1250,
       "currency": "USD",
       "status": "active"
     },
@@ -108,7 +108,7 @@
       "product_type": "head",
       "product_id": "H014",
       "name": "Estelle",
-      "price": 0,
+      "price": 2250,
       "currency": "USD",
       "status": "active"
     },
@@ -116,7 +116,7 @@
       "product_type": "head",
       "product_id": "H015",
       "name": "Celine",
-      "price": 0,
+      "price": 2000,
       "currency": "USD",
       "status": "active"
     },
@@ -260,7 +260,7 @@
       "product_type": "shank",
       "product_id": "S018",
       "name": "Amelie",
-      "price": 1250,
+      "price": 0,
       "currency": "USD",
       "status": "active"
     },
@@ -268,7 +268,7 @@
       "product_type": "shank",
       "product_id": "S019",
       "name": "Elan",
-      "price": 1600,
+      "price": 0,
       "currency": "USD",
       "status": "active"
     },
@@ -276,23 +276,23 @@
       "product_type": "shank",
       "product_id": "S020",
       "name": "Elanora",
-      "price": 1250,
+      "price": 0,
       "currency": "USD",
       "status": "active"
     },
     {
       "product_type": "shank",
       "product_id": "S021",
-      "name": "Aurelie",
-      "price": 2250,
+      "name": "Estelle",
+      "price": 0,
       "currency": "USD",
       "status": "active"
     },
     {
       "product_type": "shank",
       "product_id": "S022",
-      "name": "Isadora",
-      "price": 2000,
+      "name": "Celine",
+      "price": 0,
       "currency": "USD",
       "status": "active"
     },

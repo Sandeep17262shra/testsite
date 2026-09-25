@@ -455,17 +455,6 @@ const THREE_STONE_SHAPE_TO_HEAD = {
   emerald: { head: "BAGUETTE", threestone: "baguette" },
 };
 
-// Independent side-stone shape picker for three-stone rings - decoupled from
-// the center stone's own shape (handleShape no longer forces ringHead to
-// follow the center shape once a three-stone head is active; this list is
-// the source of truth for the dedicated "Side Stone Shape" row instead).
-const SIDE_STONE_SHAPE_OPTIONS = [
-  { label: "Round", head: "HALF-MOON", threestone: "half-moon" },
-  { label: "Trapezoid", head: "TRAPEZOID", threestone: "trapezoid" },
-  { label: "Oval", head: "OVAL", threestone: "oval" },
-  { label: "Pear", head: "PEAR", threestone: "pear" },
-  { label: "Baguette", head: "BAGUETTE", threestone: "baguette" },
-];
 // Hidden Halo now has its own per-shape head model for every stone shape
 // (see objects/Head.jsx shapeDataForHiddenHalo), so it is no longer round-only.
 // Single Halo and Double Halo still only have a round head model.
@@ -504,9 +493,9 @@ const THEME3_SECTION_GUIDE_FEATURE = {
 };
 
 const THEME3_SECTION_CTA_LABEL = {
-  band: "Choose Shank",
-  setting: "Choose Head",
-  shape: "Choose Diamond",
+  band: "Checkout",
+  setting: "Checkout",
+  shape: "Checkout",
 };
 
 const THEME3_SECTION_ICON = {
@@ -701,7 +690,7 @@ function Theme3SectionHeader({ step, total, title, sectionId, isActive = false, 
   );
 }
 
-function CardOption({ active, label, image, imageClassName = "", spritePosition, onClick, disabled = false, className = "", onMouseEnter, onMouseLeave, badge = null }) {
+function CardOption({ active, label, image, imageClassName = "", spritePosition, onClick, disabled = false, className = "", onMouseEnter, onMouseLeave, badge = null, delta = null, parent = null }) {
   return (
     <button
       type="button"
@@ -733,6 +722,9 @@ function CardOption({ active, label, image, imageClassName = "", spritePosition,
         <img className={imageClassName} src={image} alt="" />
       ) : null}
       <span style={T3_BODY_STYLE}>{label}</span>
+      <span style={{ display: "block", fontSize: "11px", fontWeight: 600, color: "#555", lineHeight: 1.2, marginTop: "2px", minHeight: "14px" }}>
+        {!active && delta !== null && delta !== 0 ? `${delta > 0 ? "+" : ""}${formatStoreCurrency(delta, parent)}` : ""}
+      </span>
     </button>
   );
 }
@@ -786,7 +778,8 @@ function CaratSlider({
       <div className="gb-carat-slider-ticks">
         {stops.map((stop, idx) => {
           const leftPos = stops.length > 1 ? `calc(9px + (100% - 18px) * (${idx} / ${totalStops}))` : "50%";
-          const labelText = String(stop);
+          const stopNum = Number(stop);
+          const isWholeNumber = Number.isInteger(stopNum) || Math.abs(stopNum - Math.round(stopNum)) < 1e-4;
 
           return (
             <div
@@ -797,10 +790,15 @@ function CaratSlider({
                 transform: "translateX(-50%)",
               }}
               onClick={() => onChange(stop)}
+              title={`${stop} ct`}
             >
-              <span className="gb-carat-slider-tick">
-                {labelText}
-              </span>
+              {isWholeNumber ? (
+                <span className="gb-carat-slider-tick">
+                  {Math.round(stopNum)}
+                </span>
+              ) : (
+                <span className="gb-carat-slider-dot" aria-hidden="true" />
+              )}
             </div>
           );
         })}
@@ -833,7 +831,7 @@ function CaratSlider({
 
 function CaratOptionRow({ title, guide, value, onChange, stops, min, max, step }) {
   const guideMeta = guide ? getTheme3GuideMeta(guide) : null;
-  const displayVal = value !== undefined && value !== null ? `${Number(value)}ct` : "";
+  const displayVal = value !== undefined && value !== null ? `${Number(value)} ct` : "";
 
   return (
     <section
@@ -1458,20 +1456,15 @@ const RingCustomizer = forwardRef(({
   const handleShape = (option) => {
     if (diamondWiseDesignId && option.value !== (selectedDiamondWiseDesign?.defaultShape || "marquise")) return;
     if (ROUND_ONLY_HEAD_STYLES.includes(headStyle) && option.value !== "round") return;
-    if (headStyle === "tulip" && !TULIP_COMPATIBLE_SHAPES.includes(option.value)) return;
-    // Center shape and side-stone shape are picked separately for three-stone
-    // rings now - see handleSideStoneShape - so this only gates which center
-    // shapes are selectable, it no longer touches ringHead/threestone.
-    if (headStyle === "three-stone" && !THREE_STONE_SHAPE_TO_HEAD[option.value]) return;
+    if (headStyle === "three-stone") {
+      const threeStoneSelection = THREE_STONE_SHAPE_TO_HEAD[option.value];
+      if (!threeStoneSelection) return;
+      setRingHead(threeStoneSelection.head);
+      setThreestone(threeStoneSelection.threestone);
+      applyRingPrice({ nextHead: threeStoneSelection.head });
+    }
 
     setShape(option.value);
-    setSummaryBlink(true);
-  };
-
-  const handleSideStoneShape = (option) => {
-    setRingHead(option.head);
-    setThreestone(option.threestone);
-    applyRingPrice({ nextHead: option.head });
     setSummaryBlink(true);
   };
 
@@ -2129,10 +2122,10 @@ const RingCustomizer = forwardRef(({
 
   const isShapeDisabled = (shapeValue) => {
     if (diamondWiseDesignId) return shapeValue !== (selectedDiamondWiseDesign?.defaultShape || "marquise");
-    if (!isShapeCompatible(parent, ringHead, shapeValue)) return true;
     if (ROUND_ONLY_HEAD_STYLES.includes(headStyle)) return shapeValue !== "round";
     if (headStyle === "tulip") return !TULIP_COMPATIBLE_SHAPES.includes(shapeValue);
     if (headStyle === "three-stone") return !THREE_STONE_SHAPE_TO_HEAD[shapeValue];
+    if (!isShapeCompatible(parent, ringHead, shapeValue)) return true;
     return false;
   };
 
@@ -2221,6 +2214,11 @@ const RingCustomizer = forwardRef(({
     [settingSubtotal, matchingBandPrice]
   );
 
+  const selectedStonePrice = useMemo(() => {
+    if (stoneTotal && Number(stoneTotal) > 0) return Number(stoneTotal);
+    return calculateTheme3DiamondPrice();
+  }, [stoneTotal, calculateTheme3DiamondPrice]);
+
   const displayedHeadShankPrice = useMemo(() => {
     if (hoveredHead && typeof hoveredHead.delta === "number") {
       return Math.max(0, selectedHeadShankPrice + hoveredHead.delta);
@@ -2230,6 +2228,63 @@ const RingCustomizer = forwardRef(({
     }
     return selectedHeadShankPrice;
   }, [selectedHeadShankPrice, hoveredHead, hoveredShank]);
+
+  // Pre-compute price deltas for every head/shank/metal card so they show
+  // +/- price differences relative to the current selection at all times.
+  const headDeltaMap = useMemo(() => {
+    const effectiveMatchingBandStyle = ringMatchingBand || ringSideSetting;
+    const current = calculateFinalRingPrice(metal, ringHead, ringShank, effectiveMatchingBandStyle, ringBand, bandWidth, styleShape, engraving, parent);
+    const map = {};
+    availableHeadChoices.forEach(({ kind, value }) => {
+      if (kind === "diamondwise") {
+        const hov = calculateFinalRingPrice(metal, value.headId, value.shankId, "PLAIN", "No", bandWidth, styleShape, engraving, parent);
+        const hovTotal = (hov?.breakdown?.ringShankPrice || 0) + (hov?.breakdown?.ringHeadStylePrice || 0) + (hov?.breakdown?.ringSideSettingPrice || 0) + (hov?.breakdown?.metalPrice || 0) + (hov?.breakdown?.engravingPrice || 0);
+        const curTotal = (current?.breakdown?.ringShankPrice || 0) + (current?.breakdown?.ringHeadStylePrice || 0) + (current?.breakdown?.ringSideSettingPrice || 0) + (current?.breakdown?.metalPrice || 0) + (current?.breakdown?.engravingPrice || 0);
+        map[value.headId] = hovTotal - curTotal;
+      } else {
+        const hov = calculateFinalRingPrice(metal, value.head, ringShank, effectiveMatchingBandStyle, ringBand, bandWidth, styleShape, engraving, parent);
+        map[value.head] = hov.breakdown.ringHeadStylePrice - current.breakdown.ringHeadStylePrice;
+      }
+    });
+    return map;
+  }, [availableHeadChoices, metal, ringHead, ringShank, ringMatchingBand, ringSideSetting, ringBand, bandWidth, styleShape, engraving, parent]);
+
+  const shankDeltaMap = useMemo(() => {
+    const calcTotal = (shank, side) => {
+      const bandStyle = matchingBandQuantity > 0 ? (ringMatchingBand || side) : side;
+      const p = calculateFinalRingPrice(metal, ringHead, shank, bandStyle, ringBand, bandWidth, styleShape, engraving, parent);
+      return p.breakdown.ringShankPrice + p.breakdown.ringSideSettingPrice + p.breakdown.metalPrice + p.breakdown.matchingBandPrice + p.breakdown.engravingPrice;
+    };
+    const currentTotal = calcTotal(ringShank, ringSideSetting);
+    const map = {};
+    availableShankChoices.forEach(({ kind, value }) => {
+      if (kind === "diamondwise") {
+        const hov = calculateFinalRingPrice(metal, ringHead, value.shankId, "PLAIN", "No", bandWidth, styleShape, engraving, parent);
+        const hovTotal = (hov?.breakdown?.ringShankPrice || 0) + (hov?.breakdown?.ringSideSettingPrice || 0) + (hov?.breakdown?.metalPrice || 0) + (hov?.breakdown?.matchingBandPrice || 0) + (hov?.breakdown?.engravingPrice || 0);
+        map[value.shankId] = hovTotal - currentTotal;
+      } else {
+        map[value.shank] = calcTotal(value.shank, value.sideSetting) - currentTotal;
+      }
+    });
+    return map;
+  }, [availableShankChoices, metal, ringHead, ringShank, ringSideSetting, ringMatchingBand, ringBand, bandWidth, styleShape, engraving, parent, matchingBandQuantity]);
+
+  const metalColorDeltaMap = useMemo(() => {
+    const effectiveMatchingBandStyle = ringMatchingBand || ringSideSetting;
+    const current = calculateFinalRingPrice(metal, ringHead, ringShank, effectiveMatchingBandStyle, ringBand, bandWidth, styleShape, engraving, parent);
+    const map = {};
+    availableMetalColors.forEach((option) => {
+      let targetMetal;
+      if (option.platinum || option.fixedPurity) {
+        targetMetal = option.fixedPurity || "Platinum";
+      } else {
+        targetMetal = purityOptions.includes(metal) ? metal : availablePurities.includes("14K") ? "14K" : availablePurities[0] || "14K";
+      }
+      const hov = calculateFinalRingPrice(targetMetal, ringHead, ringShank, effectiveMatchingBandStyle, ringBand, bandWidth, styleShape, engraving, parent);
+      map[option.value] = hov.breakdown.metalPrice - current.breakdown.metalPrice;
+    });
+    return map;
+  }, [availableMetalColors, metal, ringHead, ringShank, ringMatchingBand, ringSideSetting, ringBand, bandWidth, styleShape, engraving, parent, purityOptions, availablePurities]);
 
   useEffect(() => {
     if (!isDiamondPreviewFlow && diamondWiseDesignId) {
@@ -2992,6 +3047,7 @@ const RingCustomizer = forwardRef(({
 
   useImperativeHandle(ref, () => ({
     openResetPopup: handleReset,
+    handleReset,
     scrollToTheme3Section: handleTheme3SectionClick,
   }));
 
@@ -3137,8 +3193,8 @@ const RingCustomizer = forwardRef(({
     const ringTitle = selectedDiamondWiseDesign
       ? [
           (dwShankLabel || dwHeadLabel) && (dwShankLabel || dwHeadLabel),
-          displayShapeLabel,
           `${Number(diamondSize || 0).toFixed(2)} ct`,
+          displayShapeLabel,
           stoneColorLabel,
           stoneOriginTypeLabel,
           primaryMetalLabel,
@@ -3147,8 +3203,8 @@ const RingCustomizer = forwardRef(({
       : [
           displayStyleLabel,
           displaySettingLabel,
-          displayShapeLabel,
           `${Number(diamondSize || 0).toFixed(2)} ct`,
+          displayShapeLabel,
           stoneColorLabel,
           stoneOriginTypeLabel,
           primaryMetalLabel,
@@ -3453,14 +3509,14 @@ return (
                 showHoverDelta={false}
                 titleExtra={
                   <span className="theme3-ring-type-price">
-                    {formatStoreCurrency(displayedHeadShankPrice, parent)}
+                    {formatStoreCurrency(selectedHeadShankPrice, parent)}
                   </span>
                 }
               >
                 {availableHeadChoices.map(({ kind, value }) => kind === "diamondwise" ? (
-                  <CardOption key={value.headId} active={ringHead === value.headId} label={value.headLabel} image={value.headImage || value.image} badge={demoOnlyBadge} className="theme3-image-option" onClick={() => handleDiamondWisePreset(value, "head")} onMouseEnter={() => handleDiamondWiseCardHover(value)} onMouseLeave={handleHeadCardLeave} />
+                  <CardOption key={value.headId} active={ringHead === value.headId} label={value.headLabel} image={value.headImage || value.image} badge={demoOnlyBadge} className="theme3-image-option" onClick={() => handleDiamondWisePreset(value, "head")} onMouseEnter={() => handleDiamondWiseCardHover(value)} onMouseLeave={handleHeadCardLeave} delta={headDeltaMap[value.headId] ?? null} parent={parent} />
                 ) : (
-                  <CardOption key={value.label} active={!selectedDiamondWiseDesign && isSettingActive(value)} label={value.label} image={value.image} className="theme3-image-option" onClick={() => handleSetting(value)} disabled={isSettingDisabled(value)} onMouseEnter={() => handleHeadCardHover(value.head, value.label)} onMouseLeave={handleHeadCardLeave} />
+                  <CardOption key={value.label} active={!selectedDiamondWiseDesign && isSettingActive(value)} label={value.label} image={value.image} className="theme3-image-option" onClick={() => handleSetting(value)} disabled={isSettingDisabled(value)} onMouseEnter={() => handleHeadCardHover(value.head, value.label)} onMouseLeave={handleHeadCardLeave} delta={headDeltaMap[value.head] ?? null} parent={parent} />
                 ))}
               </OptionRow>
             </div>
@@ -3484,37 +3540,44 @@ return (
               titleExtra={
                 noHeadSelected ? (
                   <span className="theme3-ring-type-price">
-                    {formatStoreCurrency(displayedHeadShankPrice, parent)}
+                    {formatStoreCurrency(selectedHeadShankPrice, parent)}
                   </span>
                 ) : null
               }
             >
               {availableShankChoices.map(({ kind, value }) => kind === "diamondwise" ? (
-                <CardOption key={value.shankId} active={ringShank === value.shankId} label={value.shankLabel} image={value.shankImage || value.image} badge={demoOnlyBadge} className="theme3-image-option" onClick={() => handleDiamondWisePreset(value, "shank")} onMouseEnter={() => handleDiamondWiseCardHover(value)} onMouseLeave={handleShankCardLeave} />
+                <CardOption key={value.shankId} active={ringShank === value.shankId} label={value.shankLabel} image={value.shankImage || value.image} badge={demoOnlyBadge} className="theme3-image-option" onClick={() => handleDiamondWisePreset(value, "shank")} onMouseEnter={() => handleDiamondWiseCardHover(value)} onMouseLeave={handleShankCardLeave} delta={shankDeltaMap[value.shankId] ?? null} parent={parent} />
               ) : (
-                <CardOption key={value.shank} active={!selectedDiamondWiseDesign && ringShank === value.shank} label={value.label} image={value.image} className="theme3-image-option" onClick={() => handleStyle(value)} disabled={isStyleDisabled(value)} onMouseEnter={() => handleShankCardHover(value.shank, value.label, value.sideSetting)} onMouseLeave={handleShankCardLeave} />
+                <CardOption key={value.shank} active={!selectedDiamondWiseDesign && ringShank === value.shank} label={value.label} image={value.image} className="theme3-image-option" onClick={() => handleStyle(value)} disabled={isStyleDisabled(value)} onMouseEnter={() => handleShankCardHover(value.shank, value.label, value.sideSetting)} onMouseLeave={handleShankCardLeave} delta={shankDeltaMap[value.shank] ?? null} parent={parent} />
               ))}
             </OptionRow>
             )}
 
             <OptionRow title="Metal" guide="metal-purity" className="theme3-band-metal" price={metalPrice} parent={parent} hovered={hoveredMetalColor}>
-              {availableMetalColors.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  className={`gb-metal-option ${selectedMetalColorValue === option.value ? "active" : ""}`}
-                  onClick={() => handleMetalColor(option)}
-                  onMouseEnter={() => handleMetalColorHover(option)}
-                  onMouseLeave={handleMetalColorLeave}
-                  title={option.label}
-                  style={{
-                    background: option.gradient || option.color,
-                    backgroundColor: option.color,
-                  }}
-                >
-                  <small style={T3_BODY_STYLE}>{option.label}</small>
-                </button>
-              ))}
+              {availableMetalColors.map((option) => {
+                const metalDelta = metalColorDeltaMap[option.value] ?? null;
+                const isActiveMetal = selectedMetalColorValue === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={`gb-metal-option ${isActiveMetal ? "active" : ""}`}
+                    onClick={() => handleMetalColor(option)}
+                    onMouseEnter={() => handleMetalColorHover(option)}
+                    onMouseLeave={handleMetalColorLeave}
+                    title={option.label}
+                    style={{
+                      background: option.gradient || option.color,
+                      backgroundColor: option.color,
+                    }}
+                  >
+                    <small style={T3_BODY_STYLE}>{option.label}</small>
+                    <span className="gb-delta-label" style={{ display: "block", fontSize: "11px", fontWeight: 600, color: "#555", lineHeight: 1.2, marginTop: "2px", minHeight: "14px" }}>
+                      {!isActiveMetal && metalDelta !== null && metalDelta !== 0 ? `${metalDelta > 0 ? "+" : ""}${formatStoreCurrency(metalDelta, parent)}` : ""}
+                    </span>
+                  </button>
+                );
+              })}
             </OptionRow>
 
             {!platinum && !["Titanium", "Silver", "Sterling Silver"].includes(metal) && (
@@ -3754,9 +3817,29 @@ return (
                 data-theme3-section="shape"
                 ref={(node) => { theme3SectionRefs.current.shape = node; }}
               >
+                <section className="gb-option-row theme3-stone-row">
+                  <div
+                    className="gb-option-title"
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      paddingBottom: 0,
+                    }}
+                  >
+                    <span style={T3_SUBHEADER_STYLE}>Stone</span>
+                    <span className="theme3-ring-type-price">
+                      {formatStoreCurrency(selectedStonePrice, parent)}
+                    </span>
+                  </div>
+                </section>
 
                 <OptionRow title="Shape" guide="center-stone-shape" className="theme3-shape-grid" maxOneRow={6}>
-                  {shapeOptions.filter((option) => getAvailableOptions(parent, "diamondShapes").includes(option.value) && isShapeCompatible(parent, ringHead, option.value)).map((option) => (
+                  {shapeOptions.filter((option) => {
+                    if (!getAvailableOptions(parent, "diamondShapes").includes(option.value)) return false;
+                    if (headStyle === "three-stone") return Boolean(THREE_STONE_SHAPE_TO_HEAD[option.value]);
+                    return isShapeCompatible(parent, ringHead, option.value);
+                  }).map((option) => (
                     <CardOption
                       key={option.value}
                       active={shape === option.value}
@@ -3769,19 +3852,6 @@ return (
                     />
                   ))}
                 </OptionRow>
-
-                {headStyle === "three-stone" && (
-                  <OptionRow title="Side Stone Shape" guide="center-stone-shape">
-                    {SIDE_STONE_SHAPE_OPTIONS.map((option) => (
-                      <TextOption
-                        key={option.head}
-                        active={ringHead?.toUpperCase() === option.head}
-                        label={option.label}
-                        onClick={() => handleSideStoneShape(option)}
-                      />
-                    ))}
-                  </OptionRow>
-                )}
 
 <CaratOptionRow
   title="Carat"

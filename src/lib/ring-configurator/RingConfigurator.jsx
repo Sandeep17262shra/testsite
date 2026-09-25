@@ -178,16 +178,20 @@ function RingConfigurator() {
       : (selectedQuality?.type || diamondType) === "Natural"
         ? "Natural Diamond"
         : "Lab Diamond";
-    // For DiamondWise rings: "{HeadLabel} head with {ShankLabel} shank {Shape} {carat} ct {color?} {origin/type} {metal} ring"
+    // For DiamondWise rings: "{DesignName} {Shape} {carat} ct {color?} {origin/type} {metal} ring"
     const isDiamondWiseActive = Boolean(selectedDiamondWiseDesign);
     const dwHeadLabel = selectedDiamondWiseDesign?.headLabel?.trim() || "";
     const dwShankLabel = (selectedDiamondWiseShank?.shankLabel || selectedDiamondWiseDesign?.shankLabel || "")?.trim();
+    const dwDesignName = (dwHeadLabel && dwShankLabel && dwHeadLabel.toLowerCase() === dwShankLabel.toLowerCase())
+      ? dwHeadLabel
+      : (dwHeadLabel && dwShankLabel)
+        ? `${dwHeadLabel} head with ${dwShankLabel} shank`
+        : (dwHeadLabel || dwShankLabel);
     const diamondWisePreviewLabel = isDiamondWiseActive
       ? [
-          dwHeadLabel && `${dwHeadLabel} head`,
-          dwShankLabel && `with ${dwShankLabel} shank`,
-          displayShapeLabel,
+          dwDesignName,
           `${Number(diamondSize || 0).toFixed(2)} ct`,
+          displayShapeLabel,
           stoneColorLabel,
           stoneOriginTypeLabel,
           theme3MetalLabel,
@@ -197,8 +201,8 @@ function RingConfigurator() {
     const previewLabel = [
       theme3DisplayStyleLabel,
       theme3DisplaySettingLabel,
-      displayShapeLabel,
       `${Number(diamondSize || 0).toFixed(2)} ct`,
+      displayShapeLabel,
       stoneColorLabel,
       stoneOriginTypeLabel,
       theme3MetalLabel,
@@ -267,18 +271,26 @@ function RingConfigurator() {
     setView360(prev => !prev);
   };
 
-  // --- Reset button: "active" state for 1 minute ---
+  // --- Reset button and confirmation popup ---
   const [isResetActive, setIsResetActive] = useState(false);
+  const [showResetPopup, setShowResetPopup] = useState(false);
   const resetTimeoutRef = useRef(null);
 
   const handleResetClick = () => {
-    ringCustomizerRef.current?.openResetPopup();
+    setShowResetPopup(true);
 
     setIsResetActive(true);
     if (resetTimeoutRef.current) clearTimeout(resetTimeoutRef.current);
     resetTimeoutRef.current = setTimeout(() => {
        setIsResetActive(false);
-    }, 2000); // 1 minute
+    }, 1500);
+  };
+
+  const handleConfirmReset = () => {
+    ringCustomizerRef.current?.handleReset?.() || ringCustomizerRef.current?.openResetPopup?.();
+    setView360(false);
+    setIsViewActive(false);
+    setShowResetPopup(false);
   };
 
   const handleTheme3SectionChange = useCallback((sectionId) => {
@@ -477,8 +489,58 @@ function RingConfigurator() {
               <div id="theme3-ai-panel-host" className="theme3-ai-panel-host" />
             </div>
           </div>
-          </div>
         </div>
+      </div>
+
+        {showResetPopup && (
+          <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/40">
+            <div
+              className="confirm-popup bg-white rounded-xl shadow-xl relative text-center"
+              style={{ width: "90%", maxWidth: "400px", padding: "24px" }}
+            >
+              <button
+                className="close-cross"
+                onClick={() => setShowResetPopup(false)}
+                aria-label="Close"
+                style={{
+                  position: "absolute",
+                  top: "14px",
+                  right: "14px",
+                  background: "transparent",
+                  border: "none",
+                  fontSize: "18px",
+                  cursor: "pointer",
+                  color: "#555555",
+                  lineHeight: 1,
+                }}
+              >
+                ✕
+              </button>
+              <p style={{ fontSize: "16px", fontWeight: "700", margin: "10px 0 6px", color: "#000000" }}>
+                Reset Ring?
+              </p>
+              <p style={{ color: "#666666", fontSize: "13px", marginBottom: "20px" }}>
+                This will clear all your custom selections.
+              </p>
+              <button
+                className="cnfm-btn"
+                onClick={handleConfirmReset}
+                style={{
+                  background: "#303030",
+                  color: "#ffffff",
+                  padding: "10px 24px",
+                  borderRadius: "6px",
+                  fontWeight: 700,
+                  fontSize: "13px",
+                  border: "none",
+                  cursor: "pointer",
+                }}
+              >
+                Confirm Reset
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -578,6 +640,56 @@ function RingConfigurator() {
         }}
       >
         Confirm
+      </button>
+    </div>
+  </div>
+)}
+
+{showResetPopup && (
+  <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/40">
+    <div
+      className="confirm-popup bg-white rounded-xl shadow-xl relative text-center"
+      style={{ width: "90%", maxWidth: "400px", padding: "24px" }}
+    >
+      <button
+        className="close-cross"
+        onClick={() => setShowResetPopup(false)}
+        aria-label="Close"
+        style={{
+          position: "absolute",
+          top: "14px",
+          right: "14px",
+          background: "transparent",
+          border: "none",
+          fontSize: "18px",
+          cursor: "pointer",
+          color: "#555555",
+          lineHeight: 1,
+        }}
+      >
+        ✕
+      </button>
+      <p style={{ fontSize: "16px", fontWeight: "700", margin: "10px 0 6px", color: "#000000" }}>
+        Reset Ring?
+      </p>
+      <p style={{ color: "#666666", fontSize: "13px", marginBottom: "20px" }}>
+        This will clear all your custom selections.
+      </p>
+      <button
+        className="cnfm-btn"
+        onClick={handleConfirmReset}
+        style={{
+          background: "#303030",
+          color: "#ffffff",
+          padding: "10px 24px",
+          borderRadius: "6px",
+          fontWeight: 700,
+          fontSize: "13px",
+          border: "none",
+          cursor: "pointer",
+        }}
+      >
+        Confirm Reset
       </button>
     </div>
   </div>

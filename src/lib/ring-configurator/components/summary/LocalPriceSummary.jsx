@@ -335,12 +335,16 @@ function LocalPriceSummary() {
     const dwShape = selectedDiamondWiseDesign
       ? (selectedDiamondWiseDesign.defaultShape || "marquise").replace(/\b\w/g, (c) => c.toUpperCase())
       : toTitleCase(shape);
+    const dwDesignName = (dwHeadLabel && dwShankLabel && dwHeadLabel.toLowerCase() === dwShankLabel.toLowerCase())
+      ? dwHeadLabel
+      : (dwHeadLabel && dwShankLabel)
+        ? `${dwHeadLabel} head with ${dwShankLabel} shank`
+        : (dwHeadLabel || dwShankLabel);
     const title = selectedDiamondWiseDesign
       ? [
-          dwHeadLabel && `${dwHeadLabel} head`,
-          dwShankLabel && `with ${dwShankLabel} shank`,
-          dwShape,
+          dwDesignName,
           `${Number(diamondSize || 0).toFixed(2)} ct`,
+          dwShape,
           stoneColorLabel,
           stoneOriginTypeLabel,
           metalPurityLabel,
@@ -349,8 +353,8 @@ function LocalPriceSummary() {
       : [
           toTitleCase(ringShank),
           ringHead === "NO-HEAD" ? null : ringHead === "4-PRONG" ? "4 Prongs" : toTitleCase(ringHead),
-          ringHead === "NO-HEAD" ? null : toTitleCase(shape),
           ringHead === "NO-HEAD" ? null : `${Number(diamondSize || 0).toFixed(2)} ct`,
+          ringHead === "NO-HEAD" ? null : toTitleCase(shape),
           ringHead === "NO-HEAD" ? null : stoneColorLabel,
           ringHead === "NO-HEAD" ? null : stoneOriginTypeLabel,
           metalPurityLabel,

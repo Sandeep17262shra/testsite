@@ -503,7 +503,8 @@ const threeStoneHeadShapes = {
 const threeStoneCenterShapes = {
     round: {
         scale: (carat) => [0.40 + carat, 0.34, 0.40 + carat],
-        position: [0, 1, 0]
+        position: [0, 1, 0],
+        rotation: [0, 0, 0],
     },
     princess: {
         scale: (carat) => [0.33 + carat, 0.33 + carat, 0.37],
@@ -512,16 +513,23 @@ const threeStoneCenterShapes = {
     },
     cushion: {
         scale: (carat) => [0.35 + carat, 0.35 + carat, 0.40],
-        position: [0, 0.4, 0]
+        position: [0, 0.4, 0],
+        rotation: [Math.PI / 2, 0, 0],
     },
     oval: {
         scale: (carat) => [0.35 + carat, 0.35 + carat, 0.367],
         position: [0, 0.45, 0],
         rotation: [Math.PI / 2, 0, 0],
     },
+    moval: {
+        scale: (carat) => [0.35 + carat, 0.35 + carat, 0.367],
+        position: [0, 0.45, 0],
+        rotation: [Math.PI / 2, 0, 0],
+    },
     radiant: {
         scale: (carat) => [0.33 + carat, 0.33 + carat, 0.40],
-        position: [0, 0.4, 0]
+        position: [0, 0.4, 0],
+        rotation: [Math.PI / 2, 0, 0],
     },
     pear: {
         scale: (carat) => [0.3 + carat, 0.3 + carat, 0.3],
@@ -529,22 +537,24 @@ const threeStoneCenterShapes = {
         rotation: [Math.PI / 2, 0, 0],
     },
     emerald: {
-        scale: (carat) => [0.35 + carat, 0.35 + carat, 0.35],
+        scale: (carat) => [0.35 + carat, 0.33 + carat, 0.35],
         position: [0, 0.6, 0],
         rotation: [Math.PI / 2, 0, 0],
     },
     marquise: {
         scale: (carat) => [0.35 + carat, 0.35 + carat, 0.40],
-        position: [0, 0.4, 0]
+        position: [0, 0.3, 0],
+        rotation: [Math.PI / 2, 0, 0],
     },
     heart: {
         scale: (carat) => [0.40 + carat, 0.40 + carat, 0.40],
-        position: [0, 0.4, 0],
-        specialPosition: [0, 0.4, 0.15]
+        position: [0, 0.4, 0.15],
+        rotation: [Math.PI / 2, 0, 0],
     },
     asscher: {
-        scale: (carat) => [0.35 + carat, 0.35 + carat, 0.40],
-        position: [0, 0.4, 0]
+        scale: (carat) => [0.38 + carat, 0.38 + carat, 0.42],
+        position: [0, 0.16, 0],
+        rotation: [Math.PI / 2, 0, 0],
     },
 };
 

@@ -803,18 +803,19 @@ const availableDiamondTypes = filterAvailableOptions(
 					  </span>
                     </span>
                     <span className="font-6b6-700 font-bold text-black text-sm" style={{ textTransform: 'none' }}>
-                    {`${activeDiamondSize}ct`}
+                    {`${activeDiamondSize} ct`}
                     </span>
                 </p>
 
                 <div className="carat-slider w-full py-2 relative">
-                    {/* Marks row above track: start value (e.g. 0.25) and whole numbers (1.0, 2.0, 3.0, 4.0, 5.0) */}
+                    {/* Marks row above track: whole numbers and dots for in-between values */}
                     <div className="gb-carat-slider-ticks" style={{ marginBottom: '8px', marginTop: 0 }}>
                       {caratOptions.map((opt, index) => {
                         const leftPos = caratOptions.length > 1
                           ? `calc(9px + (100% - 18px) * (${index} / ${caratOptions.length - 1}))`
                           : "50%";
-                        const labelText = String(opt.size);
+                        const sizeNum = Number(opt.size);
+                        const isWholeNumber = Number.isInteger(sizeNum) || Math.abs(sizeNum - Math.round(sizeNum)) < 1e-4;
 
                         return (
                           <div
@@ -825,10 +826,15 @@ const availableDiamondTypes = filterAvailableOptions(
                               transform: "translateX(-50%)",
                             }}
                             onClick={() => handleCarat(opt)}
+                            title={`${opt.size} ct`}
                           >
-                            <span className="gb-carat-slider-tick">
-                              {labelText}
-                            </span>
+                            {isWholeNumber ? (
+                              <span className="gb-carat-slider-tick">
+                                {Math.round(sizeNum)}
+                              </span>
+                            ) : (
+                              <span className="gb-carat-slider-dot" aria-hidden="true" />
+                            )}
                           </div>
                         );
                       })}
