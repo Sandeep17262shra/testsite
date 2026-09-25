@@ -3714,7 +3714,7 @@ return (
                 type="button"
                 className={`gb-metal-option ${biMetal !== "Yes" ? "active" : ""}`}
                 onClick={() => handleBiMetalSelect("none")}
-                disabled={platinum}
+                disabled={platinum || ["Titanium", "Sterling Silver"].includes(metal)}
               >
                 <small style={T3_BODY_STYLE}>None</small>
               </button>
@@ -3728,7 +3728,7 @@ return (
                       biMetal === "Yes" && selectedHeadMetalColorValue === option.value ? "active" : ""
                     }`}
                     onClick={() => handleBiMetalSelect(option.value)}
-                    disabled={platinum}
+                    disabled={platinum || ["Titanium", "Sterling Silver"].includes(metal)}
                     title={option.label}
                     style={{
                       background: option.gradient || option.color,
@@ -3739,11 +3739,6 @@ return (
                   </button>
                 ))}
             </OptionRow>
-            {(platinum || ["Titanium", "Sterling Silver"].includes(metal)) && (
-              <p className="theme3-bimetal-note theme3-band-bimetal-note" role="note">
-                      Bi-metal is unavailable with {platinum ? "platinum" : metal === "Titanium" ? "titanium" : "sterling silver"}.
-              </p>
-            )}
 </>
 )}
 
