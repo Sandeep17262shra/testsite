@@ -171,6 +171,16 @@ export const RingProvider = ({ children }) => {
     }
   }, [biMetal, isEnabled]);
 
+  // When switching to a DiamondWise store dynamically without an explicit config,
+  // ensure the initial DiamondWise preset (Amelie) is selected.
+  useEffect(() => {
+    if (!config && isDiamondWiseParentUrl(parentUrl)) {
+      setRingShank((prev) => (prev === initialRingState.ringShank ? "dw-jul-ma-02-shank" : prev));
+      setRingHead((prev) => (prev === initialRingState.ringHead ? "dw-jul-ma-02-head" : prev));
+      setDiamondWiseDesignId((prev) => (prev === initialRingState.diamondWiseDesignId ? "diamondwise-jul-ma-02" : prev));
+    }
+  }, [parentUrl, config]);
+
   // Persist ring state to sessionStorage whenever any setting changes
   useEffect(() => {
     if (typeof window === "undefined") return;

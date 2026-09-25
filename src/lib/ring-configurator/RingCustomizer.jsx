@@ -904,7 +904,7 @@ const RingCustomizer = forwardRef(({
   activeTheme3Section,
   onTheme3SectionChange,
 }, ref) => {
-  const { parent, currencyCode, setShare } = useContext(ShareContext);
+  const { parent, currencyCode, setShare, priceConfigVersion } = useContext(ShareContext);
   // The DiamondWise head/shank designs are sample content on every store
   // EXCEPT DiamondWise's own, where they are the real catalogue - so the
   // "Demo Only" corner badge is shown everywhere else and hidden there.
@@ -2363,15 +2363,25 @@ const RingCustomizer = forwardRef(({
     fancyDiamondIntensity,
     gemstone,
     parent,
+    priceConfigVersion,
   ]);
 
+  // On first load and when store pricing config is ready/updated,
+  // calculate the price of the currently selected setting and update totals.
   useEffect(() => {
     applyRingPrice({
       nextMetal: platinum ? "Platinum" : metal,
       metalPriceKey: platinum ? "Platinum" : metal,
+      nextHead: ringHead,
+      nextShank: ringShank,
+      nextSideSetting: ringSideSetting,
+      nextRingBand: ringBand,
+      nextMatchingBandQuantity: matchingBandQuantity,
+      nextEngraving: engraving,
+      nextMatchingBandStyle: ringMatchingBand,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [parent]);
+  }, [parent, priceConfigVersion, ringHead, ringShank]);
 
   useEffect(() => {
     if (ringSizeOptions.length > 0 && !ringSizeOptions.includes(String(ringSize))) {
@@ -3067,8 +3077,7 @@ const RingCustomizer = forwardRef(({
     const dwShankLabel = (selectedDiamondWiseShank?.shankLabel || selectedDiamondWiseDesign?.shankLabel || "")?.trim();
     const ringTitle = selectedDiamondWiseDesign
       ? [
-          dwHeadLabel && `${dwHeadLabel} head`,
-          dwShankLabel && `with ${dwShankLabel} shank`,
+          (dwShankLabel || dwHeadLabel) && (dwShankLabel || dwHeadLabel),
           displayShapeLabel,
           `${Number(diamondSize || 0).toFixed(2)} ct`,
           stoneColorLabel,

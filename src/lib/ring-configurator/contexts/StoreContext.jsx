@@ -147,14 +147,6 @@ const getInitialStoreContext = () => {
     return fromParentConfig;
   }
 
-  const embedded = isEmbeddedWindow();
-  if (embedded && document.referrer) {
-    const referrerUrl = normalizeHttpUrl(document.referrer);
-    if (referrerUrl) {
-      return normalizeContextInput({ parentUrl: referrerUrl }, "document.referrer", false);
-    }
-  }
-
   try {
     const params = new URLSearchParams(window.location.search);
     const queryParent = params.get("parentUrl") || params.get("parent") || params.get("store") || params.get("shop");
@@ -163,6 +155,14 @@ const getInitialStoreContext = () => {
       return normalizeContextInput({ parentUrl: normalizedQueryUrl || queryParent }, "searchParams", false);
     }
   } catch {}
+
+  const embedded = isEmbeddedWindow();
+  if (embedded && document.referrer) {
+    const referrerUrl = normalizeHttpUrl(document.referrer);
+    if (referrerUrl) {
+      return normalizeContextInput({ parentUrl: referrerUrl }, "document.referrer", false);
+    }
+  }
 
   return normalizeContextInput({ parentUrl: window.location.href }, "standalone", false);
 };

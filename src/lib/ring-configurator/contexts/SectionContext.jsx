@@ -17,6 +17,7 @@ import {
   getIntensityPrice,
   getDefaultCarat,
 } from "../utility/storePriceHelper";
+import { isDiamondWiseParentUrl, isPriceConfigReady } from "../priceConfig";
 
 const LS_KEY = "ring_configurator_state";
 
@@ -143,13 +144,14 @@ const initialSectionState = {
 export const SectionContext = createContext(initialSectionState);
 
 export const SectionProvider = ({ children }) => {
-  const { parent } = useContext(ShareContext) || {};
+  const { parent, priceConfigVersion } = useContext(ShareContext) || {};
   const { parentUrl } = useContext(StoreContext) || {};
   const currentParent = parent || parentUrl || (typeof window !== "undefined" ? resolveParentUrl() : "");
+  const isDiamondwise = isDiamondWiseParentUrl(currentParent);
 
-  const initialMetalPrice = getMetalPrice(currentParent, "14K") || initialPrice.metalPrice;
-  const initialShankPrice = getShankPrice(currentParent, "PLAIN") || initialPrice.ringPrice;
-  const initialHeadPrice = getHeadPrice(currentParent, "4-PRONG") || initialPrice.ringHeadStylePrice;
+  const initialMetalPrice = isPriceConfigReady() ? getMetalPrice(currentParent, "14K") : (getMetalPrice(currentParent, "14K") ?? initialPrice.metalPrice);
+  const initialShankPrice = isPriceConfigReady() ? getShankPrice(currentParent, "PLAIN") : (getShankPrice(currentParent, "PLAIN") ?? initialPrice.ringPrice);
+  const initialHeadPrice = isPriceConfigReady() ? getHeadPrice(currentParent, "4-PRONG") : (getHeadPrice(currentParent, "4-PRONG") ?? initialPrice.ringHeadStylePrice);
   const initialQuality = getDefaultQuality(currentParent) || "Standard";
   const initialCarat = getDefaultCarat(currentParent);
   const initialDiamondPrice = getDiamondPrice(currentParent, initialCarat, initialQuality, "Lab") || initialPrice.diamondPrice;
@@ -161,8 +163,8 @@ export const SectionProvider = ({ children }) => {
   const initialShapeList = config?.shapeList || "";
 
   const effectiveMetal = initialPlatinum ? "Platinum" : (config?.metal || "14K");
-  const effectiveShank = config?.ringShank || "PLAIN";
-  const effectiveHead = config?.ringHead || "4-PRONG";
+  const effectiveShank = config?.ringShank || (isDiamondwise ? "dw-jul-ma-02-shank" : "PLAIN");
+  const effectiveHead = config?.ringHead || (isDiamondwise ? "dw-jul-ma-02-head" : "4-PRONG");
   const effectiveSideSetting = config?.ringSideSetting || "PLAIN";
   const effectiveBandStyle = config?.ringMatchingBand || effectiveSideSetting;
   const effectiveRingBand = config?.ringBand || "No";
@@ -171,9 +173,15 @@ export const SectionProvider = ({ children }) => {
   const effectiveQuality = config?.selectedQuality?.quality || getDefaultQuality(currentParent) || "Standard";
   const effectiveType = config?.selectedQuality?.type || config?.diamondType || "Lab";
 
-  const calcInitMetalPrice = getMetalPrice(currentParent, effectiveMetal) || initialPrice.metalPrice;
-  const calcInitShankPrice = getShankPrice(currentParent, effectiveShank) || initialPrice.ringPrice;
-  const calcInitHeadPrice = getHeadPrice(currentParent, effectiveHead) || initialPrice.ringHeadStylePrice;
+  const calcInitMetalPrice = isPriceConfigReady()
+    ? getMetalPrice(currentParent, effectiveMetal)
+    : (getMetalPrice(currentParent, effectiveMetal) ?? initialPrice.metalPrice);
+  const calcInitShankPrice = isPriceConfigReady()
+    ? getShankPrice(currentParent, effectiveShank)
+    : (getShankPrice(currentParent, effectiveShank) ?? initialPrice.ringPrice);
+  const calcInitHeadPrice = isPriceConfigReady()
+    ? getHeadPrice(currentParent, effectiveHead)
+    : (getHeadPrice(currentParent, effectiveHead) ?? initialPrice.ringHeadStylePrice);
   const calcInitMatchingBandPrice = effectiveRingBand === "Yes" ? getMatchingBandPrice(currentParent, effectiveBandStyle) : 0;
   const calcInitEngravingPrice = effectiveEngraving ? getEngravingPrice(currentParent) : 0;
 
@@ -251,9 +259,10 @@ export const SectionProvider = ({ children }) => {
   useEffect(() => {
     if (!currentParent) return;
     const cfg = getConfigFromURLOrStorage();
+    const isDw = isDiamondWiseParentUrl(currentParent);
     const currMetal = cfg?.platinum ? "Platinum" : (cfg?.metal || (platinum ? "Platinum" : "14K"));
-    const currShank = cfg?.ringShank || "PLAIN";
-    const currHead = cfg?.ringHead || "4-PRONG";
+    const currShank = cfg?.ringShank || (isDw ? "dw-jul-ma-02-shank" : "PLAIN");
+    const currHead = cfg?.ringHead || (isDw ? "dw-jul-ma-02-head" : "4-PRONG");
     const currSideSetting = cfg?.ringSideSetting || "PLAIN";
     const currBandStyle = cfg?.ringMatchingBand || currSideSetting;
     const currRingBand = cfg?.ringBand || "No";
@@ -262,9 +271,15 @@ export const SectionProvider = ({ children }) => {
     const currQuality = cfg?.selectedQuality?.quality || getDefaultQuality(currentParent) || "Standard";
     const currType = cfg?.selectedQuality?.type || cfg?.diamondType || "Lab";
 
-    const nextMetalPrice = getMetalPrice(currentParent, currMetal) || initialPrice.metalPrice;
-    const nextShankPrice = getShankPrice(currentParent, currShank) || initialPrice.ringPrice;
-    const nextHeadPrice = getHeadPrice(currentParent, currHead) || initialPrice.ringHeadStylePrice;
+    const nextMetalPrice = isPriceConfigReady()
+      ? getMetalPrice(currentParent, currMetal)
+      : (getMetalPrice(currentParent, currMetal) ?? initialPrice.metalPrice);
+    const nextShankPrice = isPriceConfigReady()
+      ? getShankPrice(currentParent, currShank)
+      : (getShankPrice(currentParent, currShank) ?? initialPrice.ringPrice);
+    const nextHeadPrice = isPriceConfigReady()
+      ? getHeadPrice(currentParent, currHead)
+      : (getHeadPrice(currentParent, currHead) ?? initialPrice.ringHeadStylePrice);
     const nextMatchingBandPrice = currRingBand === "Yes" ? getMatchingBandPrice(currentParent, currBandStyle) : 0;
     const nextEngravingPrice = currEngraving ? getEngravingPrice(currentParent) : 0;
     const nextIntensityPrice = cfg?.intensityPrice != null
@@ -289,7 +304,7 @@ export const SectionProvider = ({ children }) => {
     setStoneTotal(nextDiamondPrice);
     setShankTotal(nextShankPrice + nextMetalPrice + nextMatchingBandPrice + nextEngravingPrice);
     setHeadTotal(nextHeadPrice);
-  }, [currentParent]);
+  }, [currentParent, priceConfigVersion]);
 
   return (
     <SectionContext.Provider value={{

@@ -108,15 +108,15 @@ export const resolveParentUrl = () => {
   const fromConfig = window.__parentConfig?.parentUrl;
   if (fromConfig) return fromConfig;
 
-  if (window.self !== window.top && document.referrer) {
-    return document.referrer;
-  }
-
   try {
     const params = new URLSearchParams(window.location.search);
     const fromQuery = params.get("parentUrl") || params.get("parent") || params.get("store") || params.get("shop");
     if (fromQuery) return fromQuery;
   } catch {}
+
+  if (window.self !== window.top && document.referrer) {
+    return document.referrer;
+  }
 
   return window.location.href;
 };
