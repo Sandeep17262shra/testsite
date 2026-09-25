@@ -3,7 +3,7 @@ import "../lib/ring-configurator/RCApp.css";
 import "../lib/bracelet-configurator/BraceletApp.css";
 
 const storeContextBootstrap = `
-  window.__parentConfig = null;
+  window.__parentConfig = { parentUrl: "https://jdemo364.wpenginepowered.com" };
   window.addEventListener("message", function (event) {
     if (event.data?.parentUrl) {
       window.__parentConfig = event.data;
