@@ -154,8 +154,8 @@ export const ENGRAVING_POSITIONS = {
   "KNIFE-EDGE": [0, 0.57, 0],
   "SPLIT": [0, 1.265, 0],
   "TWISTED": [0, 0.57, 0],
-  "CHANNEL": [0, 1.365, 0],
-  "PLATE-PRONG": [0, 1.39, 0],
+  "CHANNEL": [0, 1.153, 0],
+  "PLATE-PRONG": [0, 1.16, 0],
   // DiamondWise shanks (default placeholder coordinates — user can tune directly)
   "dw-jul-ma-02-shank": [0, 0.21, 0],
   "dw-ju-m-0031-shank": [0, 0.21, 0],
