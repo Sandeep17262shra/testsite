@@ -3218,6 +3218,7 @@ const RingCustomizer = forwardRef(({
                     </>
                   )}
 
+                  {!noHeadSelected && (
                   <div className="order-summary-section">
                     <div className="order-summary-row">
                       <span className="order-summary-title">Stone</span>
@@ -3243,6 +3244,7 @@ const RingCustomizer = forwardRef(({
                       ].filter(Boolean).join(" · ")}
                     </div>
                   </div>
+                  )}
 
                   <div className="order-summary-divider" />
 
