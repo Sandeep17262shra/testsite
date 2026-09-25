@@ -65,11 +65,12 @@ const STORE_RULE_OVERRIDES = {
 };
 
 const findStoreKey = (parentUrl) => {
+  if (!parentUrl) return "default";
+
   if (isDiamondWiseParentUrl(parentUrl)) return "diamondwise";
-  if (!parentUrl) return "diamondwise";
 
   const lower = parentUrl.toLowerCase();
-  return STORE_KEYS.find((key) => lower.includes(key)) ?? "diamondwise";
+  return STORE_KEYS.find((key) => lower.includes(key)) ?? "default";
 };
 
 const firstAvailable = (options, fallback) => options[0] ?? fallback;

@@ -80,21 +80,6 @@ const PARENT_CONFIGS = [
     ringSizeType: "R3",
     summaryTaxLabel: "+tax",
   },
-  {
-    key: "jdemo364.wpenginepowered",
-    logo: "",
-    logoClass: "h-[37px]",
-    currency: "$",
-    currencyCode: "USD",
-    locale: "en-US",
-    language: "en",
-    currencyRate: 1,
-    hideNaturalOption: false,
-    homeUrl: "https://jdemo364.wpenginepowered.com",
-    contactUrl: null,
-    fancyPriceFactor: 0.7,
-    ringSizeType: "R1",
-  },
 ];
 
 const DEFAULT_CONFIG = {
@@ -104,7 +89,7 @@ const DEFAULT_CONFIG = {
   language: "en",
   currencyRate: 1,
   hideNaturalOption: false,
-  homeUrl: "https://jdemo364.wpenginepowered.com",
+  homeUrl: "/",
   contactUrl: null,
   fancyPriceFactor: 0.7,
   ringSizeType: "R1",
@@ -118,7 +103,7 @@ const getConfig = (parentUrl) => {
 };
 
 export const resolveParentUrl = () => {
-  if (typeof window === "undefined") return "https://jdemo364.wpenginepowered.com";
+  if (typeof window === "undefined") return "";
 
   const fromConfig = window.__parentConfig?.parentUrl;
   if (fromConfig) return fromConfig;
@@ -133,7 +118,7 @@ export const resolveParentUrl = () => {
     if (fromQuery) return fromQuery;
   } catch {}
 
-  return "https://jdemo364.wpenginepowered.com";
+  return window.location.href;
 };
 
 export const getLogo = (parentUrl) => getConfig(parentUrl)?.logo ?? "";

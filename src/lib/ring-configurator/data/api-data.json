@@ -62,6 +62,16 @@
         "src": "/images/platinum.webp",
         "alt": "Platinum",
         "hex": "#e5e4e2"
+      },
+      {
+        "src": "/images/platinum.webp",
+        "alt": "Titanium",
+        "hex": "#8C8C8C"
+      },
+      {
+        "src": "/images/white.webp",
+        "alt": "Silver",
+        "hex": "#D8D8D8"
       }
     ],
     "size": [

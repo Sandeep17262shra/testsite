@@ -792,7 +792,7 @@ useEffect(() => {
           ref={groupRef}
           position={
             displayedIsDiamondWise
-              ? (isMobile ? [0, -1.1, 0] : [0, -0.8, 0])
+              ? (isMobile ? [0, -1, 0] : [0, -1, 0])
               : [0, shankFraming.positionY, 0]
           }
           scale={[RING_GROUP_SCALE, RING_GROUP_SCALE, RING_GROUP_SCALE]}

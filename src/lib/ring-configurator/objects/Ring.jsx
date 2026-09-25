@@ -145,7 +145,7 @@ const COLOR_CLARITY = {
 };
 
 // Configuration
-const ENGRAVING_POSITIONS = {
+export const ENGRAVING_POSITIONS = {
   // Each asset has a different inner-band profile. These positions keep the
   // text mask in the metal instead of using one shared offset for all shanks.
   "PLAIN": [0, 1.29, 0],
@@ -155,7 +155,18 @@ const ENGRAVING_POSITIONS = {
   "SPLIT": [0, 1.265, 0],
   "TWISTED": [0, 0.57, 0],
   "CHANNEL": [0, 1.365, 0],
-  "PLATE-PRONG": [0, 1.39, 0]
+  "PLATE-PRONG": [0, 1.39, 0],
+  // DiamondWise shanks (default placeholder coordinates — user can tune directly)
+  "dw-jul-ma-02-shank": [0, 0.21, 0],
+  "dw-ju-m-0031-shank": [0, 0.21, 0],
+  "dw-mar-ma-019-shank": [0, 0.21, 0],
+  "dw-LR1046-shank": [0, 0.21, 0],
+  "dw-JAN027-shank": [0, 0.21, 0],
+  "diamondwise-jul-ma-02": [0, 1.0, 0],
+  "diamondwise-ju-m-0031": [0, 1.0, 0],
+  "diamondwise-mar-ma-019": [0, 1.0, 0],
+  "diamondwise-LR1046": [0, 1.0, 0],
+  "diamondwise-JAN027": [0, 1.0, 0],
 };
 
 // Same "side setting overrides a plain shank" rule the engraving position
@@ -165,6 +176,7 @@ const ENGRAVING_POSITIONS = {
 // group's own Y offset also changes per shank (see SHANK_FRAMING there), so
 // a single hardcoded camera target can't stay correct across ring styles.
 export const getEngravingLocalPosition = (sideSetting, shank) => {
+  if (shank && ENGRAVING_POSITIONS[shank]) return ENGRAVING_POSITIONS[shank];
   const mixSettingShank =
     sideSetting === "PLAIN" && shank !== "PLAIN" ? shank : sideSetting;
   return ENGRAVING_POSITIONS[mixSettingShank] || ENGRAVING_POSITIONS.PLAIN;
@@ -294,6 +306,149 @@ function loadEngravingObj() {
   }
   return engravingObjRequest;
 }
+
+export const EngravingMesh = React.memo(function EngravingMesh({ customPosition } = {}) {
+  const { ringColor, engraving, engravingFont, metalness, roughness, envMapIntensity, engravingFocus, ringSideSetting, ringShank } = useContext(RingContext);
+  const { handleMetal } = useContext(SectionContext);
+  const { displayed } = useSceneStage();
+
+  const [textTexture, setTextTexture] = useState(null);
+  const engravingRef = useRef();
+
+  const metalTexture = useLoader(RGBELoader, handleMetal);
+  metalTexture.mapping = THREE.EquirectangularReflectionMapping;
+
+  const [obj, setObj] = useState(cachedEngravingObj);
+
+  useEffect(() => {
+    if (obj || (!engraving && !engravingFocus)) return undefined;
+
+    let alive = true;
+    loadEngravingObj()
+      .then((loadedObj) => {
+        if (alive) setObj(loadedObj);
+      })
+      .catch((error) => {
+        console.error("Error loading engraving model (/rings/ring_4.obj):", error);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [engraving, engravingFocus, obj]);
+
+  const engravingGeometry = useMemo(() => {
+    if (!obj) return null;
+    let geometry = null;
+    obj.traverse((child) => {
+      if (child.isMesh && child.name === "Cylinder") {
+        geometry = child.geometry;
+      }
+    });
+    return geometry;
+  }, [obj]);
+
+  const activeShank = displayed?.ringShank || ringShank;
+  const activeSideSetting = displayed?.ringSideSetting || ringSideSetting;
+  const engravePos = useMemo(
+    () => customPosition || getEngravingLocalPosition(activeSideSetting, activeShank),
+    [customPosition, activeSideSetting, activeShank]
+  );
+
+  useEffect(() => {
+    if (!engraving) {
+      setTextTexture(null);
+      return;
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = 1500;
+    canvas.height = 35;
+    const ctx = canvas.getContext("2d");
+
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#858686";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+
+    const baseFont =
+      ENGRAVING_CANVAS_FONT_FAMILIES[engravingFont] ||
+      ENGRAVING_CANVAS_FONT_FAMILIES.Arial;
+    let fontStyle = "normal";
+    if (engravingFont === "Segoe UI") {
+      fontStyle = "italic";
+    }
+
+    const symbolFont = "'Segoe UI Symbol', 'Arial Unicode MS', Arial, sans-serif";
+    const y = canvas.height / 2 - 6;
+    const symbolRegex = /[♡☆☾∞☯♑♓♈♉♒♋♌♍♎♏♐]/;
+    const fontFor = (char) =>
+      `${fontStyle} 13px ${symbolRegex.test(char) ? symbolFont : baseFont}`;
+
+    const chars = [...engraving];
+    const widths = chars.map((char) => {
+      ctx.font = fontFor(char);
+      return ctx.measureText(char).width;
+    });
+    const totalWidth =
+      widths.reduce((a, b) => a + b, 0) +
+      ENGRAVING_LETTER_SPACING * (chars.length - 1);
+
+    let x = (canvas.width - totalWidth) / 2;
+    chars.forEach((char, i) => {
+      ctx.font = fontFor(char);
+      ctx.fillText(char, x, y);
+      x += widths[i] + ENGRAVING_LETTER_SPACING;
+    });
+
+    const canvasTexture = new THREE.CanvasTexture(canvas);
+    canvasTexture.anisotropy = 16;
+    canvasTexture.wrapS = canvasTexture.wrapT = THREE.ClampToEdgeWrapping;
+    canvasTexture.needsUpdate = true;
+
+    setTextTexture(canvasTexture);
+
+    return () => canvasTexture.dispose();
+  }, [engraving, engravingFont]);
+
+  const engravingMaterialProps = useMemo(() => {
+    const baseColor = new THREE.Color(ringColor);
+    const luminance = baseColor.r * 0.299 + baseColor.g * 0.587 + baseColor.b * 0.114;
+    const shadowFactor = luminance > 0.6 ? 0.25 : 0.14;
+    const shadowColor = baseColor.clone().multiplyScalar(shadowFactor);
+
+    return {
+      map: textTexture,
+      transparent: true,
+      opacity: 1,
+      alphaTest: 0.01,
+      depthTest: !engravingFocus,
+      depthWrite: !engravingFocus,
+      color: shadowColor,
+      side: THREE.BackSide,
+      metalness,
+      roughness: Math.min(1, roughness + 0.4),
+      envMap: metalTexture || undefined,
+      envMapIntensity: envMapIntensity * 0.35,
+    };
+  }, [textTexture, ringColor, engravingFocus, metalness, roughness, metalTexture, envMapIntensity]);
+
+  if (!engravingGeometry || !textTexture) return null;
+
+  return (
+    <mesh
+      ref={engravingRef}
+      geometry={engravingGeometry}
+      position={engravePos}
+      rotation={[0, engravingFocus ? 0 : Math.PI, 0]}
+      scale={ENGRAVING_SCALE}
+    >
+      <meshStandardMaterial {...engravingMaterialProps} />
+    </mesh>
+  );
+});
 
 function Ring() {
   const { ringColor, engraving, engravingFont, ringWidth, metalness, roughness, reflectivity, clearcoat, clearcoatRoughness, envMapIntensity, engravingFocus } = useContext(RingContext);
@@ -681,27 +836,11 @@ function Ring() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayedLayer, displayedSideSetting, commitId, ringMaterialProps, ringColor, diamondMaterialProps]);
 
-  const renderEngraving = useMemo(() => {
-    if (!engravingGeometry || !textTexture) return null;
-
-    return (
-      <mesh
-        ref={engravingRef}
-        geometry={engravingGeometry}
-        position={engravePos}
-        rotation={[0, engravingFocus ? 0 : Math.PI, 0]}
-        scale={ENGRAVING_SCALE}
-      >
-        <meshStandardMaterial {...engravingMaterialProps} />
-      </mesh>
-    );
-  }, [engravingGeometry, textTexture, engravePos, engravingMaterialProps, engravingFocus]);
-
   return (
     <group>
       {renderRingModels}
       {renderSettingModels}
-      {renderEngraving}
+      <EngravingMesh />
     </group>
   );
 }

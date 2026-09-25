@@ -26,7 +26,7 @@ const REMOTE_API_HEADERS = {
 };
 
 // Only used when the configurator is opened standalone without a parent page.
-const DEFAULT_PARENT_URL = process.env.NEXT_PUBLIC_PARENT_URL || "https://jdemo364.wpenginepowered.com";
+const DEFAULT_PARENT_URL = process.env.NEXT_PUBLIC_PARENT_URL || "";
 
 const getPricingApiStore = ({ parentUrl, shop } = {}) => {
   const explicitShop = typeof shop === "string" ? shop.trim().toLowerCase() : "";
@@ -86,7 +86,6 @@ const STORE_SLUG_BY_HOST = {
   "jdemo364.wpenginepowered": "diamondwise",
   "shopify-jewelry-apps.keyideasinfotech.com": "keyideas",
   "demostore": "demostore",
-  "localhost": "diamondwise",
 };
 
 let configCache = null;
@@ -164,8 +163,8 @@ export async function initPriceConfig({ force = false, parentUrl, shop } = {}) {
     dimendscaasi: LOCAL_DIMENDSCAASI_JSON_URL,
     dimensacci: LOCAL_DIMENDSCAASI_JSON_URL,
     demostore: LOCAL_DEMOSTORE_JSON_URL,
-    default: LOCAL_DIAMONDWISE_JSON_URL,
-  }[storeSlug] ?? LOCAL_DIAMONDWISE_JSON_URL;
+    default: LOCAL_DEMOSTORE_JSON_URL,
+  }[storeSlug] ?? LOCAL_DEMOSTORE_JSON_URL;
   const canReuseCache =
     configCache !== null &&
     !force &&

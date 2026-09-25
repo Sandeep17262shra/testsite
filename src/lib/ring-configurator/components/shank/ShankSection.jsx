@@ -923,66 +923,53 @@ const availableMatchingBands = filterAvailableOptions(
                     </>
                 )}
 
-                <p className="font-sub-heading mt-[30px] mb-2.5 flex justify-between">
-                                    <p className="font-sub-heading flex items-center">
-                    Matching Band
-                     <span className="mx-[10px] cursor-pointer">
-                      <img src={ringBand ==="Yes" ? "/images/toggle-black.svg" : "/images/toggle-grey.svg"}
-
-                        alt="Toggle"
-                         onClick={() => handleBandChange(ringBand)}
-                    />
-                    </span>
-                    {ringBand ==="No" && 
-                    <span className="font-normal font-6b6">
-                        none
-                    </span>
-                    }
-                    {ringBand ==="Yes" && <span className="font-6b6 font-normal">
-                        {hoveredSideSettingName !== null
+                {availableMatchingBands.length > 0 && (
+                  <>
+                    <p className="font-sub-heading mt-[30px] mb-2.5 flex justify-between">
+                      <p className="font-sub-heading flex items-center">
+                        Matching Band
+                        <span className="mx-[10px] cursor-pointer">
+                          <img src={ringBand ==="Yes" ? "/images/toggle-black.svg" : "/images/toggle-grey.svg"}
+                            alt="Toggle"
+                            onClick={() => handleBandChange(ringBand)}
+                          />
+                        </span>
+                        {ringBand ==="No" && 
+                          <span className="font-normal font-6b6">
+                            none
+                          </span>
+                        }
+                        {ringBand ==="Yes" && <span className="font-6b6 font-normal">
+                          {hoveredSideSettingName !== null
                             ? hoveredSideSettingName
                             : ringMatchingBand}
-
-                        {/* Display price difference during hover */}
-                        {/*(sideSettingPriceDifference !== null && sideSettingPriceDifference !== 0) && (
-                            sideSettingPriceDifference > 0
-                                ? ` (+${sideSettingPriceDifference})`
-                                : ` (${sideSettingPriceDifference})`
-                        )*/}
-
-                        {/* Display actual price when not hovering */}
-                        {/*(sideSettingPriceDifference === null && ringMatchingBand.toLowerCase() !== "plain") && ` (+${ringSideSettingPrice + matchingBandPrice - 600})`*/}
-                    </span>
-}
-                </p>
-                    
-                    {/* <span className="float-right font-6b6 font-6b6-700">
-                        {(ringSideSettingPrice && `$${ringSideSettingPrice}`)}
-                    </span> */}
-                    {ringBand ==="Yes" && <span className="font-normal font-6b6 left-0">
+                        </span>}
+                      </p>
+                      {ringBand ==="Yes" && <span className="font-normal font-6b6 left-0">
                         {CurrencySign}{matchingBandPrice}
-                    </span>}
-                    
-                </p>
-                <div className="diamond-shape-section flex space-x-2 style-block">
-                    {availableMatchingBands.map((setting) => (
+                      </span>}
+                    </p>
+                    <div className="diamond-shape-section flex space-x-2 style-block">
+                      {availableMatchingBands.map((setting) => (
                         <button
-                            key={setting}
-                            className={`style-square-btn ${ringBand ==="Yes" && ringMatchingBand === setting ? "active-border" : ""} ${ringBand !="Yes" ? "opacity-30 !cursor-default" : ""} flex--center`}
-                            onClick={ringBand ==="Yes" ? () => handleSideSettingChange(setting): null}
-                            onMouseLeave={ringBand ==="Yes" ? () => handleSideSettingHoverEnd(): null}
-                            onMouseEnter={ringBand ==="Yes" ? () => handleSideSettingHover(setting): null}
+                          key={setting}
+                          className={`style-square-btn ${ringBand ==="Yes" && ringMatchingBand === setting ? "active-border" : ""} ${ringBand !="Yes" ? "opacity-30 !cursor-default" : ""} flex--center`}
+                          onClick={ringBand ==="Yes" ? () => handleSideSettingChange(setting): null}
+                          onMouseLeave={ringBand ==="Yes" ? () => handleSideSettingHoverEnd(): null}
+                          onMouseEnter={ringBand ==="Yes" ? () => handleSideSettingHover(setting): null}
                         >
-                            <img
-                                className="absolute"
-                                src={`/images/${setting.toLowerCase().replace('-', '')}-band.webp`}
-                                alt={setting.charAt(0).toUpperCase() + setting.slice(1)}
-                                width={50}
-                                height={50}
-                            />
+                          <img
+                            className="absolute"
+                            src={`/images/${setting.toLowerCase().replace('-', '')}-band.webp`}
+                            alt={setting.charAt(0).toUpperCase() + setting.slice(1)}
+                            width={50}
+                            height={50}
+                          />
                         </button>
-                    ))}
-                </div>
+                      ))}
+                    </div>
+                  </>
+                )}
                  <OtherSection />
             </div>
 

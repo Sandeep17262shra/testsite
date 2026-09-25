@@ -27,6 +27,8 @@ const METAL_COLORS = {
   yellow: "#FFD280",
   rose: "#FFBAA3",
   platinum: "#e5e4e2",
+  titanium: "#8C8C8C",
+  silver: "#D8D8D8",
 };
 
 const METAL_COLOR_TERMS = {
@@ -34,6 +36,8 @@ const METAL_COLOR_TERMS = {
   yellow: ["yellow gold", "yellow metal"],
   rose: ["rose gold", "pink gold", "rose metal"],
   platinum: ["platinum"],
+  titanium: ["titanium"],
+  silver: ["silver", "sterling silver"],
 };
 
 const RESPONSE_LANGUAGES = ["en", "it", "de", "es", "fr", "pt", "nl", "hi", "ar"];
@@ -792,7 +796,7 @@ const buildAvailableOptionsMessage = (infoRequest, settings, currentBaseState, p
     qualities: availableOptions.qualityLevels,
     gemstones: availableOptions.gemstones,
     coloredDiamonds: availableOptions.coloredDiamonds,
-    metals: ["White Gold", "Yellow Gold", "Rose Gold", "Platinum", ...availableOptions.metalPurities],
+    metals: ["White Gold", "Yellow Gold", "Rose Gold", "Platinum", "Titanium", "Silver", ...availableOptions.metalPurities],
     carats: getAvailableCarats(parentUrl, settings).map((value) => `${value} ct`),
   };
   const formatters = {
@@ -810,6 +814,8 @@ const buildAvailableOptionsMessage = (infoRequest, settings, currentBaseState, p
 
 const getMetalColorLabel = (config = {}) => {
   if (config.platinum || config.metalColor === METAL_COLORS.platinum) return "Platinum";
+  if (config.metalColor === METAL_COLORS.titanium) return "Titanium";
+  if (config.metalColor === METAL_COLORS.silver) return "Silver";
   if (config.metalColor === METAL_COLORS.white) return "White Gold";
   if (config.metalColor === METAL_COLORS.rose) return "Rose Gold";
   return "Yellow Gold";
@@ -1542,7 +1548,7 @@ const classifyPrompt = (prompt, intent, responseLanguage) => {
     return { status: "clarification", message: getControlMessage(responseLanguage, "conflict") };
   }
 
-  const unsupportedOptionPattern = /\b(hexagon|hexagonal|kite|trapezoid|trapezoidal|titanium|silver|sterling silver|black gold|amethyst|opal|aquamarine|birthstone|certification|certificate|resize|resizing|delivery|ship|shipping|payment|pay for)\b/i;
+  const unsupportedOptionPattern = /\b(hexagon|hexagonal|kite|trapezoid|trapezoidal|black gold|amethyst|opal|aquamarine|birthstone|certification|certificate|resize|resizing|delivery|ship|shipping|payment|pay for)\b/i;
   const unsupportedFilterPattern = /\b(?:clarity|diamond color|colour grade|cut|six prong|6 prong|four prong|4 prong|band width|engraving font)\b/i;
   const unsupportedDesignOnly = intent.notes?.some((note) => [
     "unsupportedEastWest", "unsupportedFloating", "unsupportedSurpriseDetail",

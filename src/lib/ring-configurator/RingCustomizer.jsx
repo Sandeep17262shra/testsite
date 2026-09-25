@@ -44,6 +44,8 @@ const GOLD_COLORS = {
   yellow: "#FFD280",
   rose: "#e6b08f",
   platinum: "#e5e4e2",
+  titanium: "#8C8C8C",
+  silver: "#D8D8D8",
 };
 
 const T3_FONT = "Arial, sans-serif";
@@ -130,7 +132,9 @@ const settingOptions = [
 ];
 
 const metalOptions = [
-  { label: "PL", purity: "Platinum", metal: "14K", color: GOLD_COLORS.platinum, platinum: true },
+  { label: "PL", purity: "Platinum", metal: "Platinum", color: GOLD_COLORS.platinum, platinum: true },
+  { label: "TI", purity: "Titanium", metal: "Titanium", color: GOLD_COLORS.titanium, platinum: false, fixedPurity: "Titanium" },
+  { label: "SL", purity: "Silver", metal: "Silver", color: GOLD_COLORS.silver, gradient: "linear-gradient(135deg, #D8D8D8 0%, #656262 88%, #A1A0A0 100%)", platinum: false, fixedPurity: "Silver" },
   { label: "9K White Gold", purity: "9K", metal: "9K", color: GOLD_COLORS.white, platinum: false },
   { label: "9K Yellow Gold", purity: "9K", metal: "9K", color: GOLD_COLORS.yellow, platinum: false },
   { label: "9K Rose Gold", purity: "9K", metal: "9K", color: GOLD_COLORS.rose, platinum: false },
@@ -290,6 +294,8 @@ const metalColorOptions = [
   { label: "Yellow Gold", value: "yellow",   color: GOLD_COLORS.yellow,   shortLabel: "YG", platinum: false },
   { label: "Rose Gold",   value: "rose",     color: GOLD_COLORS.rose,     shortLabel: "RG", platinum: false },
   { label: "Platinum",    value: "platinum", color: GOLD_COLORS.platinum, shortLabel: "PL", platinum: true  },
+  { label: "Titanium",    value: "titanium", color: GOLD_COLORS.titanium, shortLabel: "TI", fixedPurity: "Titanium" },
+  { label: "Silver",      value: "silver",   color: GOLD_COLORS.silver,   gradient: "linear-gradient(135deg, #D8D8D8 0%, #656262 88%, #A1A0A0 100%)", shortLabel: "SL", fixedPurity: "Silver" },
 ];
 
 const purityOptions = ["9K", "10K", "14K", "18K"];
@@ -846,6 +852,8 @@ function CaratOptionRow({ title, guide, value, onChange, stops, min, max, step }
 }
 const resolveMetalLabel = ({ metal, ringColor, platinum }) => {
   if (platinum || metal === "Platinum") return "Platinum";
+  if (metal === "Titanium" || String(ringColor || "").toLowerCase() === GOLD_COLORS.titanium.toLowerCase()) return "Titanium";
+  if (metal === "Silver" || metal === "Sterling Silver" || String(ringColor || "").toLowerCase() === GOLD_COLORS.silver.toLowerCase()) return "Silver";
 
   const normalizedColor = String(ringColor || "").toLowerCase();
   if (normalizedColor === GOLD_COLORS.white.toLowerCase()) return `${metal} White Gold`;
@@ -855,6 +863,8 @@ const resolveMetalLabel = ({ metal, ringColor, platinum }) => {
 
 const resolveMetalColorValue = ({ ringColor, platinum, metal }) => {
   if (platinum || metal === "Platinum") return "platinum";
+  if (metal === "Titanium" || String(ringColor || "").toLowerCase() === GOLD_COLORS.titanium.toLowerCase()) return "titanium";
+  if (metal === "Silver" || metal === "Sterling Silver" || String(ringColor || "").toLowerCase() === GOLD_COLORS.silver.toLowerCase()) return "silver";
 
   const normalizedColor = String(ringColor || "").toLowerCase();
   if (normalizedColor === GOLD_COLORS.white.toLowerCase() || normalizedColor === "#dbdbdb") return "white";
@@ -899,7 +909,7 @@ const RingCustomizer = forwardRef(({
   // EXCEPT DiamondWise's own, where they are the real catalogue - so the
   // "Demo Only" corner badge is shown everywhere else and hidden there.
   const isDiamondWiseStore = isDiamondWiseParentUrl(parent);
-  const demoOnlyBadge = null;
+  const demoOnlyBadge = isDiamondWiseStore ? null : "Demo Only";
   const { setCameraView } = useContext(CameraViewContext);
   const { setResetObj } = useContext(LoaderContext);
   const {
@@ -1535,26 +1545,15 @@ const RingCustomizer = forwardRef(({
 
     if (engravingFocus) deactivateEngravingPreview();
 
-    if (biMetal === "Yes") {
-      setBiMetal("No");
-      setHeadColor(ringColor);
-    }
-
     const needsUnsupportedReset =
       ringBand === "Yes" ||
       matchingBandQuantity > 0 ||
-      ringMatchingBand !== "PLAIN" ||
-      Boolean(engraving.trim());
+      ringMatchingBand !== "PLAIN";
 
-    if (matchingBandQuantity > 0 || ringBand === "Yes" || ringMatchingBand !== "PLAIN") {
+    if (needsUnsupportedReset) {
       setMatchingBandQuantity(0);
       setRingBand("No");
       setRingMatchingBand("PLAIN");
-    }
-
-    if (engraving.trim()) {
-      setEngraving("");
-      setEngravingFont("Arial");
     }
 
     applyRingPrice({
@@ -1564,7 +1563,6 @@ const RingCustomizer = forwardRef(({
         nextRingBand: "No",
         nextMatchingBandQuantity: 0,
         nextMatchingBandStyle: "PLAIN",
-        nextEngraving: "",
       }),
     });
 
@@ -1742,14 +1740,15 @@ const RingCustomizer = forwardRef(({
   };
 
   const handleMetalColor = (option) => {
-    if (option.platinum) {
-      setPlatinum(true);
-      setMetal("Platinum");
+    if (option.platinum || option.fixedPurity) {
+      const metalName = option.fixedPurity || "Platinum";
+      setPlatinum(Boolean(option.platinum));
+      setMetal(metalName);
       setRingColor(option.color);
       setHeadColor(option.color);
       setBandColor(option.color);
       setBiMetal("No");
-      applyRingPrice({ nextMetal: "Platinum", metalPriceKey: "Platinum" });
+      applyRingPrice({ nextMetal: metalName, metalPriceKey: metalName });
       return;
     }
 
@@ -1768,13 +1767,13 @@ const RingCustomizer = forwardRef(({
   };
 
   const handlePurity = (purity) => {
-    if (platinum) return;
+    if (platinum || ["Titanium", "Silver"].includes(metal)) return;
     setMetal(purity);
     applyRingPrice({ nextMetal: purity, metalPriceKey: purity });
   };
 
   const handleBiMetalSelect = (colorValue) => {
-  if (diamondWiseDesignId || platinum) return;
+  if (platinum) return;
 
   if (colorValue === "none") {
     if (biMetal !== "Yes") return;
@@ -1852,8 +1851,9 @@ const RingCustomizer = forwardRef(({
 
   const handleMetalColorHover = (option) => {
     const effectiveMatchingBandStyle = ringMatchingBand || ringSideSetting;
-    if (option.platinum) {
-      const hovered = calculateFinalRingPrice("Platinum", ringHead, ringShank, effectiveMatchingBandStyle, ringBand, bandWidth, styleShape, engraving, parent);
+    if (option.platinum || option.fixedPurity) {
+      const targetMetal = option.fixedPurity || "Platinum";
+      const hovered = calculateFinalRingPrice(targetMetal, ringHead, ringShank, effectiveMatchingBandStyle, ringBand, bandWidth, styleShape, engraving, parent);
       const current = calculateFinalRingPrice(metal, ringHead, ringShank, effectiveMatchingBandStyle, ringBand, bandWidth, styleShape, engraving, parent);
       setHoveredMetalColor({ delta: hovered.breakdown.metalPrice - current.breakdown.metalPrice });
     } else {
@@ -1937,7 +1937,6 @@ const RingCustomizer = forwardRef(({
 
 
   const activateEngravingPreview = () => {
-    if (diamondWiseDesignId) return;
     setEngravingFocus(true);
     setCameraView("engravingZoom");
   };
@@ -1948,14 +1947,12 @@ const RingCustomizer = forwardRef(({
   };
 
   const handleEngravingChange = (event) => {
-    if (diamondWiseDesignId) return;
     const nextEngraving = trimEngraving(event.target.value);
     setEngraving(nextEngraving);
     applyRingPrice({ nextEngraving });
   };
 
   const handleEngravingSymbol = (symbol) => {
-    if (diamondWiseDesignId) return;
     const input = engravingInputRef.current;
     if (!input) return;
 
@@ -1981,13 +1978,11 @@ const RingCustomizer = forwardRef(({
   };
 
   const handleEngravingFont = (font) => {
-    if (diamondWiseDesignId) return;
     setEngravingFont(font);
     activateEngravingPreview();
   };
 
   const handleEngravingClear = () => {
-    if (diamondWiseDesignId) return;
     setEngraving("");
     applyRingPrice({ nextEngraving: "" });
     requestAnimationFrame(() => {
@@ -2012,10 +2007,11 @@ const RingCustomizer = forwardRef(({
     if (resetTimeoutRef.current) clearTimeout(resetTimeoutRef.current);
     resetTimeoutRef.current = window.setTimeout(() => setIsResetActive(false), 2000);
 
-    const targetShank = "dw-jul-ma-02-shank";
-    const targetHead = "dw-jul-ma-02-head";
-    const targetShape = "marquise";
-    const targetDWId = "diamondwise-jul-ma-02";
+    const isDiamondwise = isDiamondWiseParentUrl(parent);
+    const targetShank = isDiamondwise ? "dw-jul-ma-02-shank" : "PLAIN";
+    const targetHead = isDiamondwise ? "dw-jul-ma-02-head" : "4-PRONG";
+    const targetShape = isDiamondwise ? "marquise" : "round";
+    const targetDWId = isDiamondwise ? "diamondwise-jul-ma-02" : DIAMONDWISE_DESIGN_NONE;
 
     setRingShank(targetShank);
     setRingSideSetting("PLAIN");
@@ -2125,7 +2121,7 @@ const RingCustomizer = forwardRef(({
   const selectedShape = shapeOptions.find((option) => option.value === shape) || shapeOptions[0];
   const selectedSetting = settingOptions.find(isSettingActive) || settingOptions[0];
   const selectedDiamondWiseDesign = getDiamondWiseDesignById(diamondWiseDesignId);
-  const isEngravingDisabledForShank = Boolean(diamondWiseDesignId) || ENGRAVING_INCOMPATIBLE_SHANKS.includes(ringShank);
+  const isEngravingDisabledForShank = ENGRAVING_INCOMPATIBLE_SHANKS.includes(ringShank);
   const selectedDiamondWiseShank = getDiamondWiseDesignByShankId(ringShank);
   const displayStyleLabel = selectedDiamondWiseShank?.shankLabel || selectedStyle.label;
   const displaySettingLabel = selectedDiamondWiseDesign?.headLabel || selectedSetting.label;
@@ -2136,6 +2132,11 @@ const RingCustomizer = forwardRef(({
     () => filterAvailableOptions(purityOptions, parent, "metalPurities"),
     [parent]
   );
+  const availableMetalColors = useMemo(() => {
+    const activeMetalNames = getAvailableOptions(parent, "metalColors");
+    if (!activeMetalNames || activeMetalNames.length === 0) return metalColorOptions;
+    return metalColorOptions.filter((option) => activeMetalNames.includes(option.label));
+  }, [parent]);
   const selectedMetalColorValue = resolveMetalColorValue({ ringColor, platinum, metal });
   const selectedHeadMetalColorValue = resolveMetalColorValue({ ringColor: headColor, platinum: false, metal: "14K" });
   const selectedMetalColorOption =
@@ -2187,20 +2188,10 @@ const RingCustomizer = forwardRef(({
     if (!selectedDiamondWiseDesign) return;
 
     let shouldRefreshPrice = false;
-    if (biMetal === "Yes") {
-      setBiMetal("No");
-      setHeadColor(ringColor);
-    }
     if (matchingBandQuantity > 0 || ringBand === "Yes" || ringMatchingBand !== "PLAIN") {
       setMatchingBandQuantity(0);
       setRingBand("No");
       setRingMatchingBand("PLAIN");
-      shouldRefreshPrice = true;
-    }
-    if (engraving.trim()) {
-      setEngraving("");
-      setEngravingFont("Arial");
-      deactivateEngravingPreview();
       shouldRefreshPrice = true;
     }
     if (shouldRefreshPrice) {
@@ -2208,12 +2199,12 @@ const RingCustomizer = forwardRef(({
         nextRingBand: "No",
         nextMatchingBandQuantity: 0,
         nextMatchingBandStyle: "PLAIN",
-        nextEngraving: "",
+        nextEngraving: engraving,
       });
     }
     // Keep restored DiamondWise presets normalized without wiring new pricing behavior.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDiamondWiseDesign, biMetal, matchingBandQuantity, ringBand, ringMatchingBand, engraving, ringColor]);
+  }, [selectedDiamondWiseDesign, matchingBandQuantity, ringBand, ringMatchingBand, engraving]);
 
   useEffect(() => {
     // Skip if config was loaded from URL / share link — preserve shared sizeOption and ringSize
@@ -2333,6 +2324,25 @@ const RingCustomizer = forwardRef(({
   ]);
 
   useEffect(() => {
+    if (availableMatchingBandStyles.length === 0) {
+      if (matchingBandQuantity > 0 || ringBand === "Yes") {
+        setMatchingBandQuantity(0);
+        setRingBand("No");
+        applyRingPrice({
+          nextRingBand: "No",
+          nextMatchingBandQuantity: 0,
+        });
+      }
+    } else if (matchingBandQuantity > 0 && !availableMatchingBandStyles.includes(ringMatchingBand)) {
+      const fallbackStyle = availableMatchingBandStyles[0];
+      setRingMatchingBand(fallbackStyle);
+      applyRingPrice({
+        nextMatchingBandStyle: fallbackStyle,
+      });
+    }
+  }, [availableMatchingBandStyles, matchingBandQuantity, ringBand, ringMatchingBand]);
+
+  useEffect(() => {
     const diamondPrice = calculateTheme3DiamondPrice();
     setStoneTotal(diamondPrice);
     setCaratP(diamondPrice);
@@ -2390,13 +2400,25 @@ const RingCustomizer = forwardRef(({
   }, []);
 
   useEffect(() => {
-    if (platinum || availablePurities.includes(metal)) return;
+    if (platinum || ["Titanium", "Silver"].includes(metal) || availablePurities.includes(metal)) return;
     const fallbackPurity = availablePurities.includes("14K") ? "14K" : availablePurities[0];
     if (!fallbackPurity) return;
     setMetal(fallbackPurity);
     applyRingPrice({ nextMetal: fallbackPurity, metalPriceKey: fallbackPurity });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [availablePurities, platinum]);
+  }, [availablePurities, platinum, metal]);
+
+  // Auto-switch metal color when the currently selected metal is not available for this store
+  useEffect(() => {
+    if (availableMetalColors.length === 0) return;
+    const currentValue = resolveMetalColorValue({ ringColor, platinum, metal });
+    const isCurrentAvailable = availableMetalColors.some((option) => option.value === currentValue);
+    if (!isCurrentAvailable) {
+      const firstAvailable = availableMetalColors[0];
+      if (firstAvailable) handleMetalColor(firstAvailable);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availableMetalColors]);
 
   useEffect(() => {
     if (!isDiamondPreviewFlow || isGemstoneMode) return;
@@ -3159,7 +3181,7 @@ const RingCustomizer = forwardRef(({
                         )}
                       </div>
                       <div className="order-summary-desc">
-                        {displayStyleLabel} · {selectedMetalColorOption.label} · {activePurity}{matchingBandQuantity > 0 ? ` · ${getMatchingBandStyleLabel(ringMatchingBand || ringSideSetting)}` : ""}
+                        {displayStyleLabel} · {selectedMetalColorOption.label === activePurity ? activePurity : `${selectedMetalColorOption.label} · ${activePurity}`}{biMetal === "Yes" ? ` · Bi-Metal ${selectedHeadMetalColorOption.label}` : ""}{matchingBandQuantity > 0 ? ` · ${getMatchingBandStyleLabel(ringMatchingBand || ringSideSetting)}` : ""}
                       </div>
                       <div className="order-summary-desc">Size: {ringSizeValue}</div>
                       {engravingText && <div className="order-summary-desc">Engraving: "{engravingText}"</div>}
@@ -3188,7 +3210,7 @@ const RingCustomizer = forwardRef(({
                           )}
                         </div>
                         <div className="order-summary-desc">
-                          {displayStyleLabel} · {selectedMetalColorOption.label} · {activePurity}{matchingBandQuantity > 0 ? ` · ${getMatchingBandStyleLabel(ringMatchingBand || ringSideSetting)}` : ""}
+                          {displayStyleLabel} · {selectedMetalColorOption.label === activePurity ? activePurity : `${selectedMetalColorOption.label} · ${activePurity}`}{matchingBandQuantity > 0 ? ` · ${getMatchingBandStyleLabel(ringMatchingBand || ringSideSetting)}` : ""}
                         </div>
                         <div className="order-summary-desc">Size: {ringSizeValue}</div>
                         {engravingText && <div className="order-summary-desc">Engraving: "{engravingText}"</div>}
@@ -3238,7 +3260,7 @@ const RingCustomizer = forwardRef(({
                         )}
                       </div>
                       <div className="order-summary-desc">
-                        {displayStyleLabel} · {selectedMetalColorOption.label} · {activePurity}
+                        {displayStyleLabel} · {selectedMetalColorOption.label === activePurity ? activePurity : `${selectedMetalColorOption.label} · ${activePurity}`}{biMetal === "Yes" ? ` · Bi-Metal ${selectedHeadMetalColorOption.label}` : ""}
                       </div>
                       <div className="order-summary-desc">Size: {selectedRingSizeSystem.label} {ringSize}</div>
                       {engraving && <div className="order-summary-desc">Engraving: "{engraving}"</div>}
@@ -3266,13 +3288,14 @@ const RingCustomizer = forwardRef(({
                             <span className="order-summary-price">{formatStoreCurrency(engagementRingSubtotal, parent)}</span>
                           )}
                         </div>
-                        <div className="order-summary-desc">{displayStyleLabel} · {selectedMetalColorOption.label} · {activePurity}</div>
+                        <div className="order-summary-desc">{displayStyleLabel} · {selectedMetalColorOption.label === activePurity ? activePurity : `${selectedMetalColorOption.label} · ${activePurity}`}</div>
                         <div className="order-summary-desc">Size: {selectedRingSizeSystem.label} {ringSize}</div>
                         {engraving && <div className="order-summary-desc">Engraving: "{engraving}"</div>}
                       </div>
                     </>
                   )}
 
+                  {!noHeadSelected && (
                   <div className="order-summary-section">
                     <div className="order-summary-row">
                       <span className="order-summary-title">Stone</span>
@@ -3293,6 +3316,7 @@ const RingCustomizer = forwardRef(({
                       ].filter(Boolean).join(" · ")}
                     </div>
                   </div>
+                  )}
 
                   <div className="order-summary-divider" />
                 </>
@@ -3404,7 +3428,7 @@ return (
             )}
 
             <OptionRow title="Metal" guide="metal-purity" className="theme3-band-metal" price={metalPrice} parent={parent} hovered={hoveredMetalColor}>
-              {metalColorOptions.map((option) => (
+              {availableMetalColors.map((option) => (
                 <button
                   key={option.value}
                   type="button"
@@ -3413,14 +3437,17 @@ return (
                   onMouseEnter={() => handleMetalColorHover(option)}
                   onMouseLeave={handleMetalColorLeave}
                   title={option.label}
-                  style={{ backgroundColor: option.color }}
+                  style={{
+                    background: option.gradient || option.color,
+                    backgroundColor: option.color,
+                  }}
                 >
                   <small style={T3_BODY_STYLE}>{option.label}</small>
                 </button>
               ))}
             </OptionRow>
 
-            {!platinum && (
+            {!platinum && !["Titanium", "Silver"].includes(metal) && (
               <OptionRow title="Purity" guide="metal-purity" className="theme3-band-purity" price={metalPrice} parent={parent} hovered={hoveredPurity}>
                 {availablePurities.map((option) => (
                   <TextOption
@@ -3482,7 +3509,7 @@ return (
               
             </div>
 
-            {!noHeadSelected && (
+            {!noHeadSelected && availableMatchingBandStyles.length > 0 && (
             <OptionRow
               title="Matching Band"
               guide="matching-band"
@@ -3497,19 +3524,21 @@ return (
                 className="theme3-matching-band-none"
                 onClick={() => handleMatchingBand(matchingBandOptions[0])}
               />
-              {matchingBandOptions.filter((option) => option.quantity > 0).map((option) => (
-                <CardOption
-                  key={option.label}
-                  active={matchingBandQuantity > 0 && ringMatchingBand === option.style}
-                  label={option.label}
-                  image={styleOptions.find((styleOption) => styleOption.shank === option.style)?.image}
-                  className="theme3-image-option theme3-matching-band-option"
-                  onClick={() => handleMatchingBand(option)}
-                  disabled={isMatchingBandDisabled(option) || !availableMatchingBandStyles.includes(option.style)}
-                  onMouseEnter={() => handleMatchingBandHover(option)}
-                  onMouseLeave={handleMatchingBandLeave}
-                />
-              ))}
+              {matchingBandOptions
+                .filter((option) => option.quantity > 0 && availableMatchingBandStyles.includes(option.style))
+                .map((option) => (
+                  <CardOption
+                    key={option.label}
+                    active={matchingBandQuantity > 0 && ringMatchingBand === option.style}
+                    label={option.label}
+                    image={styleOptions.find((styleOption) => styleOption.shank === option.style)?.image}
+                    className="theme3-image-option theme3-matching-band-option"
+                    onClick={() => handleMatchingBand(option)}
+                    disabled={isMatchingBandDisabled(option)}
+                    onMouseEnter={() => handleMatchingBandHover(option)}
+                    onMouseLeave={handleMatchingBandLeave}
+                  />
+                ))}
             </OptionRow>
             )}
 
@@ -3519,12 +3548,7 @@ return (
               data-theme3-guide-section="band"
               data-theme3-guide-label="Engraving"
             >
-              {selectedDiamondWiseDesign && (
-                <div className="theme3-model-note" role="note">
-                  This is a unique ring design with fixed setting geometry, so engraving is unavailable for this preset.
-                </div>
-              )}
-              {!selectedDiamondWiseDesign && isEngravingDisabledForShank && (
+              {isEngravingDisabledForShank && (
                 <div className="theme3-model-note" role="note">
                   This band style doesn't have a plain inner surface, so engraving is unavailable for it.
                 </div>
@@ -3620,12 +3644,12 @@ return (
                 type="button"
                 className={`gb-metal-option ${biMetal !== "Yes" ? "active" : ""}`}
                 onClick={() => handleBiMetalSelect("none")}
-                disabled={platinum || Boolean(diamondWiseDesignId)}
+                disabled={platinum}
               >
                 <small style={T3_BODY_STYLE}>None</small>
               </button>
-              {metalColorOptions
-                .filter((option) => !option.platinum)
+              {availableMetalColors
+                .filter((option) => !option.platinum && !option.fixedPurity)
                 .map((option) => (
                   <button
                     key={option.value}
@@ -3634,19 +3658,20 @@ return (
                       biMetal === "Yes" && selectedHeadMetalColorValue === option.value ? "active" : ""
                     }`}
                     onClick={() => handleBiMetalSelect(option.value)}
-                    disabled={platinum || Boolean(diamondWiseDesignId)}
+                    disabled={platinum}
                     title={option.label}
-                    style={{ backgroundColor: option.color }}
+                    style={{
+                      background: option.gradient || option.color,
+                      backgroundColor: option.color,
+                    }}
                   >
                     <small style={T3_BODY_STYLE}>{option.label}</small>
                   </button>
                 ))}
             </OptionRow>
-            {(platinum || diamondWiseDesignId) && (
+            {(platinum) && (
               <p className="theme3-bimetal-note theme3-band-bimetal-note" role="note">
-                {diamondWiseDesignId
-                  ? "Bi-metal is unavailable for this fixed DiamondWise geometry."
-                  : "Bi-metal is unavailable with platinum."}
+                      Bi-metal is unavailable with platinum.
               </p>
             )}
 </>
@@ -3664,12 +3689,6 @@ return (
                 data-theme3-section="shape"
                 ref={(node) => { theme3SectionRefs.current.shape = node; }}
               >
-
-                {selectedDiamondWiseDesign && (
-                  <div className="theme3-model-note" role="note">
-                    This is a unique ring design with fixed setting geometry.
-                  </div>
-                )}
 
                 <OptionRow title="Shape" guide="center-stone-shape" className="theme3-shape-grid" maxOneRow={6}>
                   {shapeOptions.filter((option) => getAvailableOptions(parent, "diamondShapes").includes(option.value) && isShapeCompatible(parent, ringHead, option.value)).map((option) => (
@@ -3834,7 +3853,7 @@ return (
                   {formatStoreCurrency(subtotalValue, parent)}
                 </strong>
                 <span className="theme3-summary-tax-label">
-                  {summaryTaxLabel ? (summaryTaxLabel.startsWith("+") ? `+ ${summaryTaxLabel.slice(1).trim()}` : summaryTaxLabel) : "+ tax"}
+                  {summaryTaxLabel ? (summaryTaxLabel.startsWith("+") ? `+ ${summaryTaxLabel.slice(1).trim()}` : summaryTaxLabel) : null}
                 </span>
               </div>
             </div>
@@ -3999,34 +4018,40 @@ return (
           <button
             key={option.label}
             type="button"
-            className={`gb-metal-option ${option.platinum ? (platinum || metal === "Platinum" ? "active" : "") : (primaryMetalLabel === option.label ? "active" : "")}`}
+            className={`gb-metal-option ${
+              option.platinum
+                ? (platinum || metal === "Platinum" ? "active" : "")
+                : (option.fixedPurity ? (metal === option.fixedPurity ? "active" : "") : (primaryMetalLabel === option.label ? "active" : ""))
+            }`}
             onClick={() => handleMetal(option)}
             title={option.label}
           >
-            <span style={{ backgroundColor: option.color }} />
-            <b>{option.label === "PL" ? "PL" : option.label.split(" ")[0]}</b>
+            <span style={{ background: option.gradient || option.color, backgroundColor: option.color }} />
+            <b>{["PL", "TI", "SL"].includes(option.label) ? option.label : option.label.split(" ")[0]}</b>
           </button>
         ))}
       </OptionRow>
 
       <div className="gb-bottom-panel">
-        {!noHeadSelected && (
+        {!noHeadSelected && availableMatchingBandStyles.length > 0 && (
           <OptionRow title="Matching Band">
-            {matchingBandOptions.map((option) => (
-              <TextOption
-                key={option.label}
-                active={option.quantity === 0 ? matchingBandQuantity === 0 : (matchingBandQuantity > 0 && ringMatchingBand === option.style)}
-                label={option.label}
-                onClick={() => handleMatchingBand(option)}
-                disabled={option.quantity > 0 && (isMatchingBandDisabled(option) || !availableMatchingBandStyles.includes(option.style))}
-              />
-            ))}
+            {matchingBandOptions
+              .filter((option) => option.quantity === 0 || availableMatchingBandStyles.includes(option.style))
+              .map((option) => (
+                <TextOption
+                  key={option.label}
+                  active={option.quantity === 0 ? matchingBandQuantity === 0 : (matchingBandQuantity > 0 && ringMatchingBand === option.style)}
+                  label={option.label}
+                  onClick={() => handleMatchingBand(option)}
+                  disabled={option.quantity > 0 && isMatchingBandDisabled(option)}
+                />
+              ))}
           </OptionRow>
         )}
 
         <div className="gb-price-summary">
           <div><span>{noHeadSelected ? "Ring Shank" : "Engagement Ring"}</span><b>{formatStoreCurrency(Number(shankTotal || 0) + (noHeadSelected ? 0 : Number(headTotal || 0)) - Number(matchingBandPrice || 0), parent)}</b></div>
-          {matchingBandQuantity > 0 && (
+          {matchingBandQuantity > 0 && availableMatchingBandStyles.length > 0 && (
             <div><span>Matching Band ({getMatchingBandStyleLabel(ringMatchingBand)})</span><b>{formatStoreCurrency(Number(matchingBandPrice || 0), parent)}</b></div>
           )}
           {!noHeadSelected && <div><span>Diamond</span><b>{formatStoreCurrency(Number(stoneTotal || 0), parent)}</b></div>}

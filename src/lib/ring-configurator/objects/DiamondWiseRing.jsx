@@ -17,6 +17,7 @@ import {
   getDiamondWiseDesignById,
   getDiamondWiseDesignByShankId,
 } from "../data/diamondwiseDesigns";
+import { EngravingMesh } from "./Ring";
 
 const MIN_CARAT = 0.75;
 const FALLBACK_DESIGN_ID = "diamondwise-jul-ma-02";
@@ -233,7 +234,7 @@ function RingPart({ scene, metalMaterialProps, diamondMaterialProps, scale, posi
 }
 
 function DiamondWiseRing() {
-  const { ringColor, metalness, roughness, envMapIntensity } = useContext(RingContext);
+  const { ringColor, headColor, biMetal, metalness, roughness, envMapIntensity } = useContext(RingContext);
   const { diamondSize, cut, clarity, diamondColorClarity } = useContext(DiamondContext);
   const { handleMetal } = useContext(SectionContext);
   const { target, displayed, reportPartReady } = useSceneStage();
@@ -340,7 +341,7 @@ function DiamondWiseRing() {
   //
   // `reflectivity` is passed for the same reason the other two files pass it:
   // it is inert on a standard material, and kept only so the prop lists match.
-  const metalMaterialProps = useMemo(() => {
+  const shankMetalMaterialProps = useMemo(() => {
     metalEnvironment.mapping = THREE.EquirectangularReflectionMapping;
     return {
       color: ringColor,
@@ -348,11 +349,21 @@ function DiamondWiseRing() {
       roughness,
       envMap: metalEnvironment,
       envMapIntensity,
-      // Kept from the original setup: these models are not all closed solids,
-      // so back faces still need to draw.
       side: THREE.DoubleSide,
     };
   }, [metalEnvironment, ringColor, metalness, roughness, envMapIntensity]);
+
+  const headMetalMaterialProps = useMemo(() => {
+    metalEnvironment.mapping = THREE.EquirectangularReflectionMapping;
+    return {
+      color: biMetal === "Yes" && headColor ? headColor : ringColor,
+      metalness,
+      roughness,
+      envMap: metalEnvironment,
+      envMapIntensity,
+      side: THREE.DoubleSide,
+    };
+  }, [metalEnvironment, biMetal, headColor, ringColor, metalness, roughness, envMapIntensity]);
 
   const { effectiveIor, effectiveBounces, aberrationStrength } = useMemo(() => {
     const base = CUT_BASELINE[cut] || CUT_BASELINE.Good;
@@ -404,17 +415,18 @@ function DiamondWiseRing() {
     <>
       <RingPart
         scene={headScene}
-        metalMaterialProps={metalMaterialProps}
+        metalMaterialProps={headMetalMaterialProps}
         diamondMaterialProps={diamondMaterialProps}
         scale={headTransform.scale}
         position={headTransform.position}
       />
       <RingPart
         scene={shankScene}
-        metalMaterialProps={metalMaterialProps}
+        metalMaterialProps={shankMetalMaterialProps}
         diamondMaterialProps={diamondMaterialProps}
         scale={displayedDesigns.shankDesign.modelScale}
       />
+      <EngravingMesh />
     </>
   );
 }

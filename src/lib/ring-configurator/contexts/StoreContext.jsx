@@ -164,7 +164,7 @@ const getInitialStoreContext = () => {
     }
   } catch {}
 
-  return normalizeContextInput({ parentUrl: "https://jdemo364.wpenginepowered.com" }, "standalone", false);
+  return normalizeContextInput({ parentUrl: window.location.href }, "standalone", false);
 };
 
 const isSameStoreContext = (previous, next) =>
