@@ -796,7 +796,7 @@ const buildAvailableOptionsMessage = (infoRequest, settings, currentBaseState, p
     qualities: availableOptions.qualityLevels,
     gemstones: availableOptions.gemstones,
     coloredDiamonds: availableOptions.coloredDiamonds,
-    metals: ["White Gold", "Yellow Gold", "Rose Gold", "Platinum", "Titanium", "Silver", ...availableOptions.metalPurities],
+    metals: ["White Gold", "Yellow Gold", "Rose Gold", "Platinum", "Titanium", "Sterling Silver", ...availableOptions.metalPurities],
     carats: getAvailableCarats(parentUrl, settings).map((value) => `${value} ct`),
   };
   const formatters = {
@@ -815,7 +815,7 @@ const buildAvailableOptionsMessage = (infoRequest, settings, currentBaseState, p
 const getMetalColorLabel = (config = {}) => {
   if (config.platinum || config.metalColor === METAL_COLORS.platinum) return "Platinum";
   if (config.metalColor === METAL_COLORS.titanium) return "Titanium";
-  if (config.metalColor === METAL_COLORS.silver) return "Silver";
+  if (config.metalColor === METAL_COLORS.silver) return "Sterling Silver";
   if (config.metalColor === METAL_COLORS.white) return "White Gold";
   if (config.metalColor === METAL_COLORS.rose) return "Rose Gold";
   return "Yellow Gold";

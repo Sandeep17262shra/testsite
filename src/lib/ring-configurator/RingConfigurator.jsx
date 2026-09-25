@@ -63,7 +63,7 @@ const ENGRAVING_FONT_LABELS = {
 const getMetalLabel = ({ metal, ringColor, platinum }) => {
   if (platinum || metal === "Platinum") return "Platinum";
   if (metal === "Titanium" || String(ringColor || "").toLowerCase() === "#8c8c8c") return "Titanium";
-  if (metal === "Silver" || metal === "Sterling Silver" || String(ringColor || "").toLowerCase() === "#d8d8d8") return "Silver";
+  if (metal === "Silver" || metal === "Sterling Silver" || String(ringColor || "").toLowerCase() === "#d8d8d8") return "Sterling Silver";
 
   const normalizedColor = String(ringColor || "").toLowerCase();
   if (normalizedColor === "f8f8f8" || normalizedColor === "#dbdbdb" || normalizedColor === "#f1f1ef") return `${metal} White Gold`;

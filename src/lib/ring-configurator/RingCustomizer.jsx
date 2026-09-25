@@ -134,7 +134,7 @@ const settingOptions = [
 const metalOptions = [
   { label: "PL", purity: "Platinum", metal: "Platinum", color: GOLD_COLORS.platinum, platinum: true },
   { label: "TI", purity: "Titanium", metal: "Titanium", color: GOLD_COLORS.titanium, platinum: false, fixedPurity: "Titanium" },
-  { label: "SL", purity: "Silver", metal: "Silver", color: GOLD_COLORS.silver, gradient: "linear-gradient(135deg, #D8D8D8 0%, #656262 88%, #A1A0A0 100%)", platinum: false, fixedPurity: "Silver" },
+  { label: "SS", purity: "Sterling Silver", metal: "Sterling Silver", color: GOLD_COLORS.silver, gradient: "linear-gradient(120deg, #A8A6A6 0%, #686767 50%, #A2A0A0 100%)", platinum: false, fixedPurity: "Sterling Silver" },
   { label: "9K White Gold", purity: "9K", metal: "9K", color: GOLD_COLORS.white, platinum: false },
   { label: "9K Yellow Gold", purity: "9K", metal: "9K", color: GOLD_COLORS.yellow, platinum: false },
   { label: "9K Rose Gold", purity: "9K", metal: "9K", color: GOLD_COLORS.rose, platinum: false },
@@ -295,7 +295,7 @@ const metalColorOptions = [
   { label: "Rose Gold",   value: "rose",     color: GOLD_COLORS.rose,     shortLabel: "RG", platinum: false },
   { label: "Platinum",    value: "platinum", color: GOLD_COLORS.platinum, shortLabel: "PL", platinum: true  },
   { label: "Titanium",    value: "titanium", color: GOLD_COLORS.titanium, shortLabel: "TI", fixedPurity: "Titanium" },
-  { label: "Silver",      value: "silver",   color: GOLD_COLORS.silver,   gradient: "linear-gradient(135deg, #D8D8D8 0%, #656262 88%, #A1A0A0 100%)", shortLabel: "SL", fixedPurity: "Silver" },
+  { label: "Sterling Silver", value: "silver", color: GOLD_COLORS.silver, gradient: "linear-gradient(120deg, #A8A6A6 0%, #686767 50%, #A2A0A0 100%)", shortLabel: "SS", fixedPurity: "Sterling Silver" },
 ];
 
 const purityOptions = ["9K", "10K", "14K", "18K"];
@@ -585,7 +585,7 @@ const getMatchingBandStyleLabel = (value) =>
     .replace(/-/g, " ")
     .replace(/\b\w/g, (char) => char.toUpperCase());
 
-function OptionRow({ title, children, guide, className, price, parent, hovered, maxOneRow, titleExtra }) {
+function OptionRow({ title, children, guide, className, price, parent, hovered, maxOneRow, titleExtra, showHoverDelta = true }) {
   const trackRef = useRef(null);
   const dragStateRef = useRef(null);
   const suppressClickRef = useRef(false);
@@ -664,7 +664,7 @@ function OptionRow({ title, children, guide, className, price, parent, hovered, 
       <div className="gb-option-title" style={{ justifyContent: 'space-between' }}>
         <span style={T3_SUBHEADER_STYLE}>{title}</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {hovered && hovered.delta !== 0 && (
+          {showHoverDelta && hovered && hovered.delta !== 0 && (
             <span className="gb-option-title-price" style={{ fontSize: '12px', fontWeight: 700, color: '#303030' }}>
               {hovered.delta > 0 ? '+' : ''}{formatStoreCurrency(hovered.delta, parent)}
             </span>
@@ -853,7 +853,7 @@ function CaratOptionRow({ title, guide, value, onChange, stops, min, max, step }
 const resolveMetalLabel = ({ metal, ringColor, platinum }) => {
   if (platinum || metal === "Platinum") return "Platinum";
   if (metal === "Titanium" || String(ringColor || "").toLowerCase() === GOLD_COLORS.titanium.toLowerCase()) return "Titanium";
-  if (metal === "Silver" || metal === "Sterling Silver" || String(ringColor || "").toLowerCase() === GOLD_COLORS.silver.toLowerCase()) return "Silver";
+  if (metal === "Silver" || metal === "Sterling Silver" || String(ringColor || "").toLowerCase() === GOLD_COLORS.silver.toLowerCase()) return "Sterling Silver";
 
   const normalizedColor = String(ringColor || "").toLowerCase();
   if (normalizedColor === GOLD_COLORS.white.toLowerCase()) return `${metal} White Gold`;
@@ -1767,29 +1767,29 @@ const RingCustomizer = forwardRef(({
   };
 
   const handlePurity = (purity) => {
-    if (platinum || ["Titanium", "Silver"].includes(metal)) return;
+    if (platinum || ["Titanium", "Silver", "Sterling Silver"].includes(metal)) return;
     setMetal(purity);
     applyRingPrice({ nextMetal: purity, metalPriceKey: purity });
   };
 
   const handleBiMetalSelect = (colorValue) => {
-  if (platinum) return;
+    if (platinum || ["Titanium", "Silver", "Sterling Silver"].includes(metal)) return;
 
-  if (colorValue === "none") {
-    if (biMetal !== "Yes") return;
-    setBiMetal("No");
-    setHeadColor(ringColor);
+    if (colorValue === "none") {
+      if (biMetal !== "Yes") return;
+      setBiMetal("No");
+      setHeadColor(ringColor);
+      setSummaryBlink(true);
+      return;
+    }
+
+    const option = metalColorOptions.find((item) => item.value === colorValue && !item.platinum && !item.fixedPurity);
+    if (!option) return;
+
+    setBiMetal("Yes");
+    setHeadColor(option.color);
     setSummaryBlink(true);
-    return;
-  }
-
-  const option = metalColorOptions.find((item) => item.value === colorValue && !item.platinum);
-  if (!option) return;
-
-  setBiMetal("Yes");
-  setHeadColor(option.color);
-  setSummaryBlink(true);
-};
+  };
 
   const handleHeadCardHover = (headId, headLabel) => {
     const effectiveMatchingBandStyle = ringMatchingBand || ringSideSetting;
@@ -1801,6 +1801,46 @@ const RingCustomizer = forwardRef(({
 
   const handleHeadCardLeave = () => {
     setHoveredHead(null);
+  };
+
+  const handleDiamondWiseCardHover = (design) => {
+    if (!design) return;
+    const hovered = calculateFinalRingPrice(
+      metal,
+      design.headId,
+      design.shankId,
+      "PLAIN",
+      "No",
+      bandWidth,
+      styleShape,
+      engraving,
+      parent
+    );
+    const current = calculateFinalRingPrice(
+      metal,
+      ringHead,
+      ringShank,
+      ringMatchingBand || ringSideSetting,
+      ringBand,
+      bandWidth,
+      styleShape,
+      engraving,
+      parent
+    );
+    const hoveredSettingTotal =
+      (hovered?.breakdown?.ringShankPrice || 0) +
+      (hovered?.breakdown?.ringHeadStylePrice || 0) +
+      (hovered?.breakdown?.ringSideSettingPrice || 0) +
+      (hovered?.breakdown?.metalPrice || 0) +
+      (hovered?.breakdown?.engravingPrice || 0);
+    const currentSettingTotal =
+      (current?.breakdown?.ringShankPrice || 0) +
+      (current?.breakdown?.ringHeadStylePrice || 0) +
+      (current?.breakdown?.ringSideSettingPrice || 0) +
+      (current?.breakdown?.metalPrice || 0) +
+      (current?.breakdown?.engravingPrice || 0);
+    const delta = hoveredSettingTotal - currentSettingTotal;
+    setHoveredHead({ name: design.headLabel || design.label, delta });
   };
 
   const handleShankCardHover = (shankId, shankLabel, sideSetting) => {
@@ -2135,7 +2175,11 @@ const RingCustomizer = forwardRef(({
   const availableMetalColors = useMemo(() => {
     const activeMetalNames = getAvailableOptions(parent, "metalColors");
     if (!activeMetalNames || activeMetalNames.length === 0) return metalColorOptions;
-    return metalColorOptions.filter((option) => activeMetalNames.includes(option.label));
+    return metalColorOptions.filter((option) =>
+      activeMetalNames.includes(option.label) ||
+      (option.label === "Sterling Silver" && activeMetalNames.includes("Silver")) ||
+      (option.label === "Silver" && activeMetalNames.includes("Sterling Silver"))
+    );
   }, [parent]);
   const selectedMetalColorValue = resolveMetalColorValue({ ringColor, platinum, metal });
   const selectedHeadMetalColorValue = resolveMetalColorValue({ ringColor: headColor, platinum: false, metal: "14K" });
@@ -2171,6 +2215,21 @@ const RingCustomizer = forwardRef(({
     () => settingSubtotal + diamondPreviewPrice,
     [settingSubtotal, diamondPreviewPrice]
   );
+
+  const selectedHeadShankPrice = useMemo(
+    () => Math.max(0, settingSubtotal - Number(matchingBandPrice || 0)),
+    [settingSubtotal, matchingBandPrice]
+  );
+
+  const displayedHeadShankPrice = useMemo(() => {
+    if (hoveredHead && typeof hoveredHead.delta === "number") {
+      return Math.max(0, selectedHeadShankPrice + hoveredHead.delta);
+    }
+    if (hoveredShank && typeof hoveredShank.delta === "number") {
+      return Math.max(0, selectedHeadShankPrice + hoveredShank.delta);
+    }
+    return selectedHeadShankPrice;
+  }, [selectedHeadShankPrice, hoveredHead, hoveredShank]);
 
   useEffect(() => {
     if (!isDiamondPreviewFlow && diamondWiseDesignId) {
@@ -2410,7 +2469,7 @@ const RingCustomizer = forwardRef(({
   }, []);
 
   useEffect(() => {
-    if (platinum || ["Titanium", "Silver"].includes(metal) || availablePurities.includes(metal)) return;
+    if (platinum || ["Titanium", "Silver", "Sterling Silver"].includes(metal) || availablePurities.includes(metal)) return;
     const fallbackPurity = availablePurities.includes("14K") ? "14K" : availablePurities[0];
     if (!fallbackPurity) return;
     setMetal(fallbackPurity);
@@ -3391,16 +3450,15 @@ return (
                 price={headTotal}
                 parent={parent}
                 hovered={hoveredHead}
+                showHoverDelta={false}
                 titleExtra={
-                  hasNoHeadCompatibility(parent) ? (
-                    <span className="theme3-ring-type-price">
-                      {formatStoreCurrency(theme3DisplayTotal, parent)}
-                    </span>
-                  ) : null
+                  <span className="theme3-ring-type-price">
+                    {formatStoreCurrency(displayedHeadShankPrice, parent)}
+                  </span>
                 }
               >
                 {availableHeadChoices.map(({ kind, value }) => kind === "diamondwise" ? (
-                  <CardOption key={value.headId} active={ringHead === value.headId} label={value.headLabel} image={value.headImage || value.image} badge={demoOnlyBadge} className="theme3-image-option" onClick={() => handleDiamondWisePreset(value, "head")} onMouseEnter={() => handleHeadCardHover(value.headId, value.headLabel)} onMouseLeave={handleHeadCardLeave} />
+                  <CardOption key={value.headId} active={ringHead === value.headId} label={value.headLabel} image={value.headImage || value.image} badge={demoOnlyBadge} className="theme3-image-option" onClick={() => handleDiamondWisePreset(value, "head")} onMouseEnter={() => handleDiamondWiseCardHover(value)} onMouseLeave={handleHeadCardLeave} />
                 ) : (
                   <CardOption key={value.label} active={!selectedDiamondWiseDesign && isSettingActive(value)} label={value.label} image={value.image} className="theme3-image-option" onClick={() => handleSetting(value)} disabled={isSettingDisabled(value)} onMouseEnter={() => handleHeadCardHover(value.head, value.label)} onMouseLeave={handleHeadCardLeave} />
                 ))}
@@ -3422,16 +3480,17 @@ return (
               price={shankTotal}
               parent={parent}
               hovered={hoveredShank}
+              showHoverDelta={false}
               titleExtra={
-                hasNoHeadCompatibility(parent) && noHeadSelected ? (
+                noHeadSelected ? (
                   <span className="theme3-ring-type-price">
-                    {formatStoreCurrency(theme3DisplayTotal, parent)}
+                    {formatStoreCurrency(displayedHeadShankPrice, parent)}
                   </span>
                 ) : null
               }
             >
               {availableShankChoices.map(({ kind, value }) => kind === "diamondwise" ? (
-                <CardOption key={value.shankId} active={ringShank === value.shankId} label={value.shankLabel} image={value.shankImage || value.image} badge={demoOnlyBadge} className="theme3-image-option" onClick={() => handleDiamondWisePreset(value, "shank")} onMouseEnter={() => handleShankCardHover(value.shankId, value.shankLabel, value.sideSetting)} onMouseLeave={handleShankCardLeave} />
+                <CardOption key={value.shankId} active={ringShank === value.shankId} label={value.shankLabel} image={value.shankImage || value.image} badge={demoOnlyBadge} className="theme3-image-option" onClick={() => handleDiamondWisePreset(value, "shank")} onMouseEnter={() => handleDiamondWiseCardHover(value)} onMouseLeave={handleShankCardLeave} />
               ) : (
                 <CardOption key={value.shank} active={!selectedDiamondWiseDesign && ringShank === value.shank} label={value.label} image={value.image} className="theme3-image-option" onClick={() => handleStyle(value)} disabled={isStyleDisabled(value)} onMouseEnter={() => handleShankCardHover(value.shank, value.label, value.sideSetting)} onMouseLeave={handleShankCardLeave} />
               ))}
@@ -3458,7 +3517,7 @@ return (
               ))}
             </OptionRow>
 
-            {!platinum && !["Titanium", "Silver"].includes(metal) && (
+            {!platinum && !["Titanium", "Silver", "Sterling Silver"].includes(metal) && (
               <OptionRow title="Purity" guide="metal-purity" className="theme3-band-purity" price={metalPrice} parent={parent} hovered={hoveredPurity}>
                 {availablePurities.map((option) => (
                   <TextOption
@@ -3680,9 +3739,9 @@ return (
                   </button>
                 ))}
             </OptionRow>
-            {(platinum) && (
+            {(platinum || ["Titanium", "Sterling Silver"].includes(metal)) && (
               <p className="theme3-bimetal-note theme3-band-bimetal-note" role="note">
-                      Bi-metal is unavailable with platinum.
+                      Bi-metal is unavailable with {platinum ? "platinum" : metal === "Titanium" ? "titanium" : "sterling silver"}.
               </p>
             )}
 </>

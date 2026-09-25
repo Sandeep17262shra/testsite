@@ -134,8 +134,8 @@ const METAL_COLOR_LABELS = {
   "#e5e4e2": "Platinum",
   "#8C8C8C": "Titanium",
   "#8c8c8c": "Titanium",
-  "#D8D8D8": "Silver",
-  "#d8d8d8": "Silver",
+  "#D8D8D8": "Sterling Silver",
+  "#d8d8d8": "Sterling Silver",
 };
 
 const SUMMARY_COPY = {
@@ -151,7 +151,7 @@ const SUMMARY_COPY = {
       rose: "Rose Gold",
       platinum: "Platinum",
       titanium: "Titanium",
-      silver: "Silver",
+      silver: "Sterling Silver",
     },
   },
   it: {
