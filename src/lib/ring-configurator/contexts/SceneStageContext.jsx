@@ -41,6 +41,18 @@ const PARTS_STANDARD = ["ring", "head", "diamond", "band"];
 const PARTS_HALO = ["ring", "head", "band"];
 const PARTS_DIAMONDWISE = ["diamondwise", "diamond"];
 const PARTS_NO_HEAD = ["ring", "band"];
+const WEDDING_BAND_MODEL_SHANKS = new Set(["CHANNEL", "PLATE-PRONG"]);
+
+const getRingLayer = (ringHead, ringShank, ringSideSetting) => {
+  // A wedding ring is rendered without a head. For its Pave and Channel
+  // styles, use the matching-band geometry; engagement rings retain their
+  // regular shank assets, even when they use those same style IDs.
+  if (ringHead === "NO-HEAD" && WEDDING_BAND_MODEL_SHANKS.has(ringShank)) {
+    return `wedding-band:${ringShank}`;
+  }
+
+  return ringSideSetting === "PLAIN" ? `shank:${ringShank}` : `setting:${ringSideSetting}`;
+};
 
 // Safety net: if a model 404s or a part never reports (bad data, dead network),
 // never leave the shopper staring at a frozen ring forever.
@@ -71,8 +83,7 @@ export const SceneStageProvider = ({ children }) => {
   const isDiamondWise = Boolean(getDiamondWiseDesignById(diamondWiseDesignId));
 
   const target = useMemo(() => {
-    const ringLayer =
-      ringSideSetting === "PLAIN" ? `shank:${ringShank}` : `setting:${ringSideSetting}`;
+    const ringLayer = getRingLayer(ringHead, ringShank, ringSideSetting);
 
     return {
       isDiamondWise,

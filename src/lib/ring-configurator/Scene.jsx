@@ -667,6 +667,7 @@ useEffect(() => {
     '/3d-models/RING-HEAD/HALO/halo-asscher/halo-asscher-3.glb',
     '/3d-models/RING-HEAD/HALO/halo-moval/halo-moval-3.glb',
     '/3d-models/WEDDING-BANDS/CHANNEL.glb',
+    '/3d-models/WEDDING-BANDS/PLATE-PRONG.glb',
   ];
 
   // Diamond .obj files are served unencrypted, so they must be warmed through

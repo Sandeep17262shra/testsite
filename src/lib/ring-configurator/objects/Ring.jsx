@@ -211,6 +211,11 @@ async function loadEncryptedMeshes(url) {
 const loadShank = (shank) =>
   ensureAsset("shank", shank, () => loadEncryptedMeshes(`/3d-models/RING-SHANK/${shank}.glb`));
 
+const loadWeddingBand = (band) =>
+  ensureAsset("wedding-band", band, () =>
+    loadEncryptedMeshes(`/3d-models/WEDDING-BANDS/${band}.glb`)
+  );
+
 const loadSideSetting = (setting) =>
   ensureAsset("setting", setting, () =>
     loadEncryptedMeshes(`/3d-models/SIDE-RING-SETTING/${setting}.glb`)
@@ -475,7 +480,11 @@ function Ring() {
 
     let alive = true;
     const [kind, name] = targetKey.split(":");
-    const request = kind === "setting" ? loadSideSetting(name) : loadShank(name);
+    const request = kind === "setting"
+      ? loadSideSetting(name)
+      : kind === "wedding-band"
+      ? loadWeddingBand(name)
+      : loadShank(name);
 
     request
       .catch((error) => {
@@ -631,6 +640,8 @@ function Ring() {
   // Everything below renders the DISPLAYED configuration.
   const displayedShank = displayed.ringShank;
   const displayedSideSetting = displayed.ringSideSetting;
+  const isWeddingBandModel = displayed.ringHead === "NO-HEAD" &&
+    ["CHANNEL", "PLATE-PRONG"].includes(displayedShank);
   const displayedLayer = displayedSideSetting === "PLAIN" ? "shank" : "setting";
   const commitId = displayed.commitId;
 
@@ -715,7 +726,10 @@ function Ring() {
   const renderRingModels = useMemo(() => {
     if (displayedLayer !== "shank") return null;
 
-    const models = getCachedAsset("shank", displayedShank);
+    const models = getCachedAsset(
+      isWeddingBandModel ? "wedding-band" : "shank",
+      displayedShank
+    );
     if (!models) return null;
 
     const width = ringWidth / 10;
@@ -772,7 +786,11 @@ function Ring() {
 
       let showDiamond = scale;
       let isDiamond = "";
-      if (NEW_DEFAULT_SHANKS.has(displayedShank)) {
+      if (isWeddingBandModel) {
+        // Matching-band assets use mesh names to distinguish their metal from
+        // their stones (the same convention used by MatchingBand.jsx).
+        isDiamond = !COLORED_MESH_NAMES.has(mesh.name);
+      } else if (NEW_DEFAULT_SHANKS.has(displayedShank)) {
         // All 11 new default-only shanks (not just the 8 gem-carrying ones)
         // were exported through the same pipeline as CHANNEL/PLATE-PRONG and
         // need the same fixed SETTING_SCALE (0.335), not `scale`
@@ -793,13 +811,28 @@ function Ring() {
         isDiamond = Boolean(mesh.material?.name?.toLowerCase().startsWith("gem"));
       }
 
+      // Keep wedding Pave/Channel mesh transforms identical to MatchingBand.
+      // Their stone meshes are authored at a smaller scale than the band;
+      // applying the shank scale makes the stones appear to float outside it.
+      const meshScale = isWeddingBandModel
+        ? isPlainMesh
+          ? RING_SCALE
+          : mesh.name === "metal002"
+          ? [0.33, 0.33, 0.33]
+          : SETTING_SCALE
+        : isPlainMesh
+        ? RING_SCALE
+        : mesh.name === "metal002"
+        ? [0.33, 0.33, 0.33]
+        : showDiamond;
+
       return (
         <FadeMeshRing
           key={`ring_${displayedShank}_${i}_${ringWidth}`}
           geometry={mesh.geometry}
           position={activePosition}
           rotation={DEFAULT_ROTATION}
-          scale={isPlainMesh ? RING_SCALE : mesh.name === "metal002" ? [0.33, 0.33, 0.33] : showDiamond}
+          scale={meshScale}
           materialProps={ringMaterialProps}
           isDiamond={isDiamond}
           color={ringColor}
@@ -808,7 +841,7 @@ function Ring() {
       );
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [displayedLayer, displayedShank, commitId, ringMaterialProps, ringColor, ringWidth, diamondMaterialProps]);
+  }, [displayedLayer, displayedShank, isWeddingBandModel, commitId, ringMaterialProps, ringColor, ringWidth, diamondMaterialProps]);
 
   const renderSettingModels = useMemo(() => {
     if (displayedLayer !== "setting") return null;

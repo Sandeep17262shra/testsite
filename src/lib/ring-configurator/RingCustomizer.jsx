@@ -831,7 +831,7 @@ function CaratSlider({
 
 function CaratOptionRow({ title, guide, value, onChange, stops, min, max, step }) {
   const guideMeta = guide ? getTheme3GuideMeta(guide) : null;
-  const displayVal = value !== undefined && value !== null ? `${Number(value)} ct` : "";
+  const displayVal = value !== undefined && value !== null ? `${Number(value).toFixed(2)} Ct` : "";
 
   return (
     <section
@@ -1075,9 +1075,7 @@ const RingCustomizer = forwardRef(({
   const [hoveredHead, setHoveredHead] = useState(null);
   const [hoveredShank, setHoveredShank] = useState(null);
   const [hoveredPurity, setHoveredPurity] = useState(null);
-  const [hoveredMatchingBand, setHoveredMatchingBand] = useState(null);
   const [hoveredStone, setHoveredStone] = useState(null);
-  const [hoveredMetalColor, setHoveredMetalColor] = useState(null);
   const [hoveredStoneCategory, setHoveredStoneCategory] = useState(null);
   const [hoveredQuality, setHoveredQuality] = useState(null);
   const isDiamondPreviewFlow = flow === "diamond-preview";
@@ -1861,44 +1859,12 @@ const RingCustomizer = forwardRef(({
     setHoveredPurity(null);
   };
 
-  const handleMatchingBandHover = (bandOption) => {
-    const targetPrice =
-      bandOption.quantity > 0
-        ? getMatchingBandPrice(parent, bandOption.style || "PLAIN") * bandOption.quantity
-        : 0;
-    const delta = targetPrice - matchingBandPrice;
-    setHoveredMatchingBand({ delta });
-  };
-
-  const handleMatchingBandLeave = () => {
-    setHoveredMatchingBand(null);
-  };
-
   const handleStoneOptionHover = (delta) => {
     setHoveredStone({ delta });
   };
 
   const handleStoneOptionLeave = () => {
     setHoveredStone(null);
-  };
-
-  const handleMetalColorHover = (option) => {
-    const effectiveMatchingBandStyle = ringMatchingBand || ringSideSetting;
-    if (option.platinum || option.fixedPurity) {
-      const targetMetal = option.fixedPurity || "Platinum";
-      const hovered = calculateFinalRingPrice(targetMetal, ringHead, ringShank, effectiveMatchingBandStyle, ringBand, bandWidth, styleShape, engraving, parent);
-      const current = calculateFinalRingPrice(metal, ringHead, ringShank, effectiveMatchingBandStyle, ringBand, bandWidth, styleShape, engraving, parent);
-      setHoveredMetalColor({ delta: hovered.breakdown.metalPrice - current.breakdown.metalPrice });
-    } else {
-      const nextMetal = purityOptions.includes(metal) ? metal : availablePurities.includes("14K") ? "14K" : availablePurities[0] || "14K";
-      const hovered = calculateFinalRingPrice(nextMetal, ringHead, ringShank, effectiveMatchingBandStyle, ringBand, bandWidth, styleShape, engraving, parent);
-      const current = calculateFinalRingPrice(metal, ringHead, ringShank, effectiveMatchingBandStyle, ringBand, bandWidth, styleShape, engraving, parent);
-      setHoveredMetalColor({ delta: hovered.breakdown.metalPrice - current.breakdown.metalPrice });
-    }
-  };
-
-  const handleMetalColorLeave = () => {
-    setHoveredMetalColor(null);
   };
 
   const handleStoneCategoryHover = (option) => {
@@ -2285,6 +2251,17 @@ const RingCustomizer = forwardRef(({
     });
     return map;
   }, [availableMetalColors, metal, ringHead, ringShank, ringMatchingBand, ringSideSetting, ringBand, bandWidth, styleShape, engraving, parent, purityOptions, availablePurities]);
+
+  const matchingBandDeltaMap = useMemo(() => {
+    const map = {};
+    matchingBandOptions.forEach((option) => {
+      const targetPrice = option.quantity > 0
+        ? getMatchingBandPrice(parent, option.style || "PLAIN") * option.quantity
+        : 0;
+      map[option.style || "none"] = targetPrice - Number(matchingBandPrice || 0);
+    });
+    return map;
+  }, [parent, matchingBandPrice]);
 
   useEffect(() => {
     if (!isDiamondPreviewFlow && diamondWiseDesignId) {
@@ -3553,7 +3530,7 @@ return (
             </OptionRow>
             )}
 
-            <OptionRow title="Metal" guide="metal-purity" className="theme3-band-metal" price={metalPrice} parent={parent} hovered={hoveredMetalColor}>
+            <OptionRow title="Metal" guide="metal-purity" className="theme3-band-metal" price={metalPrice} parent={parent} showHoverDelta={false}>
               {availableMetalColors.map((option) => {
                 const metalDelta = metalColorDeltaMap[option.value] ?? null;
                 const isActiveMetal = selectedMetalColorValue === option.value;
@@ -3563,8 +3540,6 @@ return (
                     type="button"
                     className={`gb-metal-option ${isActiveMetal ? "active" : ""}`}
                     onClick={() => handleMetalColor(option)}
-                    onMouseEnter={() => handleMetalColorHover(option)}
-                    onMouseLeave={handleMetalColorLeave}
                     title={option.label}
                     style={{
                       background: option.gradient || option.color,
@@ -3649,7 +3624,7 @@ return (
               className="theme3-matching-band"
               price={matchingBandPrice}
               parent={parent}
-              hovered={hoveredMatchingBand}
+              showHoverDelta={false}
             >
               <TextOption
                 active={matchingBandQuantity === 0}
@@ -3668,8 +3643,8 @@ return (
                     className="theme3-image-option theme3-matching-band-option"
                     onClick={() => handleMatchingBand(option)}
                     disabled={isMatchingBandDisabled(option)}
-                    onMouseEnter={() => handleMatchingBandHover(option)}
-                    onMouseLeave={handleMatchingBandLeave}
+                    delta={matchingBandDeltaMap[option.style] ?? null}
+                    parent={parent}
                   />
                 ))}
             </OptionRow>
