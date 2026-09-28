@@ -4,6 +4,20 @@ const nextConfig = {
   async headers() {
     return [
       {
+        // ✅ Allow this app to be embedded as an iframe from the parent store
+        source: "/(.*)",
+        headers: [
+          {
+            key: "X-Frame-Options",
+            value: "ALLOWALL",
+          },
+          {
+            key: "Content-Security-Policy",
+            value: "frame-ancestors 'self' https://jdemo364.wpenginepowered.com",
+          },
+        ],
+      },
+      {
         source: "/:all*(enc|glb|hdr|obj|webp|png|jpg|jpeg|svg|dmat)",
         headers: [
           {
