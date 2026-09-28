@@ -42,7 +42,8 @@ const FALLBACK_OPTIONS = {
   headStyles: ["4-PRONG", "6-PRONG", "HIDDEN-HALO", "DOUBLE-HALO", "BEZEL", "HALO", "OVAL", "TULIP", "TWO-STONE"],
   matchingBandStyles: ["PLAIN", "CATHEDRAL", "KNIFE-EDGE", "SPLIT", "CHANNEL", "PLATE-PRONG"],
   diamondShapes: ["round", "pear", "princess", "emerald", "cushion", "marquise", "oval", "heart", "asscher", "radiant", "moval"],
-  diamondTypes: ["Lab", "Natural"], qualityLevels: ["Standard", "Premium", "High-End"],
+  diamondTypes: ["Lab", "Natural"], qualityLevels: ["Standard", "Premium", "High-End"], qualityClarities: {},
+  headLabels: {}, shankLabels: {}, matchingBandLabels: {},
   caratSizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
   coloredDiamonds: ["Yellow", "Blue", "Red", "Green", "Orange", "Pink", "Brown", "Purple", "Black", "Peach"],
   gemstones: ["blue-sapphire", "green-emerald", "green-sapphire", "moissanite", "pink-sapphire", "red-ruby", "yellow-sapphire"],
@@ -125,6 +126,20 @@ const catalogueToConfig = (catalogue) => {
   // by the picker after this step and may disable an otherwise active option.
   options.metalColors = activeMetals.length > 0 ? activeMetals : FALLBACK_OPTIONS.metalColors;
   options.headStyles = heads.map(({ value }) => value);
+  // Product IDs select the internal head/model. The API name is presentation
+  // metadata, so a catalogue rename updates the customer-facing card and
+  // summary without affecting availability, pricing, or model selection.
+  options.headLabels = Object.fromEntries(
+    heads
+      .map(({ item, value }) => [value, String(item.name ?? "").trim()])
+      .filter(([, label]) => Boolean(label)),
+  );
+  options.shankLabels = Object.fromEntries(
+    shanks.map(({ item, value }) => [value, String(item.name ?? "").trim()]).filter(([, label]) => Boolean(label)),
+  );
+  options.matchingBandLabels = Object.fromEntries(
+    bands.map(({ item, value }) => [value, String(item.name ?? "").trim()]).filter(([, label]) => Boolean(label)),
+  );
   options.shankStyles = shanks.map(({ value }) => value);
   options.matchingBandStyles = bands.map(({ value }) => value);
   options.metalPurities = Object.keys(config.metalPrices).filter((value) => !["Platinum", "Titanium", "Silver", "Sterling Silver"].includes(value));
@@ -192,8 +207,20 @@ const catalogueToConfig = (catalogue) => {
 
   const activeGradeRules = rules.filter((rule) => rule.rule_type === "grade");
   const qualities = [...new Set(activeGradeRules.map((rule) => getRuleQuality(rule)).filter(Boolean))];
+  // Preserve the clarity shown by the catalogue beside each commercial grade.
+  // The grade remains the value used for pricing and selection; this is display
+  // metadata only, sourced directly from the active API rule.
+  const qualityClarities = {};
+  activeGradeRules.forEach((rule) => {
+    const quality = getRuleQuality(rule);
+    const clarity = String(rule.clarity ?? "").trim();
+    if (quality && clarity && !qualityClarities[quality]) {
+      qualityClarities[quality] = clarity;
+    }
+  });
   options.diamondTypes = origins.length ? origins : FALLBACK_OPTIONS.diamondTypes;
   options.qualityLevels = qualities.length ? qualities : FALLBACK_OPTIONS.qualityLevels;
+  options.qualityClarities = qualityClarities;
   const caratRulesByOrigin = {};
   for (const origin of options.diamondTypes) {
     const originCaratRules = rules.filter(

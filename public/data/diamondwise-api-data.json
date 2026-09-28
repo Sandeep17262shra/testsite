@@ -6,7 +6,7 @@
       "name": "4 Prong",
       "price": 0,
       "currency": "USD",
-      "status": "inactive"
+      "status": "active"
     },
     {
       "product_type": "head",
@@ -14,7 +14,7 @@
       "name": "6 Prong",
       "price": 0,
       "currency": "USD",
-      "status": "inactive"
+      "status": "active"
     },
     {
       "product_type": "head",
@@ -22,7 +22,7 @@
       "name": "Hidden Halo",
       "price": 0,
       "currency": "USD",
-      "status": "inactive"
+      "status": "active"
     },
     {
       "product_type": "head",
@@ -30,7 +30,7 @@
       "name": "Single Halo",
       "price": 0,
       "currency": "USD",
-      "status": "inactive"
+      "status": "active"
     },
     {
       "product_type": "head",
@@ -38,7 +38,7 @@
       "name": "Double Halo",
       "price": 0,
       "currency": "USD",
-      "status": "inactive"
+      "status": "active"
     },
     {
       "product_type": "head",
@@ -46,7 +46,7 @@
       "name": "Bezel",
       "price": 0,
       "currency": "USD",
-      "status": "inactive"
+      "status": "active"
     },
     {
       "product_type": "head",
@@ -54,7 +54,7 @@
       "name": "Halo",
       "price": 0,
       "currency": "USD",
-      "status": "inactive"
+      "status": "active"
     },
     {
       "product_type": "head",
@@ -300,9 +300,9 @@
       "product_type": "band",
       "product_id": "B001",
       "name": "Plain",
-      "price": 0,
+      "price": 1250,
       "currency": "USD",
-      "status": "inactive"
+      "status": "active"
     },
     {
       "product_type": "band",
@@ -310,7 +310,7 @@
       "name": "Cathedral",
       "price": 0,
       "currency": "USD",
-      "status": "inactive"
+      "status": "active"
     },
     {
       "product_type": "band",
@@ -332,17 +332,17 @@
       "product_type": "band",
       "product_id": "B005",
       "name": "Channel",
-      "price": 0,
+      "price": 1250,
       "currency": "USD",
-      "status": "inactive"
+      "status": "active"
     },
     {
       "product_type": "band",
       "product_id": "B006",
       "name": "Pave",
-      "price": 0,
+      "price": 1250,
       "currency": "USD",
-      "status": "inactive"
+      "status": "active"
     },
     {
       "product_type": "metal",
@@ -454,7 +454,7 @@
       "name": "Titanium",
       "price": 0,
       "currency": "USD",
-      "status": "active"
+      "status": "inactive"
     },
     {
       "product_type": "metal",
@@ -462,7 +462,7 @@
       "name": "Sterling Silver",
       "price": 0,
       "currency": "USD",
-      "status": "active"
+      "status": "inactive"
     }
   ],
   "stones": [
@@ -750,7 +750,7 @@
       "clarity": null,
       "pricing_method": "fixed",
       "value": 0,
-      "status": "inactive"
+      "status": "active"
     },
     {
       "rule_type": "shape",
@@ -761,7 +761,7 @@
       "clarity": null,
       "pricing_method": "fixed",
       "value": 0,
-      "status": "inactive"
+      "status": "active"
     },
     {
       "rule_type": "shape",

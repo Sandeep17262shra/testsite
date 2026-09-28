@@ -303,6 +303,7 @@ button {
   color: #111111;
   border-radius: 3px;
   cursor: pointer;
+  min-height: 60px;
 }
 
 
@@ -329,6 +330,8 @@ button {
   font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
+  line-height: 1 !important;
+  margin-top: 0px !important;
 }
 
 .gb-card-option.active,
@@ -351,7 +354,7 @@ button {
 }
 
 .gb-metal-option {
-  min-height: 66px;
+  min-height: 60px;
   display: grid;
   place-items: center;
   gap: 5px;
@@ -3860,8 +3863,8 @@ img.rotate-minus-90{
 .theme3-ring-type-header-row {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  padding: 16px 0px 10px;
+  justify-content: center;
+  padding: 16px 0px 0px;
   margin-bottom: 2px;
 }
 
@@ -3877,7 +3880,7 @@ img.rotate-minus-90{
   display: inline-flex;
   align-items: center;
   border: 1px solid #000000;
-  border-radius: 9999px;
+  border-radius: 4px;
   overflow: hidden;
   padding: 0;
   background: #ffffff;
@@ -4288,8 +4291,8 @@ img.rotate-minus-90{
 .theme3-engraving-controls > label {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  justify-content: flex-start;
+  gap: 8px;
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
@@ -4566,7 +4569,7 @@ img.rotate-minus-90{
 }
 
 .theme3-root .gb-card-option {
-  min-height: 94px;
+  min-height: 140px;
   grid-template-rows: 70px auto;
   padding: 10px 8px;
 }
@@ -4665,16 +4668,35 @@ img.rotate-minus-90{
   padding: 0 12px;
   line-height: normal;
   white-space: normal;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  line-height: 1.3;
+}
+
+.theme3-root .quality-option-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.15;
 }
 
 .theme3-root .gb-metal-option {
   display: flex;
-  min-height: 42px;
-  gap: 8px;
+  min-height: 60px;
+  gap: 0px;
   padding: 8px;
   justify-content: center;
+  flex-direction: column;
 }
-
+.theme3-root .gb-metal-option-bi {
+  display: flex;
+  min-height: 42px !important;
+  gap: 0px;
+  padding: 8px;
+  justify-content: center;
+  flex-direction: column;
+}
 .theme3-root .gb-metal-option span:not(.gb-delta-label) {
   width: 16px;
   height: 16px;
@@ -4769,6 +4791,9 @@ img.rotate-minus-90{
 .theme3-image-option {
   min-height: 120px;
   padding: 10px 8px;
+  /* Keep the name and optional price in consistent rows. This preserves an
+     equal card size without applying a min-height to the price span itself. */
+  grid-template-rows: 120px auto 12px;
 }
 
 .theme3-image-option img {
@@ -5698,6 +5723,7 @@ img.rotate-minus-90{
 
   .theme3-image-option {
     min-height: 90px;
+    grid-template-rows: 90px auto 12px;
   }
 
   .theme3-image-option img {
