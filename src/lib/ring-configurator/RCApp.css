@@ -3863,7 +3863,7 @@ img.rotate-minus-90{
 .theme3-ring-type-header-row {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   padding: 16px 0px 0px;
   margin-bottom: 2px;
 }
@@ -4310,6 +4310,17 @@ img.rotate-minus-90{
   align-items: center;
 }
 
+.theme3-engraving-count {
+  position: absolute;
+  right: 34px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--theme3-muted);
+  font-size: 9px;
+  font-weight: 400;
+  pointer-events: none;
+}
+
 .theme3-engraving-controls > input,
 .theme3-engraving-input-wrap > input {
   width: 100%;
@@ -4664,13 +4675,15 @@ img.rotate-minus-90{
 }
 
 .theme3-root .gb-text-option {
-  min-height: 42px;
+  min-height: 60px;
   padding: 0 12px;
   line-height: normal;
   white-space: normal;
   display: flex;
   justify-content: center;
   align-items: center;
+  flex-direction: column;
+  gap: 5px;
   line-height: 1.3;
 }
 
@@ -4679,6 +4692,15 @@ img.rotate-minus-90{
   flex-direction: column;
   align-items: center;
   line-height: 1.15;
+}
+
+.theme3-root .theme3-category-options .gb-text-option,
+.theme3-root .theme3-quality-options .gb-text-option {
+  width: 142px;
+  min-width: 142px;
+  min-height: 66px;
+  box-sizing: border-box;
+  padding: 10px 9px;
 }
 
 .theme3-root .gb-metal-option {

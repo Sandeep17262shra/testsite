@@ -148,14 +148,14 @@ const COLOR_CLARITY = {
 export const ENGRAVING_POSITIONS = {
   // Each asset has a different inner-band profile. These positions keep the
   // text mask in the metal instead of using one shared offset for all shanks.
-  "PLAIN": [0, 1.29, 0],
+  "PLAIN": [0, 1.29, -0.05],
   "WIDE-PLAIN": [0, 0.57, 0],
   "CATHEDRAL": [0, 0.51, 0],
   "KNIFE-EDGE": [0, 0.57, 0],
   "SPLIT": [0, 1.265, 0],
   "TWISTED": [0, 0.57, 0],
-  "CHANNEL": [0, 1.53, 0],
-  "PLATE-PRONG": [0, 1.16, 0],
+  "CHANNEL": [0, 1.16, -0.05],
+  "PLATE-PRONG": [0, 1.16, -0.05],
   // DiamondWise shanks (default placeholder coordinates — user can tune directly)
   "dw-jul-ma-02-shank": [0, 0.21, 0],
   "dw-ju-m-0031-shank": [0, 0.21, 0],

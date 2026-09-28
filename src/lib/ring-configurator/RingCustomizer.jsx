@@ -53,7 +53,7 @@ const T3_PRIMARY = "#303030";
 const T3_SECONDARY = "#92928D";
 const T3_SECTION_STYLE = { fontFamily: T3_FONT, fontWeight: 400, fontSize: "16px", color: T3_PRIMARY };
 const T3_SUBHEADER_STYLE = { fontFamily: T3_FONT, fontWeight: 700, fontSize: "12px", color: T3_PRIMARY };
-const T3_BODY_STYLE = { fontFamily: T3_FONT, fontWeight: 400, fontSize: "12px", color: T3_PRIMARY };
+const T3_BODY_STYLE = { fontFamily: T3_FONT, fontWeight: 600, fontSize: "12px", color: T3_PRIMARY };
 
 const styleOptions = [
   { label: "Plain", shank: "PLAIN", sideSetting: "PLAIN", image: "/images/basic-bands/plain.webp?v3" },
@@ -286,7 +286,7 @@ const ENGRAVING_FONTS = [
   { label: "Roman", value: "Times New Roman", fontFamily: '"Times New Roman", serif', image: "/images/roman.webp" },
   { label: "Script", value: "Dancing Script", fontFamily: '"Apple Chancery", "Dancing Script", cursive', image: "/images/script.webp" },
   { label: "Italics", value: "Segoe UI", fontFamily: '"Segoe UI", Arial, sans-serif', fontStyle: "italic", image: "/images/italics.webp" },
-  { label: "Regular", value: "Arial", fontFamily: "Arial, sans-serif", image: "/images/regular.webp" },
+  //{ label: "Regular", value: "Arial", fontFamily: "Arial, sans-serif", image: "/images/regular.webp" },
 ];
 
 const metalColorOptions = [
@@ -729,7 +729,7 @@ function CardOption({ active, label, image, imageClassName = "", spritePosition,
   );
 }
 
-function TextOption({ active, label, onClick, disabled = false, onMouseEnter, onMouseLeave, className }) {
+function TextOption({ active, label, onClick, disabled = false, onMouseEnter, onMouseLeave, className, delta = null, parent = null }) {
   return (
     <button
       type="button"
@@ -740,7 +740,10 @@ function TextOption({ active, label, onClick, disabled = false, onMouseEnter, on
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      {label}
+      <span>{label}</span>
+      {delta !== null && delta !== 0 && !active && (
+        <span className="gb-delta-label" style={{ fontWeight: 400 }}>{delta > 0 ? "+" : ""}{formatStoreCurrency(delta, parent)}</span>
+      )}
     </button>
   );
 }
@@ -1867,6 +1870,13 @@ const RingCustomizer = forwardRef(({
     setHoveredPurity(null);
   };
 
+  const getPurityDelta = (purity) => {
+    const effectiveMatchingBandStyle = ringMatchingBand || ringSideSetting;
+    const target = calculateFinalRingPrice(purity, ringHead, ringShank, effectiveMatchingBandStyle, ringBand, bandWidth, styleShape, engraving, parent);
+    const current = calculateFinalRingPrice(metal, ringHead, ringShank, effectiveMatchingBandStyle, ringBand, bandWidth, styleShape, engraving, parent);
+    return target.breakdown.metalPrice - current.breakdown.metalPrice;
+  };
+
   const handleStoneOptionHover = (delta) => {
     setHoveredStone({ delta });
   };
@@ -1910,6 +1920,18 @@ const RingCustomizer = forwardRef(({
   const handleQualityLeave = () => {
     setHoveredQuality(null);
   };
+
+  const getStoneCategoryDelta = (option) => {
+    const nextSelectedQuality = {
+      type: option.diamondOrigin,
+      quality: selectedQuality?.quality || getDefaultQuality(parent),
+    };
+    const nextFancyDiamond = availableFancyDiamonds.includes(fancyDiamond) ? fancyDiamond : availableFancyDiamonds[0] || fancyDiamondOptions[0];
+    const nextGemstone = availableGemstones.includes(gemstone) ? gemstone : availableGemstones[0] || gemstoneOptions[0];
+    return calculateTheme3DiamondPrice({ nextActiveTab: option.activeTab, nextSelectedQuality, nextFancyDiamond, nextGemstone }) - calculateTheme3DiamondPrice({});
+  };
+
+  const getQualityDelta = (quality) => calculateTheme3DiamondPrice({ nextSelectedQuality: { type: selectedDiamondOrigin, quality } }) - calculateTheme3DiamondPrice({});
 
   const handleSizeOption = (option) => {
     const nextSystem = ringSizeSystems.find((system) => system.label === option);
@@ -3576,12 +3598,14 @@ return (
             </OptionRow>
 
             {!platinum && !["Titanium", "Silver", "Sterling Silver"].includes(metal) && (
-              <OptionRow title="Purity" guide="metal-purity" className="theme3-band-purity" price={metalPrice} parent={parent} hovered={hoveredPurity}>
+              <OptionRow title="Purity" guide="metal-purity" className="theme3-band-purity" price={metalPrice} parent={parent} showHoverDelta={false}>
                 {availablePurities.map((option) => (
                   <TextOption
                     key={option}
                     active={activePurity === option}
                     label={option}
+                    delta={getPurityDelta(option)}
+                    parent={parent}
                     onClick={() => handlePurity(option)}
                     onMouseEnter={() => handlePurityHover(option)}
                     onMouseLeave={handlePurityLeave}
@@ -3684,7 +3708,6 @@ return (
               <div className="theme3-engraving-controls">
                 <label htmlFor="theme3-engraving-input">
                   <span style={T3_SUBHEADER_STYLE}>Engraving</span>
-                  <small style={T3_BODY_STYLE}>{getAdjustedEngravingLength(engraving)} / {ENGRAVING_LIMIT}</small>
                 </label>
                 <div className="theme3-engraving-input-wrap">
                   <input
@@ -3707,6 +3730,7 @@ return (
                       fontStyle: getEngravingFontOption(engravingFont)?.fontStyle || "normal",
                     }}
                   />
+                  <small className="theme3-engraving-count" style={{ ...T3_BODY_STYLE, fontWeight: 400 }}>{getAdjustedEngravingLength(engraving)} / {ENGRAVING_LIMIT}</small>
                   {engraving && (
                     <button
                       type="button"
@@ -3860,12 +3884,14 @@ return (
 />
 
                 {availableStoneTypeOptions.length > 1 && (
-                  <OptionRow title="Category" guide="stone-type" price={stoneTotal} parent={parent} hovered={hoveredStoneCategory}>
+                  <OptionRow title="Category" guide="stone-type" className="theme3-category-options" price={stoneTotal} parent={parent} showHoverDelta={false}>
                     {availableStoneTypeOptions.map((option) => (
                       <TextOption
                         key={option.activeTab + option.diamondOrigin}
                         active={activeStoneTab === option.activeTab && selectedDiamondOrigin === option.diamondOrigin}
                         label={option.label}
+                        delta={getStoneCategoryDelta(option)}
+                        parent={parent}
                         onClick={() => handleStoneType(option)}
                         onMouseEnter={() => handleStoneCategoryHover(option)}
                         onMouseLeave={handleStoneCategoryLeave}
@@ -3926,7 +3952,7 @@ return (
                 )}
 
                 {!isGemstoneMode && availableQualityLevels.length > 0 && (
-                  <OptionRow title="Quality" guide="cut-clarity" price={stoneTotal} parent={parent} hovered={hoveredQuality}>
+                  <OptionRow title="Quality" guide="cut-clarity" className="theme3-quality-options" price={stoneTotal} parent={parent} showHoverDelta={false}>
                     {availableQualityLevels.map((option) => (
                       <TextOption
                         key={option}
@@ -3937,6 +3963,8 @@ return (
                             <span>({qualityClarities[option]})</span>
                           </span>
                         ) : option}
+                        delta={getQualityDelta(option)}
+                        parent={parent}
                         onClick={() => handleDiamondQuality(option)}
                         onMouseEnter={() => handleQualityHover(option)}
                         onMouseLeave={handleQualityLeave}
