@@ -13,7 +13,7 @@ const nextConfig = {
           },
           {
             key: "Content-Security-Policy",
-            value: "frame-ancestors 'self' https://jdemo364.wpenginepowered.com",
+            value: "frame-ancestors 'self' https://jdemo364.wpenginepowered.com https://apps.keyideasinfotech.com",
           },
         ],
       },
