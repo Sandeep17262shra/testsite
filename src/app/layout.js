@@ -3,12 +3,23 @@ import "../lib/ring-configurator/RCApp.css";
 import "../lib/bracelet-configurator/BraceletApp.css";
 
 const storeContextBootstrap = `
-  window.__parentConfig = { parentUrl: "https://jdemo364.wpenginepowered.com" };
-  window.addEventListener("message", function (event) {
-    if (event.data?.parentUrl) {
-      window.__parentConfig = event.data;
-    }
-  });
+  (function () {
+    var storeMap = {
+      "/bongioielli":  "https://bongioielli.com",
+      "/dimendscaasi": "https://www.dimendscaasi.com",
+      "/elitejewelers": "https://www.elitejewelers.com",
+      "/labgrownlove":  "https://labgrownlove.de",
+      "/jdemo364":      "https://jdemo364.wpenginepowered.com"
+    };
+    var path = window.location.pathname.replace(/\\/+$/, "") || "/";
+    var parentUrl = storeMap[path] || "https://jdemo364.wpenginepowered.com";
+    window.__parentConfig = { parentUrl: parentUrl };
+    window.addEventListener("message", function (event) {
+      if (event.data && event.data.parentUrl) {
+        window.__parentConfig = event.data;
+      }
+    });
+  })();
 `;
 
 export const metadata = {
