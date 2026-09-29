@@ -177,7 +177,7 @@ export const getIntensityPrice = (parentUrl, intensity) => {
       index = Math.min(legacyIndex, INTENSITY_OPTIONS.length - 1);
     }
   }
-  const rawPrice = index >= 0 ? 20 * (index + 1) : 0;
+  const rawPrice = index >= 0 ? 20 * index : 0;
   const rate = getCurrencyRate(parentUrl);
   return Math.round(rawPrice * rate);
 };

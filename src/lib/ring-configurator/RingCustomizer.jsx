@@ -890,7 +890,7 @@ const getRingSizePrice = (parent, sizeMm) => {
 
 const getIntensityPrice = (parent, intensity) => {
   const index = intensityOptions.indexOf(intensity);
-  const rawPrice = index >= 0 ? 20 * (index + 1) : 0;
+  const rawPrice = index >= 0 ? 20 * index : 0;
   return Math.round(rawPrice * getCurrencyRate(parent));
 };
 

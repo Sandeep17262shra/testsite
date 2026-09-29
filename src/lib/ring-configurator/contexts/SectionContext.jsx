@@ -131,7 +131,7 @@ const initialSectionState = {
   setFancyColorPrice: () => { },
   getGemstonePrice: 100,
   setGemstonePrice: () => { },
-  intensityPrice: 20,
+  intensityPrice: 0,
   setIntensityPrice: () => { },
   summaryBlink: false, 
   setSummaryBlink: () => {},
