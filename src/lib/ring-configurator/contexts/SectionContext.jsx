@@ -54,10 +54,14 @@ const deriveHeadStyle = (config) => {
   if (!config?.ringHead) return "plain";
   const raw = config.ringHead.trim().toUpperCase();
   if (raw === "DOUBLE-HALO") return "double-halo";
-  if (raw === "SINGLE-HALO") return "single-halo";
+  if (raw === "SINGLE-HALO" || raw === "HALO") return "halo";
   if (raw === "HIDDEN-HALO") return "hidden-halo";
+  if (raw === "HIDDEN-HALO-2") return "hidden-halo-2";
   if (raw === "BEZEL") return "bezel";
-  if (["OVAL", "TRAPEZOID", "HALF-MOON", "PEAR", "BAGUETTE"].includes(raw)) return "three-stone";
+  if (raw === "TULIP") return "tulip";
+  if (raw === "TWO-STONE") return "two-stone";
+  if (raw === "CLAW-SET") return "claw-set";
+  if (["OVAL", "TRAPEZOID", "HALF-MOON", "PEAR", "BAGUETTE", "ROUND"].includes(raw)) return "three-stone";
   return "plain";
 };
 
@@ -196,8 +200,13 @@ export const SectionProvider = ({ children }) => {
     calcInitDiamondPrice = calcInitDiamondPrice + getColoredDiamondExtraPrice(currentParent, config?.fancyDiamond || "Blue") + Math.round(calcInitIntensityPrice);
   }
 
-  const [shankTotal, setShankTotal] = useState(() => calcInitShankPrice + calcInitMetalPrice + calcInitMatchingBandPrice + calcInitEngravingPrice);
-  const [headTotal, setHeadTotal] = useState(() => calcInitHeadPrice);
+  // Metal is part of the setting/head price, except wedding rings have no
+  // head. Keep their metal price in the shank subtotal so it is not omitted.
+  const [shankTotal, setShankTotal] = useState(() =>
+    calcInitShankPrice + calcInitMatchingBandPrice + calcInitEngravingPrice +
+    (effectiveHead === "NO-HEAD" ? calcInitMetalPrice : 0)
+  );
+  const [headTotal, setHeadTotal] = useState(() => calcInitHeadPrice + calcInitMetalPrice);
   const [stoneTotal, setStoneTotal] = useState(() => calcInitDiamondPrice);
   const [otherTotal, setOtherTotal] = useState(initialSectionState.otherTotal);
 
@@ -302,8 +311,11 @@ export const SectionProvider = ({ children }) => {
     setCaratP(nextDiamondPrice);
     setActiveDiamondType(nextDiamondPrice);
     setStoneTotal(nextDiamondPrice);
-    setShankTotal(nextShankPrice + nextMetalPrice + nextMatchingBandPrice + nextEngravingPrice);
-    setHeadTotal(nextHeadPrice);
+    setShankTotal(
+      nextShankPrice + nextMatchingBandPrice + nextEngravingPrice +
+      (currHead === "NO-HEAD" ? nextMetalPrice : 0)
+    );
+    setHeadTotal(nextHeadPrice + nextMetalPrice);
   }, [currentParent, priceConfigVersion]);
 
   return (

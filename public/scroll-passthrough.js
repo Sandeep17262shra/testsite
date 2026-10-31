@@ -1,6 +1,6 @@
 /**
  * iframe scroll passthrough — drop this script onto any parent page that
- * embeds a ring / bracelet / necklace configurator iframe. It listens for
+ * embeds a ring / bracelet / necklace / bead-bracelet configurator iframe. It listens for
  * scroll-delta messages and forwards them via window.scrollBy().
  * Works cross-origin.
  *
@@ -60,7 +60,8 @@
     var type = e.data.type;
     if (type !== "ring-configurator:scroll" &&
         type !== "bracelet-configurator:scroll" &&
-        type !== "necklace-configurator:scroll") return;
+        type !== "necklace-configurator:scroll" &&
+        type !== "beads-configurator:scroll") return;
     pending += e.data.deltaY || 0;
     if (!raf) raf = requestAnimationFrame(flush);
   });

@@ -18,7 +18,7 @@ export function PreviewFocusProvider({ children }) {
       return;
     }
     const prev = lastFocusTargetRef.current;
-    const targetChanged = prev.patternIndex !== patternIndex;
+    const targetChanged = prev.patternIndex !== patternIndex || prev.itemId !== itemId;
     lastFocusTargetRef.current = { itemId, patternIndex };
     setFocusItemId(itemId);
     setFocusPatternIndex(patternIndex);
@@ -30,6 +30,9 @@ export function PreviewFocusProvider({ children }) {
 
   const clearPreviewFocus = useCallback(() => {
     setFocusUntil(0);
+    setFocusItemId(null);
+    setFocusPatternIndex(null);
+    lastFocusTargetRef.current = { itemId: null, patternIndex: null };
   }, []);
 
   const value = useMemo(

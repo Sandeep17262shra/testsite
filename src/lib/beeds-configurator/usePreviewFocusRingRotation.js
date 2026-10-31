@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   PREVIEW_FOCUS_ANIM_MS,
+  PREVIEW_FOCUS_FRONT_ANGLE_DEG_2D,
   easeInOutCubic,
   getRingRotationToFocusItem,
   getShortestRotationDelta,
@@ -12,16 +13,25 @@ const PREVIEW_FOCUS_MIN_ROTATE_DEG = 2.5;
 import { usePreviewFocus } from "./contexts/PreviewFocusContext";
 
 function resolveFocusItem(settledItems, pattern, focusItemId, focusPatternIndex) {
+  if (!settledItems?.length) return null;
   if (focusItemId) {
     const byId = settledItems.find((item) => item.id === focusItemId);
     if (byId) {
       return byId;
     }
   }
-  if (focusPatternIndex != null && pattern[focusPatternIndex]) {
-    const entry = pattern[focusPatternIndex];
+  if (focusPatternIndex != null) {
+    const bySlot = settledItems.find((item) => item.slotIndex === focusPatternIndex);
+    if (bySlot) {
+      return bySlot;
+    }
+    const entry = pattern?.[focusPatternIndex];
     if (entry?.id) {
-      return settledItems.find((item) => item.id === entry.id) ?? null;
+      const byId = settledItems.find((item) => item.id === entry.id);
+      if (byId) return byId;
+    }
+    if (settledItems[focusPatternIndex]) {
+      return settledItems[focusPatternIndex];
     }
   }
   return null;
@@ -37,14 +47,14 @@ export function usePreviewFocusRingRotation({
   setRotationDeg,
   rotationRef,
   suppressFocus = false,
-  frontAngleDeg,
+  frontAngleDeg = PREVIEW_FOCUS_FRONT_ANGLE_DEG_2D,
 }) {
   const { focusItemId, focusPatternIndex, focusUntil } = usePreviewFocus();
   const [focusLockActive, setFocusLockActive] = useState(false);
   const animRef = useRef(null);
   const holdTimerRef = useRef(null);
   const focusUntilRef = useRef(focusUntil);
-  const lastAnimatedPatternIndexRef = useRef(null);
+  const lastAnimatedFocusKeyRef = useRef(null);
   const settledItemsRef = useRef(settledItems);
   const patternRef = useRef(pattern);
   settledItemsRef.current = settledItems;
@@ -60,6 +70,7 @@ export function usePreviewFocusRingRotation({
       clearTimeout(holdTimerRef.current);
       holdTimerRef.current = null;
     }
+    lastAnimatedFocusKeyRef.current = null;
     setFocusLockActive(false);
   };
 
@@ -69,12 +80,18 @@ export function usePreviewFocusRingRotation({
       return undefined;
     }
 
-    if (!focusItemId && focusPatternIndex == null) {
-      lastAnimatedPatternIndexRef.current = null;
+    const focusKey = focusItemId
+      ? `id:${focusItemId}`
+      : focusPatternIndex != null
+      ? `idx:${focusPatternIndex}`
+      : null;
+
+    if (!focusKey) {
+      lastAnimatedFocusKeyRef.current = null;
       return undefined;
     }
 
-    if (focusPatternIndex === lastAnimatedPatternIndexRef.current) {
+    if (focusKey === lastAnimatedFocusKeyRef.current) {
       return undefined;
     }
 
@@ -92,7 +109,7 @@ export function usePreviewFocusRingRotation({
     const from = rotationRef.current;
     const delta = getShortestRotationDelta(from, target);
     if (Math.abs(delta) < PREVIEW_FOCUS_MIN_ROTATE_DEG) {
-      lastAnimatedPatternIndexRef.current = focusPatternIndex;
+      lastAnimatedFocusKeyRef.current = focusKey;
       return undefined;
     }
 
@@ -104,7 +121,7 @@ export function usePreviewFocusRingRotation({
     }
 
     const start = performance.now();
-    lastAnimatedPatternIndexRef.current = focusPatternIndex;
+    lastAnimatedFocusKeyRef.current = focusKey;
     setFocusLockActive(true);
 
     const tick = (now) => {

@@ -18,10 +18,12 @@ export function getLayoutAngleDegFromItem(item) {
 export const PREVIEW_FOCUS_FRONT_ANGLE_DEG_2D = 90;
 
 /**
- * 3D flat-lay: camera on +Y; layout +Y → world −Z. Screen “front” (6 o’clock) is +Z,
- * so focus rotation uses 270° in layout space (180° offset from the 2D south = 90° front).
+ * 3D flat-lay: layout +Y → world −Z. The edit camera has a small +X/+Z offset
+ * (rather than sitting directly above the origin), so its visual front is 3.8°
+ * clockwise of +Z. Matching that azimuth keeps a focused bead at the actual
+ * screen bottom-center instead of a little to the left of it.
  */
-export const PREVIEW_FOCUS_FRONT_ANGLE_DEG_3D = 270;
+export const PREVIEW_FOCUS_FRONT_ANGLE_DEG_3D = 273.8;
 
 /** `ringViewRotation` / ring yaw that places the item at the front of the preview. */
 export function getRingRotationToFocusItem(item, frontAngleDeg = PREVIEW_FOCUS_FRONT_ANGLE_DEG_2D) {

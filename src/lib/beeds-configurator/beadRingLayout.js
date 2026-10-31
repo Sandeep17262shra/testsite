@@ -5,6 +5,8 @@
 import {
   DEFAULT_BEAD_SIZE_ID,
   getBeadSizeScale,
+  isColoredCrystalSpacerSku,
+  isRoundSpacerSku,
   isScene81MetalSpacerSku,
   LAYOUT_BEAD_SIZE_ID,
 } from "./assets";
@@ -21,15 +23,24 @@ const PREVIEW_TOP_RESERVE = 28;
 const PREVIEW_BOTTOM_RESERVE = 12;
 const PREVIEW_SIDE_RESERVE = 14;
 const PREVIEW_CENTER_OFFSET_Y = 0;
-const MIN_BRACELET_LENGTH_INCHES = 4;
-const MAX_BRACELET_LENGTH_INCHES = 5.5;
+export const MIN_BRACELET_LENGTH_INCHES = 4;
+export const MAX_BRACELET_LENGTH_INCHES = 5.5;
 /** Visual pack factor for bead PNG art (render size). */
 const BEAD_IMAGE_PACK_FACTOR = 1.06;
 const BEAD_RING_SCALE = 1.14;
 /** Visible marble occupies ~this fraction of the image box width. */
 const BEAD_ART_FILL_RATIO = 0.76;
+/** The catalog PNG fills its box, then is deliberately reduced in the 2D preview. */
+const CATALOG_SPACER_ART_FILL_RATIO = 0.98;
+const CATALOG_SPACER_2D_ART_SCALE = 0.86;
 const SPACER_WIDTH_SCALE = 0.4;
 const SPACER_HEIGHT_SCALE = 0.6;
+/** Source aspect ratio of the replacement Classic S1–S6 three-stone artwork. */
+const CLASSIC_STONE_SPACER_ASPECT_RATIO = 78 / 274;
+/** Source aspect ratio of the replacement Classic S7–S9 twister rope band artwork (60w x 277h). */
+const CLASSIC_TWISTER_SPACER_ASPECT_RATIO = 60 / 277;
+/** Source aspect ratio of the replacement Classic S10–S14 glass crystal artwork (125h x 267w after 90° rotation). */
+const CLASSIC_CRYSTAL_SPACER_ASPECT_RATIO = 125 / 267;
 /** Pendant width relative to bead visual diameter — slightly narrower than a bead. */
 const CHARM_VISUAL_WIDTH_SCALE = 0.76;
 /** Pendant height relative to bead visual diameter — matches the charm art aspect so the
@@ -49,6 +60,8 @@ const CHARM_BAIL_RING_LAYOUT_SCALE = 0.03;
 const CHARM_ASPECT_HEIGHT_SCALE = 1.2;
 /** Cap enamel charm width so neighbours in adjacent gaps do not overlap. */
 const CHARM_MAX_WIDTH_SCALE = 1.05;
+/** Min string distance between charm gaps, as a share of the widest charm pendant. */
+const CHARM_MIN_GAP_SPACING_WIDTH_RATIO = 0.78;
 /** Angular nudge when multiple charms share one gap. */
 const CHARM_GAP_STACK_ANGLE_RAD = 0.055;
 /** Gold hardware stroke relative to bead visual diameter. */
@@ -76,9 +89,11 @@ const SPACER_THREAD_GAP_PX = 3;
 /** Tighter than bead–spacer — two wheels side-by-side read too loose at 3px. */
 const SPACER_TO_SPACER_THREAD_GAP_PX = 1.5;
 /** S7–S9: tiny extra thread (metal band is slightly wider than flat spacer art). */
-const SCENE81_SPACER_EXTRA_THREAD_GAP_PX = 1;
+const SCENE81_SPACER_EXTRA_THREAD_GAP_PX = 0;
+/** Style 2 + S10–S14 glass wheel — slight breathing room next to beads. */
+const STYLE2_S10_S14_EXTRA_THREAD_GAP_PX = 0;
 /** Layout half-span along string — small bump only; large values read as loose string. */
-const SCENE81_SPACER_LAYOUT_HALF_SCALE = 1.16;
+const SCENE81_SPACER_LAYOUT_HALF_SCALE = 1;
 
 function resolveSpacerAssetKeyFromItem(item) {
   return item?.assetKey ?? item?.asset?.key ?? null;
@@ -86,6 +101,33 @@ function resolveSpacerAssetKeyFromItem(item) {
 
 function isScene81SpacerItem(item) {
   return item?.type === "spacer" && isScene81MetalSpacerSku(resolveSpacerAssetKeyFromItem(item));
+}
+
+function isColoredCrystalSpacerItem(item) {
+  return item?.type === "spacer" && isColoredCrystalSpacerSku(resolveSpacerAssetKeyFromItem(item));
+}
+
+/** Round 3D spacer models share the bead's diameter and string contact area. */
+function isRoundSpacerItem(item) {
+  return item?.type === "spacer" && isRoundSpacerSku(resolveSpacerAssetKeyFromItem(item));
+}
+
+function isClassicStoneSpacerItem(item) {
+  const key = String(resolveSpacerAssetKeyFromItem(item) || "").toLowerCase();
+  return /^legacy-s[1-6]$/.test(key);
+}
+
+function getClassicSpacerAspectRatio(item) {
+  if (isClassicStoneSpacerItem(item)) {
+    return CLASSIC_STONE_SPACER_ASPECT_RATIO;
+  }
+  if (isScene81SpacerItem(item)) {
+    return CLASSIC_TWISTER_SPACER_ASPECT_RATIO;
+  }
+  if (isColoredCrystalSpacerItem(item)) {
+    return CLASSIC_CRYSTAL_SPACER_ASPECT_RATIO;
+  }
+  return null;
 }
 
 function getScene81SpacerLayoutHalfSpan(baseHalf) {
@@ -103,6 +145,8 @@ const CHARM_HANG_AXIS_OFFSET_DEG = 0;
 const CHARM_GAP_EDGE_RATIO = 0.58;
 /** Clearance off the bare string when there are no beads or spacers on the ring. */
 const CHARM_STRING_EDGE_PX = 2;
+/** Extra thread on gaps that hold charms — pushes both neighbouring beads apart. */
+const CHARM_GAP_EXTRA_THREAD_GAP_PX = 6;
 /** @deprecated Bail sits on the string (no standoff). Kept at 0 for layout compat. */
 const CHARM_BAIL_STRING_STANDOFF_PX = 0;
 /** Edge-on bail half-height as a fraction of reference bead visual diameter. */
@@ -112,10 +156,60 @@ const CHARM_EDGE_BAIL_RY_MAX_PX = 6;
 /** Tube thickness (edge-on) — thin vertical gold line. */
 const CHARM_EDGE_BAIL_RX_SCALE = 0.011;
 const CHARM_EDGE_BAIL_RX_MIN_PX = 0.9;
-/** How far the charm's own loop hangs past the bottom of our bail (fraction of bail ry). */
+/**
+ * Charm loop vs the string bail. 0 keeps the loop on the outer edge of the bail.
+ * Negative tucks the charm inward so the thread reads as passing through the loop.
+ */
 export const CHARM_BAIL_HOOK_DROP_RATIO = 0.3;
 
-function getThreadGapBetween(prevItem, nextItem) {
+function isStyle2RingPattern(pattern) {
+  const ring = pattern.filter((item) => item.type === "bead" || item.type === "spacer");
+  if (ring.length < 3 || ring.length % 3 !== 0) {
+    return false;
+  }
+  for (let index = 0; index < ring.length; index += 3) {
+    if (
+      ring[index]?.type !== "bead" ||
+      ring[index + 1]?.type !== "bead" ||
+      ring[index + 2]?.type !== "spacer"
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function getCharmOccupiedGapIndices(charmPattern, ringCount) {
+  if (!charmPattern?.length || ringCount < 1) {
+    return new Set();
+  }
+  const gapCount = Math.max(1, ringCount);
+  const gaps = new Set();
+  charmPattern.forEach((item, index) => {
+    const raw = Number.isFinite(item.ringGap) ? Math.floor(item.ringGap) : index;
+    gaps.add(((raw % gapCount) + gapCount) % gapCount);
+  });
+  return gaps;
+}
+
+function createLayoutGapContext(ringPattern, charmPattern = null) {
+  const ring = ringPattern.filter((item) => item.type === "bead" || item.type === "spacer");
+  const charms = charmPattern ?? [];
+  return {
+    style2Ring: isStyle2RingPattern(ring),
+    charmGaps: getCharmOccupiedGapIndices(charms, ring.length),
+  };
+}
+
+function getThreadGapForSegment(prevItem, nextItem, gapContext, gapIndex) {
+  let gap = getThreadGapBetween(prevItem, nextItem, gapContext);
+  if (gapIndex != null && gapContext?.charmGaps?.has(gapIndex)) {
+    gap += CHARM_GAP_EXTRA_THREAD_GAP_PX;
+  }
+  return gap;
+}
+
+function getThreadGapBetween(prevItem, nextItem, gapContext = null) {
   if (!prevItem || !nextItem) return 0;
   if (prevItem.type === "charm" || nextItem.type === "charm") {
     let gap = SPACER_THREAD_GAP_PX;
@@ -124,30 +218,62 @@ function getThreadGapBetween(prevItem, nextItem) {
     }
     return gap;
   }
-  if (prevItem.type === "spacer" && nextItem.type === "spacer") {
+  const prevIsThinSpacer = prevItem.type === "spacer" && !isRoundSpacerItem(prevItem);
+  const nextIsThinSpacer = nextItem.type === "spacer" && !isRoundSpacerItem(nextItem);
+  if (prevIsThinSpacer && nextIsThinSpacer) {
     let gap = SPACER_TO_SPACER_THREAD_GAP_PX;
     if (isScene81SpacerItem(prevItem) || isScene81SpacerItem(nextItem)) {
       gap += SCENE81_SPACER_EXTRA_THREAD_GAP_PX * 0.5;
     }
     return gap;
   }
-  if (prevItem.type === "spacer" || nextItem.type === "spacer") {
+  if (prevIsThinSpacer || nextIsThinSpacer) {
     let gap = SPACER_THREAD_GAP_PX;
     if (isScene81SpacerItem(prevItem) || isScene81SpacerItem(nextItem)) {
       gap += SCENE81_SPACER_EXTRA_THREAD_GAP_PX;
+    }
+    if (gapContext?.style2Ring) {
+      const spacer = prevIsThinSpacer ? prevItem : nextItem;
+      if (isColoredCrystalSpacerSku(resolveSpacerAssetKeyFromItem(spacer))) {
+        gap += STYLE2_S10_S14_EXTRA_THREAD_GAP_PX;
+      }
     }
     return gap;
   }
   return 0;
 }
 
-function getStepArcLength(prevItem, nextItem, prevRadius, nextRadius) {
-  return prevRadius + getThreadGapBetween(prevItem, nextItem) + nextRadius;
+function getStepArcLength(
+  prevItem,
+  nextItem,
+  prevRadius,
+  nextRadius,
+  gapContext = null,
+  gapIndex = null
+) {
+  return (
+    prevRadius + getThreadGapForSegment(prevItem, nextItem, gapContext, gapIndex) + nextRadius
+  );
 }
 
 /** Angular step on a ring so visual widths do not overlap along the curve. */
-function getStepAngleRadians(prevItem, nextItem, prevRadius, nextRadius, ringRadius) {
-  const contactSpan = getStepArcLength(prevItem, nextItem, prevRadius, nextRadius);
+function getStepAngleRadians(
+  prevItem,
+  nextItem,
+  prevRadius,
+  nextRadius,
+  ringRadius,
+  gapContext = null,
+  gapIndex = null
+) {
+  const contactSpan = getStepArcLength(
+    prevItem,
+    nextItem,
+    prevRadius,
+    nextRadius,
+    gapContext,
+    gapIndex
+  );
   const ratio = Math.min(1, contactSpan / ringRadius);
   return 2 * Math.asin(ratio / 2);
 }
@@ -170,10 +296,13 @@ export function getPatternOccupiedLength(
   defaultSizeId = LAYOUT_BEAD_SIZE_ID,
   { closedLoop = true, ringRadius = BASE_RING_RADIUS } = {}
 ) {
-  const count = pattern.length;
+  const ringPattern = getRingBeadPattern(pattern);
+  const charmPattern = pattern.filter((item) => item.type === "charm");
+  const count = ringPattern.length;
   if (!count) return 0;
 
-  const layoutRadii = getPatternLayoutRadii(pattern, defaultSizeId);
+  const layoutRadii = getPatternLayoutRadii(ringPattern, defaultSizeId);
+  const gapContext = createLayoutGapContext(ringPattern, charmPattern);
 
   if (!closedLoop) {
     if (count === 1) {
@@ -183,11 +312,13 @@ export function getPatternOccupiedLength(
     let totalAngle = 0;
     for (let index = 0; index < count - 1; index += 1) {
       totalAngle += getStepAngleRadians(
-        pattern[index],
-        pattern[index + 1],
+        ringPattern[index],
+        ringPattern[index + 1],
         layoutRadii[index],
         layoutRadii[index + 1],
-        ringRadius
+        ringRadius,
+        gapContext,
+        index
       );
     }
 
@@ -203,11 +334,13 @@ export function getPatternOccupiedLength(
 
     const nextIndex = closedLoop ? (index + 1) % count : index + 1;
     totalAngle += getStepAngleRadians(
-      pattern[index],
-      pattern[nextIndex],
+      ringPattern[index],
+      ringPattern[nextIndex],
       layoutRadii[index],
       layoutRadii[nextIndex],
-      ringRadius
+      ringRadius,
+      gapContext,
+      index
     );
   }
 
@@ -222,19 +355,24 @@ export function getPatternClosedLoopCircumference(
   pattern,
   defaultSizeId = LAYOUT_BEAD_SIZE_ID
 ) {
-  const count = pattern.length;
+  const ringPattern = getRingBeadPattern(pattern);
+  const charmPattern = pattern.filter((item) => item.type === "charm");
+  const count = ringPattern.length;
   if (!count) return 0;
 
-  const layoutRadii = getPatternLayoutRadii(pattern, defaultSizeId);
+  const layoutRadii = getPatternLayoutRadii(ringPattern, defaultSizeId);
+  const gapContext = createLayoutGapContext(ringPattern, charmPattern);
   let total = 0;
 
   for (let index = 0; index < count; index += 1) {
     const nextIndex = (index + 1) % count;
     total += getStepArcLength(
-      pattern[index],
-      pattern[nextIndex],
+      ringPattern[index],
+      ringPattern[nextIndex],
       layoutRadii[index],
-      layoutRadii[nextIndex]
+      layoutRadii[nextIndex],
+      gapContext,
+      index
     );
   }
 
@@ -361,6 +499,7 @@ export function canAddItemToPattern(
   const candidate = {
     type: newItem.type,
     ...(newItem.type === "bead" ? { sizeId: newItem.sizeId || defaultSizeId } : {}),
+    ...(newItem.type === "spacer" && newItem.assetKey ? { assetKey: newItem.assetKey } : {}),
   };
 
   const testPattern = [...pattern, candidate];
@@ -417,7 +556,13 @@ export function toCapacityPattern(manualItems, defaultSizeId = DEFAULT_BEAD_SIZE
     .filter((item) => item.type !== "charm")
     .map((item) => ({
       type: item.type,
-      ...(item.type === "bead" ? { sizeId: item.sizeId || defaultSizeId } : {}),
+      ...(item.type === "bead" ||
+      (item.type === "spacer" && isRoundSpacerSku(item.assetKey ?? item.asset?.key))
+        ? { sizeId: item.sizeId || defaultSizeId }
+        : {}),
+      ...(item.type === "spacer"
+        ? { assetKey: item.assetKey ?? item.asset?.key ?? DEFAULT_SEPARATOR_KEY }
+        : {}),
     }));
 }
 
@@ -444,7 +589,7 @@ export function buildCapacityFilledPattern({
     while (true) {
       const next = nextIsBead
         ? { type: "bead", sizeId: defaultSizeId }
-        : { type: "spacer" };
+        : { type: "spacer", assetKey: separator?.key ?? DEFAULT_SEPARATOR_KEY };
       const test = [...capacityItems, next];
       if (getPatternOccupiedLength(test, defaultSizeId, { ringRadius }) > available) {
         break;
@@ -466,7 +611,10 @@ export function buildCapacityFilledPattern({
   return capacityItems.map((item) => ({
     type: item.type,
     asset: item.type === "spacer" ? separator : bead,
-    ...(item.type === "bead" ? { sizeId: item.sizeId || defaultSizeId } : {}),
+    ...(item.type === "bead" ||
+    (item.type === "spacer" && isRoundSpacerSku(separator?.key))
+      ? { sizeId: item.sizeId || defaultSizeId }
+      : {}),
   }));
 }
 
@@ -523,17 +671,20 @@ function finalizeStyle3CapacityItems(capacityItems, defaultSizeId, ringRadius, m
   };
 }
 
-function getNextStyleCapacityItem(styleId, capacityItems, defaultSizeId) {
+function getNextStyleCapacityItem(styleId, capacityItems, defaultSizeId, separatorKey) {
   if (styleId === "full-bead") {
     return { type: "bead", sizeId: defaultSizeId };
   }
   if (styleId === "style-1") {
     return capacityItems.length % 2 === 0
       ? { type: "bead", sizeId: defaultSizeId }
-      : { type: "spacer" };
+      : { type: "spacer", assetKey: separatorKey ?? DEFAULT_SEPARATOR_KEY };
   }
   if (styleId === "style-2") {
-    return getStyle2CapacityItem(capacityItems.length, defaultSizeId);
+    const item = getStyle2CapacityItem(capacityItems.length, defaultSizeId);
+    return item.type === "spacer"
+      ? { ...item, assetKey: separatorKey ?? DEFAULT_SEPARATOR_KEY }
+      : item;
   }
   if (styleId === "style-3") {
     const charmCount = capacityItems.filter((item) => item.type === "charm").length;
@@ -702,7 +853,12 @@ export function buildTightFilledPattern({
 
   if (styleId !== "full-bead" && styleId !== "style-3") {
     while (true) {
-      const next = getNextStyleCapacityItem(styleId, capacityItems, defaultSizeId);
+      const next = getNextStyleCapacityItem(
+        styleId,
+        capacityItems,
+        defaultSizeId,
+        separator?.key
+      );
       if (!next) break;
 
       const candidate = [...capacityItems, next];
@@ -834,12 +990,35 @@ function resolveBeadLayoutContactDiameter(sizeId = LAYOUT_BEAD_SIZE_ID) {
 }
 
 /** Fixed spacer render size — does not change with the size chart. */
-function getSpacerVisualDimensions() {
+function getSpacerVisualDimensions(item = null) {
   const referenceVisual = getBeadDiameterPx(LAYOUT_BEAD_SIZE_ID);
+  const height = referenceVisual * SPACER_HEIGHT_SCALE;
+  const classicAspect = getClassicSpacerAspectRatio(item);
+  if (classicAspect !== null) {
+    return {
+      // The spacer's drill direction is across the narrow dimension, so this
+      // is also the real width the layout must reserve on the bracelet string.
+      width: height * classicAspect,
+      height,
+    };
+  }
   return {
     width: referenceVisual * SPACER_WIDTH_SCALE,
-    height: referenceVisual * SPACER_HEIGHT_SCALE,
+    height,
   };
+}
+
+function getRoundSpacerVisualDimensions(item, defaultSizeId) {
+  const diameter = resolveBeadVisualDiameter(item.sizeId || defaultSizeId);
+  return { width: diameter, height: diameter };
+}
+
+function resolveCatalogSpacerLayoutContactDiameter(sizeId = LAYOUT_BEAD_SIZE_ID) {
+  return (
+    resolveBeadVisualDiameter(sizeId) *
+    CATALOG_SPACER_ART_FILL_RATIO *
+    CATALOG_SPACER_2D_ART_SCALE
+  );
 }
 
 /** Charm pendant render size — scales with bracelet bead mm; optional `asset.aspect` for enamel. */
@@ -882,7 +1061,10 @@ export function getCharmStringAttachmentPoint(centerX, centerY, ringRadius) {
 
 function getItemDimensions(item, pattern, index, defaultSizeId) {
   if (item.type === "spacer") {
-    return getSpacerVisualDimensions();
+    if (isRoundSpacerItem(item)) {
+      return getRoundSpacerVisualDimensions(item, defaultSizeId);
+    }
+    return getSpacerVisualDimensions(item);
   }
 
   if (item.type === "charm") {
@@ -901,7 +1083,12 @@ function getItemDimensions(item, pattern, index, defaultSizeId) {
 /** Half-width along the string used for layout spacing (visible bead, not image box). */
 function getItemLayoutRadius(item, pattern, index, defaultSizeId) {
   if (item.type === "spacer") {
-    const dimensions = getSpacerVisualDimensions();
+    if (isRoundSpacerItem(item)) {
+      // Catalog spacer art has no transparent padding like the bead PNGs, so
+      // it needs a wider physical slot to avoid touching neighbouring beads.
+      return resolveCatalogSpacerLayoutContactDiameter(item.sizeId || defaultSizeId) / 2;
+    }
+    const dimensions = getSpacerVisualDimensions(item);
     const half = dimensions.width / 2;
     return isScene81SpacerItem(item) ? getScene81SpacerLayoutHalfSpan(half) : half;
   }
@@ -1021,7 +1208,9 @@ function applyThreadTangentRotations(
     }
 
     const holeAxisOffsetDeg =
-      item.type === "bead" ? BEAD_HOLE_AXIS_OFFSET_DEG : SPACER_HOLE_AXIS_OFFSET_DEG;
+      item.type === "bead" || isRoundSpacerItem(item)
+        ? BEAD_HOLE_AXIS_OFFSET_DEG
+        : SPACER_HOLE_AXIS_OFFSET_DEG;
 
     if (hasCenter && item.x != null && item.y != null) {
       return {
@@ -1045,12 +1234,16 @@ function applyThreadTangentRotations(
   });
 }
 
-function getUniformItemDimensions(type, slotCount, sizeScale, ringRadius) {
+function getUniformItemDimensions(item, slotCount, sizeScale, ringRadius) {
   const beadSize = getPackedBeadSize(slotCount, sizeScale, ringRadius);
-  if (type === "spacer") {
+  if (item.type === "spacer" && !isRoundSpacerItem(item)) {
+    const height = beadSize * SPACER_HEIGHT_SCALE;
+    const classicAspect = getClassicSpacerAspectRatio(item);
     return {
-      width: beadSize * SPACER_WIDTH_SCALE,
-      height: beadSize * SPACER_HEIGHT_SCALE,
+      width: classicAspect !== null
+        ? height * classicAspect
+        : beadSize * SPACER_WIDTH_SCALE,
+      height,
     };
   }
   return {
@@ -1072,7 +1265,7 @@ function computeUniformSlotLayout({
 
   const items = pattern.map((item, index) => {
     const point = getRingPoint(angles[index], centerX, centerY, ringRadius);
-    const dimensions = getUniformItemDimensions(item.type, slotCount, sizeScale, ringRadius);
+    const dimensions = getUniformItemDimensions(item, slotCount, sizeScale, ringRadius);
 
     return {
       ...item,
@@ -1112,6 +1305,10 @@ function getRingItemThreadHalfSpan(item, defaultSizeId = LAYOUT_BEAD_SIZE_ID) {
     return 0;
   }
   if (item.type === "spacer") {
+    if (isRoundSpacerItem(item)) {
+      const visualWidth = item.width ?? resolveBeadVisualDiameter(item.sizeId || defaultSizeId);
+      return (visualWidth * BEAD_ART_FILL_RATIO) / 2;
+    }
     const half = (item.width ?? 0) / 2;
     return isScene81SpacerItem(item) ? getScene81SpacerLayoutHalfSpan(half) : half;
   }
@@ -1129,7 +1326,8 @@ export function getGapAngleBetweenRingItems(
   gapIndex,
   centerX,
   centerY,
-  defaultSizeId = LAYOUT_BEAD_SIZE_ID
+  defaultSizeId = LAYOUT_BEAD_SIZE_ID,
+  gapContext = null
 ) {
   const count = layoutItems.length;
   if (count < 2) {
@@ -1150,7 +1348,8 @@ export function getGapAngleBetweenRingItems(
 
   const prevR = getRingItemThreadHalfSpan(prev, defaultSizeId);
   const nextR = getRingItemThreadHalfSpan(next, defaultSizeId);
-  const threadGap = getThreadGapBetween(prev, next);
+  const resolvedGapContext = gapContext ?? createLayoutGapContext(layoutItems);
+  const threadGap = getThreadGapForSegment(prev, next, resolvedGapContext, normalizedGap);
   const totalSpan = prevR + threadGap + nextR;
 
   if (totalSpan <= 0) {
@@ -1164,6 +1363,43 @@ export function getGapAngleBetweenRingItems(
 
   const towardNext = (prevR + threadGap / 2) / totalSpan;
   return a0 + delta * towardNext;
+}
+
+/**
+ * Closest two charm gaps may sit along the string, in px, sized by the widest of `charmAssets`.
+ * Charms hang outward where the circle is larger than the string, so under one full pendant
+ * width of string still keeps the pendants apart.
+ */
+export function getMinCharmGapSpacingPx(charmAssets = null) {
+  const refSizeId = resolveCharmReferenceSizeId();
+  const assets = charmAssets?.length ? charmAssets : [null];
+  const widest = assets.reduce(
+    (width, asset) => Math.max(width, getCharmVisualDimensions(asset, refSizeId).width),
+    0
+  );
+  return widest * CHARM_MIN_GAP_SPACING_WIDTH_RATIO;
+}
+
+/** Where each gap sits along the closed string (px from item 0's centre), plus loop length. */
+export function getCharmGapStringPositions(segmentEntries, defaultSizeId = LAYOUT_BEAD_SIZE_ID) {
+  const count = segmentEntries?.length ?? 0;
+  if (count < 2) {
+    return null;
+  }
+
+  const gapContext = createLayoutGapContext(segmentEntries);
+  const radii = segmentEntries.map((item, index) =>
+    getItemLayoutRadius(item, segmentEntries, index, defaultSizeId)
+  );
+  const positions = [];
+  let length = 0;
+  for (let index = 0; index < count; index += 1) {
+    const nextIndex = (index + 1) % count;
+    const thread = getThreadGapBetween(segmentEntries[index], segmentEntries[nextIndex], gapContext);
+    positions.push(length + radii[index] + thread / 2);
+    length += radii[index] + thread + radii[nextIndex];
+  }
+  return { positions, length };
 }
 
 /** String attachment point between two consecutive ring items (beads/spacers). */
@@ -1220,6 +1456,9 @@ function getRingItemOutwardExtentPx(item) {
     return 0;
   }
   if (item.type === "spacer") {
+    if (isRoundSpacerItem(item)) {
+      return ((item.width ?? 0) * BEAD_ART_FILL_RATIO) / 2;
+    }
     return (item.height ?? 0) / 2;
   }
   return ((item.width ?? 0) * BEAD_ART_FILL_RATIO) / 2;
@@ -1249,7 +1488,7 @@ export function getCharmSegmentFrame(
   centerX,
   centerY,
   defaultSizeId = LAYOUT_BEAD_SIZE_ID,
-  { angleOffset = 0 } = {}
+  { angleOffset = 0, gapContext = null } = {}
 ) {
   const { prev, next } = getCharmGapNeighbors(ringLayoutItems, gapIndex);
   const gapAngle =
@@ -1258,7 +1497,8 @@ export function getCharmSegmentFrame(
       gapIndex,
       centerX,
       centerY,
-      defaultSizeId
+      defaultSizeId,
+      gapContext
     ) + angleOffset;
   const outwardX = Math.cos(gapAngle);
   const outwardY = Math.sin(gapAngle);
@@ -1292,7 +1532,7 @@ export function getCharmGapAttachmentPoint(
   centerX,
   centerY,
   defaultSizeId = LAYOUT_BEAD_SIZE_ID,
-  { angleOffset = 0 } = {}
+  { angleOffset = 0, gapContext = null } = {}
 ) {
   const frame = getCharmSegmentFrame(
     layoutItems,
@@ -1301,7 +1541,7 @@ export function getCharmGapAttachmentPoint(
     centerX,
     centerY,
     defaultSizeId,
-    { angleOffset }
+    { angleOffset, gapContext }
   );
   return {
     x: frame.anchor.x,
@@ -1321,7 +1561,7 @@ export function getCharmGapHardwareRotationDegrees(
   centerX,
   centerY,
   ringRadius,
-  { angleOffset = 0 } = {}
+  { angleOffset = 0, gapContext = null } = {}
 ) {
   return getCharmSegmentFrame(
     ringLayoutItems,
@@ -1330,7 +1570,7 @@ export function getCharmGapHardwareRotationDegrees(
     centerX,
     centerY,
     LAYOUT_BEAD_SIZE_ID,
-    { angleOffset }
+    { angleOffset, gapContext }
   ).tangentDeg;
 }
 
@@ -1519,7 +1759,8 @@ function getCharmGapFanRoom(
   ringRadius,
   centerX,
   centerY,
-  defaultSizeId
+  defaultSizeId,
+  gapContext = null
 ) {
   const count = ringLayoutItems.length;
   if (!count || !(ringRadius > 0)) {
@@ -1544,7 +1785,8 @@ function getCharmGapFanRoom(
     normalizedGap,
     centerX,
     centerY,
-    defaultSizeId
+    defaultSizeId,
+    gapContext
   );
 
   const toNext = backwardAngleDelta(a0, a1);
@@ -1648,8 +1890,17 @@ function buildCharmsOnRing({
         2 /
         ringRadius
       : 0;
+  const gapContext = createLayoutGapContext(ringLayoutItems, charmPattern);
   const gapRooms = Array.from({ length: Math.max(1, ringCount) }, (_, gap) =>
-    getCharmGapFanRoom(ringLayoutItems, gap, ringRadius, centerX, centerY, defaultSizeId)
+    getCharmGapFanRoom(
+      ringLayoutItems,
+      gap,
+      ringRadius,
+      centerX,
+      centerY,
+      defaultSizeId,
+      gapContext
+    )
   );
   const gapAssignments = resolveCharmGapAssignments(
     charmPattern,
@@ -1673,7 +1924,7 @@ function buildCharmsOnRing({
       centerX,
       centerY,
       defaultSizeId,
-      { angleOffset }
+      { angleOffset, gapContext }
     );
     const hardwareRotation = getCharmGapHardwareRotationDegrees(
       ringLayoutItems,
@@ -1681,13 +1932,21 @@ function buildCharmsOnRing({
       centerX,
       centerY,
       ringRadius,
-      { angleOffset }
+      { angleOffset, gapContext }
     );
-    return buildCharmPositionedAtPoint(item, attachment, dimensions, defaultSizeId, centerX, centerY, {
-      rotation: hardwareRotation,
-      hardwareRotation,
-      charmRefSizeId,
-    });
+    return buildCharmPositionedAtPoint(
+      { ...item, ringGap },
+      attachment,
+      dimensions,
+      defaultSizeId,
+      centerX,
+      centerY,
+      {
+        rotation: hardwareRotation,
+        hardwareRotation,
+        charmRefSizeId,
+      }
+    );
   });
 }
 
@@ -1934,6 +2193,7 @@ function buildFreeSizeTightRingLayout({
   );
   const count = ringPattern.length;
 
+  const gapContext = createLayoutGapContext(ringPattern, charmPattern);
   const stepAngles = [];
   for (let index = 0; index < count; index += 1) {
     const nextIndex = (index + 1) % count;
@@ -1943,7 +2203,9 @@ function buildFreeSizeTightRingLayout({
         ringPattern[nextIndex],
         layoutRadii[index],
         layoutRadii[nextIndex],
-        layoutRadius
+        layoutRadius,
+        gapContext,
+        index
       )
     );
   }
@@ -1962,14 +2224,16 @@ function buildFreeSizeTightRingLayout({
       }
     }
   } else {
-    const circumference = getPatternClosedLoopCircumference(ringPattern, defaultSizeId);
+    const circumference = getPatternClosedLoopCircumference(pattern, defaultSizeId);
     const stepArcLengths = stepAngles.map((_, index) => {
       const nextIndex = (index + 1) % count;
       return getStepArcLength(
         ringPattern[index],
         ringPattern[nextIndex],
         layoutRadii[index],
-        layoutRadii[nextIndex]
+        layoutRadii[nextIndex],
+        gapContext,
+        index
       );
     });
 
@@ -2048,24 +2312,19 @@ function buildManualEvenRingLayout({
   }
 
   const baseLayoutRadius = resolveManualLayoutRadius();
-  const neededRadius = getPatternNeededLayoutRadius(ringPattern, defaultSizeId, {
-    ringRadius: baseLayoutRadius,
-    closedLoop: true,
-  });
-  const layoutRadius = Math.min(
-    Math.max(baseLayoutRadius, neededRadius),
-    getMaxLayoutRadius(ringRadiusHint)
-  );
+  // Keep the ring at a fixed size — do not grow it as beads are added.
+  // fillRemainingArc will space items evenly around the fixed ring.
   const ringLayout = computeVariableLayoutOnFixedRing({
     pattern: ringPattern,
+    charmPattern,
     defaultSizeId,
     centerX,
     centerY,
-    ringRadius: layoutRadius,
+    ringRadius: baseLayoutRadius,
     fullCircle: true,
     anchorAtStart: true,
     fillRemainingArc: ringPattern.length > 1,
-    maxLayoutRadius: getMaxLayoutRadius(ringRadiusHint),
+    maxLayoutRadius: baseLayoutRadius,
   });
 
   const charmItems = buildCharmsOnRing({
@@ -2083,7 +2342,14 @@ function buildManualEvenRingLayout({
   };
 }
 
-function computeRingStepAngles(pattern, layoutRadii, count, fullCircle, ringRadius) {
+function computeRingStepAngles(
+  pattern,
+  layoutRadii,
+  count,
+  fullCircle,
+  ringRadius,
+  gapContext
+) {
   const stepAngles = [];
   for (let index = 0; index < count; index += 1) {
     if (!fullCircle && index === count - 1) {
@@ -2097,7 +2363,9 @@ function computeRingStepAngles(pattern, layoutRadii, count, fullCircle, ringRadi
         pattern[nextIndex],
         layoutRadii[index],
         layoutRadii[nextIndex],
-        ringRadius
+        ringRadius,
+        gapContext,
+        index
       )
     );
   }
@@ -2106,6 +2374,7 @@ function computeRingStepAngles(pattern, layoutRadii, count, fullCircle, ringRadi
 
 function computeVariableLayoutOnFixedRing({
   pattern,
+  charmPattern = [],
   defaultSizeId,
   centerX,
   centerY,
@@ -2116,18 +2385,27 @@ function computeVariableLayoutOnFixedRing({
   fillRemainingArc = false,
   maxLayoutRadius = Infinity,
 }) {
-  const count = pattern.length;
-  const layoutRadii = pattern.map((item, index) =>
-    getItemLayoutRadius(item, pattern, index, defaultSizeId)
+  const ringPattern = getRingBeadPattern(pattern);
+  const charms = charmPattern.length
+    ? charmPattern
+    : pattern.filter((item) => item.type === "charm");
+  const count = ringPattern.length;
+  if (!count) {
+    return { ringRadius, items: [] };
+  }
+  const gapContext = createLayoutGapContext(ringPattern, charms);
+  const layoutRadii = ringPattern.map((item, index) =>
+    getItemLayoutRadius(item, ringPattern, index, defaultSizeId)
   );
 
   let layoutRadius = ringRadius;
   let stepAngles = computeRingStepAngles(
-    pattern,
+    ringPattern,
     layoutRadii,
     count,
     fullCircle,
-    layoutRadius
+    layoutRadius,
+    gapContext
   );
 
   if (fillRemainingArc && fullCircle && anchorAtStart && count > 1) {
@@ -2141,11 +2419,12 @@ function computeVariableLayoutOnFixedRing({
           layoutRadius = maxLayoutRadius;
         }
         stepAngles = computeRingStepAngles(
-          pattern,
+          ringPattern,
           layoutRadii,
           count,
           fullCircle,
-          layoutRadius
+          layoutRadius,
+          gapContext
         );
         totalAngle = stepAngles.reduce((sum, angle) => sum + angle, 0);
         if (layoutRadius >= maxLayoutRadius) {
@@ -2155,7 +2434,26 @@ function computeVariableLayoutOnFixedRing({
     }
 
     totalAngle = stepAngles.reduce((sum, angle) => sum + angle, 0);
-    if (totalAngle > 0 && totalAngle < targetAngle) {
+    if (totalAngle > targetAngle && charms.length) {
+      // The string cannot grow any further, so charm-gap padding only gets the slack that is
+      // left. Otherwise the overflow piles up at the seam and the last items sit on the first.
+      const baseStepAngles = computeRingStepAngles(
+        ringPattern,
+        layoutRadii,
+        count,
+        fullCircle,
+        layoutRadius,
+        createLayoutGapContext(ringPattern)
+      );
+      const baseTotal = baseStepAngles.reduce((sum, angle) => sum + angle, 0);
+      const paddingShare =
+        baseTotal < targetAngle ? (targetAngle - baseTotal) / (totalAngle - baseTotal) : 0;
+      stepAngles = stepAngles.map(
+        (angle, index) => baseStepAngles[index] + (angle - baseStepAngles[index]) * paddingShare
+      );
+      totalAngle = stepAngles.reduce((sum, angle) => sum + angle, 0);
+    }
+    if (totalAngle > 0 && Math.abs(totalAngle - targetAngle) > 1e-6) {
       const scale = targetAngle / totalAngle;
       for (let index = 0; index < stepAngles.length; index += 1) {
         stepAngles[index] *= scale;
@@ -2163,7 +2461,14 @@ function computeVariableLayoutOnFixedRing({
     }
   }
 
-  const closedTotalAngle = stepAngles.reduce((sum, angle) => sum + angle, 0);
+  let closedTotalAngle = stepAngles.reduce((sum, angle) => sum + angle, 0);
+  if (fullCircle && !tightLoop && count > 1 && closedTotalAngle > 0 && Math.abs(closedTotalAngle - 2 * Math.PI) > 1e-6) {
+    const scale = (2 * Math.PI) / closedTotalAngle;
+    for (let index = 0; index < stepAngles.length; index += 1) {
+      stepAngles[index] *= scale;
+    }
+    closedTotalAngle = 2 * Math.PI;
+  }
   if (fullCircle && tightLoop) {
     layoutRadius = closedTotalAngle * layoutRadius / (2 * Math.PI);
   }
@@ -2183,7 +2488,7 @@ function computeVariableLayoutOnFixedRing({
   return {
     ringRadius: layoutRadius,
     items: buildItemsFromAngles({
-      pattern,
+      pattern: ringPattern,
       angles,
       ringRadius: layoutRadius,
       centerX,
@@ -2191,6 +2496,30 @@ function computeVariableLayoutOnFixedRing({
       defaultSizeId,
       closedLoop: fullCircle,
     }),
+  };
+}
+
+function appendCharmsToRingLayout({
+  ringLayout,
+  charmPattern,
+  centerX,
+  centerY,
+  defaultSizeId,
+}) {
+  if (!charmPattern.length) {
+    return ringLayout;
+  }
+  const charmItems = buildCharmsOnRing({
+    charmPattern,
+    ringLayoutItems: ringLayout.items,
+    ringRadius: ringLayout.ringRadius,
+    centerX,
+    centerY,
+    defaultSizeId,
+  });
+  return {
+    ringRadius: ringLayout.ringRadius,
+    items: [...ringLayout.items, ...charmItems],
   };
 }
 
@@ -2219,7 +2548,8 @@ export function buildPositionedRingItems({
 
   const ringRadius = ringRadiusHint || BASE_RING_RADIUS;
   const ringBeadPattern = getRingBeadPattern(pattern);
-  const charmOnlyPattern = pattern.filter((item) => item.type === "charm");
+  const charmPattern = pattern.filter((item) => item.type === "charm");
+  const charmOnlyPattern = charmPattern;
   if (!ringBeadPattern.length && charmOnlyPattern.length) {
     return buildCharmsOnlyRingLayout({
       charmPattern: charmOnlyPattern,
@@ -2232,14 +2562,21 @@ export function buildPositionedRingItems({
 
   if (!useVariableDiameters) {
     const effectiveRadius = resolveLayoutRingRadius(pattern, defaultSizeId, ringRadius);
-    return computeVariableLayoutOnFixedRing({
-      pattern,
-      defaultSizeId,
+    return appendCharmsToRingLayout({
+      ringLayout: computeVariableLayoutOnFixedRing({
+        pattern: ringBeadPattern,
+        charmPattern,
+        defaultSizeId,
+        centerX,
+        centerY,
+        ringRadius: effectiveRadius,
+        fullCircle: true,
+        tightLoop: false,
+      }),
+      charmPattern,
       centerX,
       centerY,
-      ringRadius: effectiveRadius,
-      fullCircle: true,
-      tightLoop: false,
+      defaultSizeId,
     });
   }
 
@@ -2259,16 +2596,23 @@ export function buildPositionedRingItems({
   const usePartialArc =
     !manualFullCircle && (isPartialCluster || pattern.length < slotCount);
 
-  return computeVariableLayoutOnFixedRing({
-    pattern,
-    defaultSizeId,
+  return appendCharmsToRingLayout({
+    ringLayout: computeVariableLayoutOnFixedRing({
+      pattern: ringBeadPattern,
+      charmPattern,
+      defaultSizeId,
+      centerX,
+      centerY,
+      ringRadius,
+      fullCircle: !usePartialArc,
+      tightLoop: false,
+      anchorAtStart: true,
+      fillRemainingArc: false,
+    }),
+    charmPattern,
     centerX,
     centerY,
-    ringRadius,
-    fullCircle: !usePartialArc,
-    tightLoop: false,
-    anchorAtStart: true,
-    fillRemainingArc: false,
+    defaultSizeId,
   });
 }
 

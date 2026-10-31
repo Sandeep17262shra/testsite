@@ -2703,6 +2703,7 @@ button:focus{
             display: flex;
     justify-content: center;
     align-items: center;
+    display: none !important;
 }
 .arrow-icon {
   font-size: 20px;
@@ -3558,7 +3559,7 @@ button:focus{
   position: relative;
   display: block;
   padding: 0;
-  background: linear-gradient(180deg, #f7f7f7 0%, #efefef 100%);
+  background: #f8f8f8;
 }
 
 .beeds-configurator-root .gb-preview-control--undo:disabled {
@@ -3599,15 +3600,46 @@ button:focus{
   transform-style: preserve-3d;
   transform-origin: 50% 46%;
   backface-visibility: hidden;
+}
+
+.beads-preview-morph.is-morphing .beads-preview-morph__layer {
+  transition:
+    opacity 420ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 420ms cubic-bezier(0.4, 0, 0.2, 1);
   will-change: opacity, transform;
 }
 
 .beads-preview-morph__layer--2d {
   z-index: 2;
+  opacity: 1;
+  transform: none;
+}
+
+.beads-preview-morph.is-3d-active .beads-preview-morph__layer--2d {
+  opacity: 0;
+  transform: translate3d(0, -14px, 0) scale(0.955) rotateX(-16deg);
 }
 
 .beads-preview-morph__layer--3d {
   z-index: 3;
+  opacity: 0;
+  /* Stay flat. A rotateX here tilts the WebGL canvas during the 360° fade
+     and the round bracelet reads as an oval until the tilt finishes. */
+  transform: none;
+  pointer-events: none;
+}
+
+/* The canvas defaults to pointer-events: auto, which still hits even when this
+   layer is none. Force the whole hidden 3D view out of the way in 2D. */
+.beads-preview-morph:not(.is-3d-active) .beads-preview-morph__layer--3d,
+.beads-preview-morph:not(.is-3d-active) .beads-preview-morph__layer--3d * {
+  pointer-events: none !important;
+}
+
+.beads-preview-morph.is-3d-active .beads-preview-morph__layer--3d {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
 }
 
 .beads-preview-morph.is-morphing .beads-2d-stage-wrap {
@@ -3653,6 +3685,19 @@ button:focus{
   display: flex;
   align-items: center;
   pointer-events: none;
+}
+
+.beads-preview-morph.is-morphing.is-3d-active .beads-preview-desc-overlay {
+  animation: beads-preview-desc-in 200ms ease 160ms both;
+}
+
+@keyframes beads-preview-desc-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .beads-preview-desc-overlay strong {
@@ -3710,6 +3755,21 @@ button:focus{
 .beads-2d-string {
   vector-effect: non-scaling-stroke;
   stroke-opacity: 0.88;
+}
+
+.beads-2d-ring-visual {
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+}
+
+.beads-2d-ring-visual.is-art-ready {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .beads-2d-ring-visual {
+    transition: none;
+  }
 }
 
 .beads-2d-string--free-size {
@@ -3847,6 +3907,19 @@ button:focus{
   object-fit: cover;
 }
 
+.beads-fly-in-ghost__model-token {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  border: 1px solid #202020;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 28%, #fff 0 6%, #d8d8d8 38%, #8b8b8b 100%);
+  color: #171717;
+  font-size: clamp(11px, 2.6vw, 22px);
+  font-weight: 700;
+}
+
 .beads-2d-preview.is-fly-in .beads-2d-ring-item--preview,
 .beads-2d-preview.is-fly-in .beads-2d-ring-item--animated,
 .beads-2d-preview.is-fly-in .beads-2d-charm-hardware--preview {
@@ -3887,8 +3960,23 @@ button:focus{
   pointer-events: all;
   fill: transparent;
   stroke: transparent;
-  cursor: grab;
+  cursor: pointer;
   touch-action: none;
+}
+
+.beads-2d-selection-arrow {
+  pointer-events: none;
+  animation: beads-arrow-float 1.8s ease-in-out infinite;
+  transition: opacity 0.25s ease;
+}
+
+@keyframes beads-arrow-float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(3.5px);
+  }
 }
 
 .beads-2d-preview.is-ring-dragging .beads-2d-drag-hit {
@@ -4198,7 +4286,7 @@ button:focus{
 }
 
 .beads-style-row .gb-option-track {
-  grid-auto-columns: 118px;
+  grid-auto-columns: 120px;
   grid-auto-flow: column;
   gap: 12px;
   cursor: default;
@@ -4309,12 +4397,45 @@ button:focus{
   min-height: 44px;
 }
 
+/* Global RCApp.css uses --appearance-secondary on pill text (too light on white). */
+.beeds-configurator-root.theme3-root:not(.theme3-has-button-typography) .gb-text-option:not(:disabled),
+.beeds-configurator-root.theme3-root:not(.theme3-has-button-typography) .gb-text-option:not(.active):not(:disabled),
+.beeds-configurator-root.theme3-root:not(.theme3-has-button-typography) .gb-text-option.active {
+  color: #303030 !important;
+}
+
+.beeds-configurator-root.theme3-root .gb-text-option:not(.active):not(:disabled) {
+  border-color: #e2e2de;
+}
+
+.beeds-configurator-root.theme3-root .gb-text-option.active {
+  border-color: #303030;
+  background: #f8f8f8;
+}
+
 .beads-picker-filters {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
   gap: 16px;
   margin-bottom: 0;
   align-items: end;
+}
+
+.beads-picker-filters--metalic {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: 16px;
+  margin-bottom: 0;
+  align-items: end;
+}
+
+.beads-picker-filters--metalic .beads-picker-filter--size {
+  grid-column: 2;
+}
+
+.beads-picker-filter--spacer {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .beads-asset-grid {
@@ -4326,8 +4447,8 @@ button:focus{
 .beads-asset-grid--picker,
 .beads-asset-grid--spacers,
 .beads-asset-grid--charms {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .beads-slot-replace-hint {
@@ -4543,9 +4664,10 @@ button:focus{
   position: absolute;
   top: 50%;
   right: 12px;
+  z-index: 1;
   width: 12px;
   height: 8px;
-  color: #111;
+  color: var(--typography-button-primary-text-color, var(--appearance-secondary-text, #303030));
   pointer-events: none;
   transform: translateY(-50%);
 }
@@ -4554,6 +4676,10 @@ button:focus{
   display: block;
   width: 100%;
   height: 100%;
+}
+
+.beads-picker-type-select__chevron svg path {
+  stroke: currentColor;
 }
 
 .beads-picker-size-options {
@@ -4586,20 +4712,22 @@ button:focus{
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
   width: 100%;
-  padding: 14px 10px 16px;
+  padding: 10px 8px;
   border: 1px solid #d8d8d8;
   border-radius: 6px;
   background: #fff;
   cursor: pointer;
   text-align: center;
-  min-height: 136px;
+  /*min-height: 136px;*/
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .beads-grid-card.active {
-  border-color: #111;
-  box-shadow: inset 0 0 0 1px #111;
+  border-color: var(--appearance-primary, #111);
+  box-shadow: none;
 }
 
 .beads-grid-card.is-disabled {
@@ -4649,6 +4777,97 @@ button:focus{
   width: 100%;
   height: 100%;
   object-fit: contain;
+  -webkit-user-drag: none;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Bead materials are now shown as miniature polished spheres rather than the
+   old flat catalogue art. The same texture that wraps the 3D GLB gives the
+   picker an honest preview of the finished bead. */
+.beads-grid-card__bead-icon {
+  position: relative;
+  display: block;
+  width: 58px;
+  height: 58px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--bead-texture) center / 230% auto;
+  box-shadow:
+    inset 1px 1px 1px rgb(255 255 255 / 38%),
+    inset -5px -6px 9px rgb(0 0 0 / 20%),
+    0 7px 10px -6px rgb(0 0 0 / 55%),
+    0 2px 3px rgb(0 0 0 / 22%);
+  isolation: isolate;
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+/* Light from above-left and a darker lower edge provide the round 3D form. */
+.beads-grid-card__bead-icon::before,
+.beads-grid-card__bead-icon::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  content: "";
+  pointer-events: none;
+}
+
+.beads-grid-card__bead-icon::before {
+  background: radial-gradient(
+    circle at 34% 28%,
+    rgb(255 255 255 / 10%) 0 24%,
+    rgb(0 0 0 / 10%) 58%,
+    rgb(0 0 0 / 52%) 100%
+  );
+}
+
+.beads-grid-card__bead-icon::after {
+  background:
+    radial-gradient(ellipse 31% 19% at 30% 20%, rgb(255 255 255 / 92%) 0%, rgb(255 255 255 / 42%) 28%, transparent 72%),
+    radial-gradient(ellipse 16% 10% at 48% 37%, rgb(255 255 255 / 34%), transparent 100%),
+    radial-gradient(ellipse 24% 15% at 71% 80%, rgb(255 255 255 / 36%), transparent 100%),
+    linear-gradient(135deg, rgb(255 255 255 / 20%), transparent 42%);
+}
+
+.beads-grid-card__bead-hole {
+  position: absolute;
+  z-index: 1;
+  top: 2.5%;
+  left: 50%;
+  width: 19%;
+  height: 7.5%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 45%, #000 50%, transparent 100%);
+  box-shadow: 0 0 3px 1px rgb(0 0 0 / 45%);
+  transform: translateX(-50%);
+}
+
+.beads-grid-card:hover:not(:disabled) .beads-grid-card__bead-icon {
+  transform: translateY(-2px) scale(1.04);
+}
+
+.beads-grid-card.active .beads-grid-card__bead-icon {
+  /* Active border is shown on the card itself; keep the icon's own 3D shadow only. */
+  box-shadow:
+    inset 1px 1px 1px rgb(255 255 255 / 38%),
+    inset -5px -6px 9px rgb(0 0 0 / 20%),
+    0 8px 11px -6px rgb(0 0 0 / 55%);
+}
+
+/* S1–S8 are 3D round spacers. Their 2D picker is intentionally a clean top-view token. */
+.beads-grid-card__model-token {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border: 1px solid #232323;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 28%, #fff 0 6%, #d8d8d8 38%, #8b8b8b 100%);
+  box-shadow: inset -4px -4px 7px rgb(0 0 0 / 18%), inset 3px 3px 5px rgb(255 255 255 / 75%);
+  color: #171717;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .beads-grid-card__label {
@@ -4658,9 +4877,33 @@ button:focus{
 }
 
 .beads-grid-card__meta {
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.2;
   color: #666;
+}
+
+/* Beads / spacers / charms picker: same 12px name + price on every store.
+   Appearance API still colors borders; it must not shrink these labels. */
+.beeds-configurator-root.theme3-root.theme3-root--beeds .beads-grid-card,
+.beeds-configurator-root.theme3-root.theme3-has-button-typography.theme3-root--beeds .beads-grid-card {
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  line-height: 1.25 !important;
+  letter-spacing: normal !important;
+}
+
+.beeds-configurator-root.theme3-root.theme3-root--beeds .beads-grid-card .theme3-option-box-label,
+.beeds-configurator-root.theme3-root.theme3-root--beeds .beads-grid-card .beads-grid-card__label,
+.beeds-configurator-root.theme3-root.theme3-has-button-typography.theme3-root--beeds .beads-grid-card .theme3-option-box-label,
+.beeds-configurator-root.theme3-root.theme3-has-button-typography.theme3-root--beeds .beads-grid-card .beads-grid-card__label,
+.beeds-configurator-root.theme3-root.theme3-root--beeds .beads-grid-card .theme3-option-box-price,
+.beeds-configurator-root.theme3-root.theme3-root--beeds .beads-grid-card .beads-grid-card__meta,
+.beeds-configurator-root.theme3-root.theme3-has-button-typography.theme3-root--beeds .beads-grid-card .theme3-option-box-price,
+.beeds-configurator-root.theme3-root.theme3-has-button-typography.theme3-root--beeds .beads-grid-card .beads-grid-card__meta {
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  line-height: 1.25 !important;
+  letter-spacing: normal !important;
 }
 
 @media (max-width: 900px) {
@@ -4840,7 +5083,7 @@ button:focus{
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 0 22px;
+  padding: 10px 0 4px;
   margin-bottom: 2px;
   flex-wrap: nowrap;
   overflow-x: auto;
@@ -4858,15 +5101,29 @@ button:focus{
   cursor: grabbing;
 }
 
+.beeds-configurator-root.theme3-root .selected-charms-row.is-dragging-slots .selected-charm-slot {
+  transition: none;
+}
+
 .beeds-configurator-root.theme3-root .selected-charm-slot.is-dragging-slot {
   transition: none;
+  transform-origin: left center;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.14);
 }
 
 .beeds-configurator-root.theme3-root .selected-charm-slot {
+  box-sizing: border-box;
   width: 64px;
   height: 64px;
+  min-width: 64px;
+  min-height: 64px;
   flex: 0 0 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px 2px 3px;
   border: 1px solid #dcdcd8;
   border-style: solid;
   border-radius: 4px;
@@ -4874,9 +5131,26 @@ button:focus{
 }
 
 .beeds-configurator-root.theme3-root .selected-charm-slot img {
-  width: 48px;
-  height: 48px;
+  width: 36px;
+  height: 36px;
+  max-width: 36px;
+  max-height: 36px;
   object-fit: contain;
+  flex: 0 0 auto;
+}
+
+.beeds-configurator-root.theme3-root .selected-charm-slot .beads-slot-model-token {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid #202020;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 28%, #fff 0 6%, #d8d8d8 38%, #8b8b8b 100%);
+  color: #171717;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .beeds-configurator-root.theme3-root .selected-charm-slot.add-slot {
@@ -4904,14 +5178,16 @@ button:focus{
   background: #f5f5f3;
 }
 
-.beeds-configurator-root.theme3-root .selected-charm-slot .remove-slot-btn {
+.beeds-configurator-root.theme3-root .selected-charm-slot .remove-slot-btn,
+.beeds-configurator-root.theme3-root .selected-charm-slot .remove-slot-btn:hover {
   top: -6px;
   right: -6px;
   width: 18px;
   height: 18px;
-  border: 0;
-  background: #303030;
-  color: #ffffff;
+  border: 0 !important;
+  border-radius: 50%;
+  background: #303030 !important;
+  color: #ffffff !important;
 }
 
 .beeds-configurator-root.theme3-root .selected-charms-row.is-readonly .selected-charm-slot {
@@ -4928,16 +5204,16 @@ button:focus{
 }
 
 .beeds-configurator-root.theme3-root .selected-charm-slot .beads-slot-size-label {
-  position: absolute;
-  left: 4px;
-  bottom: 4px;
-  padding: 1px 4px;
-  border-radius: 3px;
-  background: rgba(255, 255, 255, 0.92);
-  color: #333;
-  font-size: 9px;
+  position: static;
+  display: block;
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  color: #303030;
+  font-size: 10px;
   font-weight: 600;
   line-height: 1.2;
+  text-align: center;
   pointer-events: none;
 }
 .beeds-configurator-root.theme3-root .gb-option-row--bead-picker.gb-option-row--two-line .gb-option-track {
@@ -4980,6 +5256,14 @@ button:focus{
   .beads-picker-filters {
     grid-template-columns: 1fr;
     gap: 12px;
+  }
+
+  .beads-picker-filters--metalic .beads-picker-filter--size {
+    grid-column: 1;
+  }
+
+  .beads-picker-filter--spacer {
+    display: none;
   }
 }
 
@@ -5078,6 +5362,7 @@ button:focus{
   flex-direction: column;
   align-items: flex-start;
   flex-shrink: 0;
+  min-width: 77px;
 }
 
 .theme3-root--beeds .theme3-summary-details-toggle {
@@ -5092,7 +5377,7 @@ button:focus{
   line-height: 1.2;
 }
 
-.theme3-root--beeds .theme3-summary-details-toggle span {
+.theme3-root--beeds:not(.theme3-has-link-typography) .theme3-summary-details-toggle span {
   color: #000000 !important;
   font-size: 10px !important;
   font-weight: 400 !important;
@@ -5162,6 +5447,9 @@ button:focus{
   font-size: 12px !important;
   font-weight: 500 !important;
   white-space: nowrap;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .theme3-root--beeds .theme3-panel-footer-cta {
@@ -5177,11 +5465,41 @@ button:focus{
   cursor: not-allowed;
 }
 
+/* 360° preview: orbit-only on canvas; options panel read-only; footer row stays interactive. */
+.theme3-root--beeds .beads-panel-edit-body {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Same washed-out look as .gb-card-option:disabled (opacity 0.35). */
+.theme3-root--beeds .beads-panel-edit-body.is-360-disabled {
+  opacity: 0.35;
+  pointer-events: none;
+  user-select: none;
+  cursor: not-allowed;
+  transition: opacity 0.28s ease;
+}
+
+.theme3-root--beeds.theme3-root--view360 .theme3-section-nav {
+  opacity: 0.35;
+  pointer-events: none;
+  cursor: not-allowed;
+  transition: opacity 0.28s ease;
+}
+
+.theme3-root--beeds.theme3-root--view360 .theme3-section-nav > button {
+  cursor: not-allowed;
+}
+
 .theme3-root--beeds .theme3-panel-action-btn.theme3-panel-share-btn,
 .theme3-root--beeds .theme3-panel-action-btn.theme3-panel-reset-btn {
   width: 96px;
   padding: 0 16px;
-  border: 1px solid #262626 !important;
+  border: 1px solid var(--appearance-primary, #262626) !important;
   background: #ffffff !important;
   color: #262626 !important;
 }
@@ -5189,16 +5507,14 @@ button:focus{
 .theme3-root--beeds .theme3-panel-action-btn.theme3-panel-share-btn:hover,
 .theme3-root--beeds .theme3-panel-action-btn.theme3-panel-reset-btn:hover {
   background: #f5f5f3 !important;
-  border-color: #262626 !important;
+  border-color: var(--appearance-hover-primary, var(--appearance-primary, #262626)) !important;
 }
 
 @media (min-width: 901px) {
   .theme3-root--beeds .theme3-workspace {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-rows: 60px minmax(0, 1fr);
-    grid-template-areas:
-      "preview nav"
-      "preview options";
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: "preview options";
   }
 
   .theme3-root--beeds .theme3-preview-caption {
@@ -5231,8 +5547,8 @@ button:focus{
     border-right-color: var(--theme3-ink, #262626);
   }
 
-  .theme3-root--beeds .theme3-panel-scroll > [data-theme3-section="jewelry"] > .theme3-option-section-header {
-    padding-top: 8px;
+  .theme3-root--beeds .theme3-panel-scroll > [data-theme3-section="jewelry"] > .theme3-jewelry-block-header {
+    padding-top: 0;
   }
 }
 
@@ -5284,3 +5600,102 @@ button:focus{
     min-width: 108px;
   }
 }
+
+/* Let store button typography control pill labels (same as ring / jewelry). */
+.beeds-configurator-root.theme3-root.theme3-has-button-typography .gb-text-option:not(:disabled),
+.beeds-configurator-root.theme3-root.theme3-has-button-typography .gb-text-option:not(.active):not(:disabled),
+.beeds-configurator-root.theme3-root.theme3-has-button-typography .gb-text-option.active {
+  color: unset !important;
+}
+
+/* 3D Bead Selection Indicator */
+.beads-3d-selection-bar {
+  position: absolute;
+  bottom: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 15;
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  pointer-events: auto;
+  animation: beads-selection-bar-in 0.22s ease-out both;
+}
+
+@keyframes beads-selection-bar-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.beads-selection-nav-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  animation: beads-arrow-float 1.8s ease-in-out infinite;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.12));
+  transition: transform 0.18s ease;
+}
+
+.beads-selection-nav-arrow:hover {
+  transform: scale(1.12);
+}
+
+.beads-selection-nav-arrow:active {
+  transform: scale(0.95);
+}
+
+.beads-selection-nav-arrow svg {
+  display: block;
+}
+
+@media (max-width: 900px) {
+  .beads-3d-selection-bar {
+    bottom: 14px;
+  }
+}
+
+/* 3D Drag-to-Remove Indicator */
+.beads-3d-remove-indicator {
+  bottom: 84px;
+  z-index: 25;
+}
+
+@media (max-width: 900px) {
+  .beads-3d-remove-indicator {
+    bottom: 68px;
+  }
+}
+
+/* Thread / Cord Color Selector */
+.gb-thread-color-option {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 0 14px !important;
+  min-height: 42px !important;
+}
+
+.gb-thread-color-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+

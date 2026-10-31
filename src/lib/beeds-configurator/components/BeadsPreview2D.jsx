@@ -1,10 +1,13 @@
 import React, { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import { isSvgBeadAsset, resolvePatternAsset } from "../assets";
+import { isCatalogSpacerSku, isColoredCrystalSpacerSku, isSvgBeadAsset, resolvePatternAsset } from "../assets";
 import { useBeedsContext } from "../contexts/BeedsContext";
 import { View360Context } from "../contexts/View360Context";
+import { useRingPreviewArtReady } from "../useRingPreviewArtReady";
+import { useJewelryText } from "@/lib/ring-configurator/useJewelryText";
 import { usePreviewFocusRingRotation } from "../usePreviewFocusRingRotation";
+import { usePreviewFocus } from "../contexts/PreviewFocusContext";
 import {
   buildPositionedRingItems,
   charmPendantLocalToWorld,
@@ -91,9 +94,93 @@ const { x: CENTER_X, y: CENTER_Y } = getPreviewCenter();
 const FREE_SIZE_RADIUS_ANIM_MS = 400;
 /** Thin cord so it stays inside bead holes and does not cover charm hardware. */
 const PREVIEW_STRING_STROKE_WIDTH = 1;
+/** Catalog spacer PNG has less transparent padding than bead artwork. */
+const CATALOG_SPACER_2D_ART_SCALE = 0.86;
 
 function getItemKey(item, index) {
   return item.id || `${item.type}-${item.asset?.key}-${item.sizeId || "default"}-${index}`;
+}
+
+/** Top-down placeholder for a round 3D spacer: no legacy raster is reused in 2D. */
+function RoundSpacerTopView({ item, className }) {
+  const diameter = Math.min(item.width, item.height);
+  const radius = diameter / 2;
+  const label = item.asset?.topViewLabel ?? String(item.assetKey || "").replace(/^s/i, "");
+
+  return (
+    <g className={className} aria-label={`Spacer ${label}`}>
+      <circle r={radius} fill="#bdbdbd" stroke="#202020" strokeWidth={Math.max(1, diameter * 0.035)} />
+      <circle
+        r={radius * 0.79}
+        fill="none"
+        stroke="#f6f6f6"
+        strokeOpacity="0.75"
+        strokeWidth={Math.max(0.7, diameter * 0.025)}
+      />
+      <text
+        x="0"
+        y="0"
+        textAnchor="middle"
+        dominantBaseline="central"
+        fill="#171717"
+        fontSize={Math.max(10, diameter * 0.45)}
+        fontWeight="700"
+        fontFamily="Arial, sans-serif"
+      >
+        {label}
+      </text>
+    </g>
+  );
+}
+
+function SpacerTopViewImage({ item, className }) {
+  const isCatalogSpacer = isCatalogSpacerSku(item.assetKey ?? item.asset?.key);
+  const scale = isCatalogSpacer ? CATALOG_SPACER_2D_ART_SCALE : 1;
+  const width = item.width * scale;
+  const height = item.height * scale;
+
+  // The new gem PNG overrides (S10–S14) are landscape pill-shapes shot from the
+  // side. The ring layout rotates items tangentially around the string, which
+  // would rotate a landscape image 90° sideways. Counter-rotate by -90° so the
+  // long axis of the gem always reads perpendicular to the string (upright).
+  // S7–S9 twister images are portrait (taller than wide) — they rotate naturally
+  // with the string tangent and do NOT need counter-rotation.
+  const isGemPngOverride = isColoredCrystalSpacerSku(item.assetKey ?? item.asset?.key);
+
+  const imageEl = (
+    <image
+      href={item.asset.image}
+      x={-width / 2}
+      y={-height / 2}
+      width={width}
+      height={height}
+      className={className}
+      // Classic spacer artwork is intentionally tall so all three stones are
+      // visible on the bracelet; cropping it to the layout box hides the end
+      // stones and makes the replacement assets look incorrect.
+      preserveAspectRatio="xMidYMid meet"
+    />
+  );
+
+  if (isGemPngOverride) {
+    // Swap width/height so the landscape gem image fits the (taller) spacer slot
+    // after the -90° counter-rotation.
+    return (
+      <g transform="rotate(-90)">
+        <image
+          href={item.asset.image}
+          x={-height / 2}
+          y={-width / 2}
+          width={height}
+          height={width}
+          className={className}
+          preserveAspectRatio="xMidYMid meet"
+        />
+      </g>
+    );
+  }
+
+  return imageEl;
 }
 
 function getCharmDisplayRotation(item) {
@@ -338,7 +425,12 @@ function layoutItemsByPattern(pattern, positionedItems) {
       if (!positioned) {
         return null;
       }
-      return { ...positioned, patternIndex: index };
+      return {
+        ...positioned,
+        id: entry.id || positioned.id,
+        slotIndex: entry.slotIndex != null ? entry.slotIndex : index,
+        patternIndex: index,
+      };
     })
     .filter(Boolean);
 }
@@ -372,6 +464,11 @@ export default function BeadsPreview2D() {
     pattern,
     manualItems,
     presetSlotItems,
+    customizeSlotItems,
+    activeSlotIndex,
+    setActiveSlotIndex,
+    selectSlotIndex,
+    selectSlotById,
     isManualMode,
     layoutRingRadius,
     isStringFull,
@@ -389,8 +486,11 @@ export default function BeadsPreview2D() {
     flyInSourceRectRef,
     clearFlyInAnimation,
     randomizeSwappedIds,
+    selectedThreadColor,
   } = useBeedsContext();
+  const t = useJewelryText("beaded");
   const { view360 } = useContext(View360Context);
+  const { requestPreviewFocus, clearPreviewFocus } = usePreviewFocus();
 
   const ringRadiusHint = layoutRingRadius;
 
@@ -440,6 +540,8 @@ export default function BeadsPreview2D() {
   const ringViewRotationRef = useRef(0);
 
   const [dragMeta, setDragMeta] = useState(null);
+  const [isPointerTrackingActive, setIsPointerTrackingActive] = useState(false);
+  const pointerDownInfoRef = useRef(null);
   const [ringViewRotation, setRingViewRotation] = useState(0);
   const [isRingSpinning, setIsRingSpinning] = useState(false);
   const [settling, setSettling] = useState(null);
@@ -630,6 +732,21 @@ export default function BeadsPreview2D() {
     pattern,
     charmLayoutConfig,
   ]);
+
+  const selectedVisualItem = useMemo(() => {
+    if (activeSlotIndex == null) return null;
+    const activeSlot = customizeSlotItems?.[activeSlotIndex];
+    if (activeSlot?.id) {
+      const byId = displayItems.find((item) => item.id === activeSlot.id);
+      if (byId) return byId;
+    }
+    const bySlotIndex = displayItems.find((item) => item.slotIndex === activeSlotIndex);
+    if (bySlotIndex) return bySlotIndex;
+    if (activeSlotIndex >= 0 && activeSlotIndex < displayItems.length) {
+      return displayItems[activeSlotIndex];
+    }
+    return null;
+  }, [activeSlotIndex, customizeSlotItems, displayItems]);
 
   const targetStringRadius = settledLayout.ringRadius || layoutRingRadius;
 
@@ -1206,7 +1323,7 @@ export default function BeadsPreview2D() {
       }
 
       const asset = resolvePatternAsset(anim.type, anim.assetKey);
-      if (!asset?.image) {
+      if (!asset?.image && !asset?.topViewLabel) {
         cancelFlyInRef.current?.();
         return;
       }
@@ -1429,6 +1546,8 @@ export default function BeadsPreview2D() {
       })),
     [charmItems]
   );
+
+  const ringPreviewArtReady = useRingPreviewArtReady(ringItems, charmPendants);
 
   const flyingInItemId = useMemo(() => {
     if (flyInActiveItemId) {
@@ -2108,14 +2227,108 @@ export default function BeadsPreview2D() {
     applyGhostVisuals(drag);
   }, [dragMeta, applyGhostVisuals]);
 
+  const lastTapHandledTimeRef = useRef(0);
+
+  const isItemSelected = useCallback(
+    (item) => {
+      if (activeSlotIndex == null || !item) return false;
+      const activeSlot = customizeSlotItems?.[activeSlotIndex];
+      if (activeSlot?.id && item.id && activeSlot.id === item.id) return true;
+      if (item.slotIndex != null && item.slotIndex === activeSlotIndex) return true;
+      if (
+        selectedVisualItem &&
+        (selectedVisualItem === item || (selectedVisualItem.id && selectedVisualItem.id === item.id))
+      ) {
+        return true;
+      }
+      if (item.patternIndex != null && item.patternIndex === activeSlotIndex) return true;
+      return false;
+    },
+    [activeSlotIndex, customizeSlotItems, selectedVisualItem]
+  );
+
+  const handleItemClick = useCallback(
+    (item) => {
+      if (!item) return;
+
+      const now = performance.now();
+      if (now - lastTapHandledTimeRef.current < 120) {
+        return;
+      }
+      lastTapHandledTimeRef.current = now;
+
+      // Touching the selected bead in sandbox removes the active state & ends selection
+      if (isItemSelected(item)) {
+        setActiveSlotIndex(null);
+        clearPreviewFocus();
+        return;
+      }
+
+      // New selection: find corresponding index in customizeSlotItems
+      let slotIndex = -1;
+      if (item.id) {
+        slotIndex = customizeSlotItems.findIndex((slot) => slot.id === item.id);
+      }
+      if (slotIndex < 0 && item.slotIndex != null) {
+        slotIndex = item.slotIndex;
+      }
+      if (slotIndex < 0 && item.patternIndex != null) {
+        slotIndex = item.patternIndex;
+      }
+
+      if (item.id) {
+        selectSlotById(item.id);
+      } else if (slotIndex >= 0) {
+        selectSlotIndex(slotIndex);
+      }
+
+      // Rotate ring so selected item comes to bottom (6 o'clock)
+      requestPreviewFocus({
+        itemId: item.id ?? null,
+        patternIndex: slotIndex >= 0 ? slotIndex : null,
+      });
+    },
+    [
+      isItemSelected,
+      customizeSlotItems,
+      setActiveSlotIndex,
+      clearPreviewFocus,
+      selectSlotById,
+      selectSlotIndex,
+      requestPreviewFocus,
+    ]
+  );
+
   const handleDragPointerEndRef = useRef(null);
 
   useEffect(() => {
-    if (!isRingDragActive) {
+    if (!isRingDragActive && !isPointerTrackingActive) {
       return undefined;
     }
 
     const handlePointerMove = (event) => {
+      const downInfo = pointerDownInfoRef.current;
+      if (downInfo && event.pointerId === downInfo.pointerId && !downInfo.dragThresholdPassed) {
+        const dist = Math.hypot(event.clientX - downInfo.startX, event.clientY - downInfo.startY);
+        if (dist > 14) {
+          downInfo.dragThresholdPassed = true;
+          if (dragEnabled && downInfo.nextState) {
+            dragRef.current = downInfo.nextState;
+            setDragMeta({
+              id: downInfo.nextState.id,
+              fromIndex: downInfo.nextState.fromIndex,
+              item: downInfo.nextState.item,
+              snapGap: downInfo.nextState.snapGap,
+              charmGapAdjusted: downInfo.nextState.charmGapAdjusted,
+              isRemoveZone: downInfo.nextState.isRemoveZone,
+              charmGhostParts: downInfo.nextState.charmGhostParts,
+            });
+            applyGhostVisuals(downInfo.nextState);
+            rafRef.current = requestAnimationFrame(tickDragFrame);
+          }
+        }
+      }
+
       if (event.pointerId !== dragRef.current?.pointerId) {
         return;
       }
@@ -2124,6 +2337,29 @@ export default function BeadsPreview2D() {
     };
 
     const handlePointerEnd = (event) => {
+      const downInfo = pointerDownInfoRef.current;
+      pointerDownInfoRef.current = null;
+      setIsPointerTrackingActive(false);
+
+      const isTap =
+        downInfo &&
+        event.pointerId === downInfo.pointerId &&
+        (!downInfo.dragThresholdPassed ||
+          (Math.hypot(event.clientX - downInfo.startX, event.clientY - downInfo.startY) <= 14 &&
+            performance.now() - (downInfo.startTime || 0) < 450));
+
+      if (isTap) {
+        event.preventDefault();
+        dragRef.current = null;
+        setDragMeta(null);
+        stopDragFrame();
+        clearCharmDragPreviewFrame();
+        releaseSvgPointer(svgRef.current, event.pointerId);
+
+        handleItemClick(downInfo.item);
+        return;
+      }
+
       if (event.pointerId !== dragRef.current?.pointerId) {
         return;
       }
@@ -2132,7 +2368,7 @@ export default function BeadsPreview2D() {
     };
 
     const handleTouchMove = (event) => {
-      if (!dragRef.current) {
+      if (!dragRef.current && !isPointerTrackingActive) {
         return;
       }
       event.preventDefault();
@@ -2149,7 +2385,17 @@ export default function BeadsPreview2D() {
       window.removeEventListener("pointercancel", handlePointerEnd);
       window.removeEventListener("touchmove", handleTouchMove);
     };
-  }, [isRingDragActive]);
+  }, [
+    isRingDragActive,
+    isPointerTrackingActive,
+    dragEnabled,
+    applyGhostVisuals,
+    tickDragFrame,
+    stopDragFrame,
+    clearCharmDragPreviewFrame,
+    selectSlotById,
+    selectSlotIndex,
+  ]);
 
   const handleDragPointerEnd = useCallback(
     (event) => {
@@ -2386,6 +2632,9 @@ export default function BeadsPreview2D() {
 
       spinRef.current = {
         pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        startTime: performance.now(),
         lastAngle: getPointerAngleDeg(
           svgRef.current,
           CENTER_X,
@@ -2465,8 +2714,21 @@ export default function BeadsPreview2D() {
       }
 
       const velocity = spin.velocity;
+      const spinStartX = spin.startX;
+      const spinStartY = spin.startY;
+      const spinStartTime = spin.startTime;
       spinRef.current = null;
       setIsRingSpinning(false);
+
+      if (spinStartX != null && spinStartY != null) {
+        const dist = Math.hypot(event.clientX - spinStartX, event.clientY - spinStartY);
+        if (dist < 6 && performance.now() - (spinStartTime || 0) < 400) {
+          if (activeSlotIndex !== null) {
+            setActiveSlotIndex(null);
+            clearPreviewFocus();
+          }
+        }
+      }
 
       if (event.currentTarget?.releasePointerCapture) {
         try {
@@ -2513,8 +2775,8 @@ export default function BeadsPreview2D() {
   }, [handleStageWheel]);
 
   const handleItemPointerDown = useCallback(
-    (event, item) => {
-      if (!dragEnabled || !item.id) {
+    (event, item, itemIndex) => {
+      if (!item) {
         return;
       }
 
@@ -2526,135 +2788,142 @@ export default function BeadsPreview2D() {
         return;
       }
 
-      const isHangingCharm = item.type === "charm" && hangingCharmIdSet.has(item.id);
+      const isHangingCharm = item.type === "charm" && item.id && hangingCharmIdSet.has(item.id);
       if (item.type === "charm" && !isHangingCharm) {
         return;
       }
 
-      // Pattern order is every ring item followed by every charm, so a ring item's pattern
-      // index is also its index along the string — the space gaps and drops are measured in.
-      const fromIndex = patternIndexById.get(item.id);
-      if (fromIndex == null) {
-        return;
-      }
+      const fromIndex = item.id ? patternIndexById.get(item.id) : (item.patternIndex ?? itemIndex);
 
       event.preventDefault();
       event.stopPropagation();
       unlockBeadsAudio();
-      suppressClickRef.current = true;
       stopSpinInertia();
       spinRef.current = null;
       setIsRingSpinning(false);
 
-      const svg = svgRef.current;
-      const point = pointerToRingLocalPoint(
-        svg,
-        CENTER_X,
-        CENTER_Y,
-        ringViewRotation,
-        event.clientX,
-        event.clientY
-      );
-      const pointerAngle = getPointerAngle(CENTER_X, CENTER_Y, point.x, point.y);
-      const gapItems = getRingGapItems(settledItems, item.id);
-      let snapGap = 0;
-      let charmGapAdjusted = false;
-      if (item.type === "charm") {
-        const segmentCount = gapItems.length || getCharmPlacementSegmentCount(pattern);
-        const resolved = resolveCharmDragSnapGap({
-          gapItems,
-          centerX: CENTER_X,
-          centerY: CENTER_Y,
-          pointerAngle,
-          segmentCount,
-          pattern,
-          excludeCharmId: item.id,
-          closedLoop: ringDragUsesClosedGaps,
-          defaultSizeId: sizeId,
-        });
-        snapGap = resolved.snapGap;
-        charmGapAdjusted = resolved.charmGapAdjusted;
-      } else {
-        snapGap = findNearestGapIndex(gapItems, CENTER_X, CENTER_Y, pointerAngle, {
-          closedLoop: ringDragUsesClosedGaps,
-        });
+      let nextState = null;
+      let meta = null;
+
+      if (dragEnabled && item.id && fromIndex != null) {
+        const svg = svgRef.current;
+        const point = pointerToRingLocalPoint(
+          svg,
+          CENTER_X,
+          CENTER_Y,
+          ringViewRotation,
+          event.clientX,
+          event.clientY
+        );
+        const pointerAngle = getPointerAngle(CENTER_X, CENTER_Y, point.x, point.y);
+        const gapItems = getRingGapItems(settledItems, item.id);
+        let snapGap = 0;
+        let charmGapAdjusted = false;
+        if (item.type === "charm") {
+          const segmentCount = gapItems.length || getCharmPlacementSegmentCount(pattern);
+          const resolved = resolveCharmDragSnapGap({
+            gapItems,
+            centerX: CENTER_X,
+            centerY: CENTER_Y,
+            pointerAngle,
+            segmentCount,
+            pattern,
+            excludeCharmId: item.id,
+            closedLoop: ringDragUsesClosedGaps,
+            defaultSizeId: sizeId,
+          });
+          snapGap = resolved.snapGap;
+          charmGapAdjusted = resolved.charmGapAdjusted;
+        } else {
+          snapGap = findNearestGapIndex(gapItems, CENTER_X, CENTER_Y, pointerAngle, {
+            closedLoop: ringDragUsesClosedGaps,
+          });
+        }
+
+        const distance = getPointerDistance(CENTER_X, CENTER_Y, point.x, point.y);
+        const removeZone = isPointerOutsideRing(distance, activeStringRadius);
+        const pendant = item.type === "charm" ? getCharmPendantLayout(item) : null;
+        const grabWorld =
+          item.type === "charm" && pendant ? getCharmWorldHitPoint(item, pendant) : null;
+        const charmSnapLayout =
+          item.type === "charm" && !removeZone
+            ? resolveCharmDragSnapLayoutTarget({
+                charmId: item.id,
+                snapGap,
+                pattern,
+                layoutConfig: charmLayoutConfig,
+                charmItem: item,
+              })
+            : null;
+        nextState = {
+          pointerId: event.pointerId,
+          id: item.id,
+          fromIndex,
+          item,
+          offsetX: grabWorld ? point.x - grabWorld.x : point.x - item.x,
+          offsetY: grabWorld ? point.y - grabWorld.y : point.y - item.y,
+          grabAttachDx: grabWorld ? grabWorld.x - item.x : 0,
+          grabAttachDy: grabWorld ? grabWorld.y - item.y : 0,
+          pointerX: point.x,
+          pointerY: point.y,
+          ghostX: charmSnapLayout?.x ?? item.x,
+          ghostY: charmSnapLayout?.y ?? item.y,
+          displayX: charmSnapLayout?.x ?? item.x,
+          displayY: charmSnapLayout?.y ?? item.y,
+          charmSnapLayout,
+          charmTargetX: item.type === "charm" ? item.x : null,
+          charmTargetY: item.type === "charm" ? item.y : null,
+          snapGap,
+          charmGapAdjusted,
+          isRemoveZone: removeZone,
+          lastRemoveZone: removeZone,
+          removeT: 0,
+          // Start the preview closed and centred on the grab so the ring eases open from where
+          // the charm already sits rather than snapping open on the first frame.
+          ghostAngle: item.type === "charm" ? getPointerAngle(CENTER_X, CENTER_Y, item.x, item.y) : null,
+          ghostRotationDeg:
+            item.type === "charm"
+              ? charmSnapLayout
+                ? charmSnapLayout.hardwareRotation ??
+                  charmSnapLayout.rotation ??
+                  getCharmDisplayRotation(charmSnapLayout)
+                : getCharmDisplayRotation(item)
+              : null,
+          snapAngle: null,
+          markerAngle: null,
+          spreadT: 0,
+          lastFrameMs: null,
+          beadShadowSmooth: item.type === "bead" ? {} : null,
+          charmGhostParts:
+            item.type === "charm" ? getCharmGhostParts(item, item.x, item.y) : null,
+        };
+
+        meta = {
+          id: item.id,
+          fromIndex,
+          item,
+          snapGap,
+          charmGapAdjusted,
+          isRemoveZone: removeZone,
+          charmGhostParts:
+            item.type === "charm" ? getCharmGhostParts(item, item.x, item.y) : null,
+        };
       }
 
-      const distance = getPointerDistance(CENTER_X, CENTER_Y, point.x, point.y);
-      const removeZone = isPointerOutsideRing(distance, activeStringRadius);
-      const pendant = item.type === "charm" ? getCharmPendantLayout(item) : null;
-      const grabWorld =
-        item.type === "charm" && pendant ? getCharmWorldHitPoint(item, pendant) : null;
-      const charmSnapLayout =
-        item.type === "charm" && !removeZone
-          ? resolveCharmDragSnapLayoutTarget({
-              charmId: item.id,
-              snapGap,
-              pattern,
-              layoutConfig: charmLayoutConfig,
-              charmItem: item,
-            })
-          : null;
-      const nextState = {
+      pointerDownInfoRef.current = {
         pointerId: event.pointerId,
-        id: item.id,
-        fromIndex,
+        startX: event.clientX,
+        startY: event.clientY,
+        startTime: performance.now(),
         item,
-        offsetX: grabWorld ? point.x - grabWorld.x : point.x - item.x,
-        offsetY: grabWorld ? point.y - grabWorld.y : point.y - item.y,
-        grabAttachDx: grabWorld ? grabWorld.x - item.x : 0,
-        grabAttachDy: grabWorld ? grabWorld.y - item.y : 0,
-        pointerX: point.x,
-        pointerY: point.y,
-        ghostX: charmSnapLayout?.x ?? item.x,
-        ghostY: charmSnapLayout?.y ?? item.y,
-        displayX: charmSnapLayout?.x ?? item.x,
-        displayY: charmSnapLayout?.y ?? item.y,
-        charmSnapLayout,
-        charmTargetX: item.type === "charm" ? item.x : null,
-        charmTargetY: item.type === "charm" ? item.y : null,
-        snapGap,
-        charmGapAdjusted,
-        isRemoveZone: removeZone,
-        lastRemoveZone: removeZone,
-        removeT: 0,
-        // Start the preview closed and centred on the grab so the ring eases open from where
-        // the charm already sits rather than snapping open on the first frame.
-        ghostAngle: item.type === "charm" ? getPointerAngle(CENTER_X, CENTER_Y, item.x, item.y) : null,
-        ghostRotationDeg:
-          item.type === "charm"
-            ? charmSnapLayout
-              ? charmSnapLayout.hardwareRotation ??
-                charmSnapLayout.rotation ??
-                getCharmDisplayRotation(charmSnapLayout)
-              : getCharmDisplayRotation(item)
-            : null,
-        snapAngle: null,
-        markerAngle: null,
-        spreadT: 0,
-        lastFrameMs: null,
-        beadShadowSmooth: item.type === "bead" ? {} : null,
-        charmGhostParts:
-          item.type === "charm" ? getCharmGhostParts(item, item.x, item.y) : null,
+        fromIndex,
+        itemIndex,
+        dragThresholdPassed: false,
+        nextState,
+        meta,
       };
+      setIsPointerTrackingActive(true);
 
-      dragRef.current = nextState;
-      setDragMeta({
-        id: item.id,
-        fromIndex,
-        item,
-        snapGap,
-        charmGapAdjusted,
-        isRemoveZone: removeZone,
-        charmGhostParts:
-          item.type === "charm" ? getCharmGhostParts(item, item.x, item.y) : null,
-      });
-
-      applyGhostVisuals(nextState);
-      if (item.type === "charm" && !removeZone) {
-        updateDragFromPointer(event.clientX, event.clientY);
-      }
-      rafRef.current = requestAnimationFrame(tickDragFrame);
       if (event.currentTarget?.setPointerCapture) {
         try {
           event.currentTarget.setPointerCapture(event.pointerId);
@@ -2843,7 +3112,11 @@ export default function BeadsPreview2D() {
             cy={hitPoint.y}
             r={hitRadius}
             className="beads-2d-drag-hit"
-            onPointerDown={(event) => handleItemPointerDown(event, item)}
+            onPointerDown={(event) => handleItemPointerDown(event, item, index)}
+            onClick={(event) => {
+              event.stopPropagation();
+              handleItemClick(item);
+            }}
           />
         )}
         <g
@@ -2899,7 +3172,11 @@ export default function BeadsPreview2D() {
           cy={hitY}
           r={hitRadius}
           className="beads-2d-drag-hit"
-          onPointerDown={(event) => handleItemPointerDown(event, item)}
+          onPointerDown={(event) => handleItemPointerDown(event, item, index)}
+          onClick={(event) => {
+            event.stopPropagation();
+            handleItemClick(item);
+          }}
         />
         <g
           className={`beads-2d-ring-item beads-2d-draggable-visual ${transitionClass}`}
@@ -2934,15 +3211,11 @@ export default function BeadsPreview2D() {
             </g>
           ) : (
             <g className={getSwapClass(item.id)}>
-              <image
-                href={item.asset.image}
-                x={-item.width / 2}
-                y={-item.height / 2}
-                width={item.width}
-                height={item.height}
-                className={itemClass}
-                preserveAspectRatio="xMidYMid slice"
-              />
+              {item.asset?.topViewLabel ? (
+                <RoundSpacerTopView item={item} className={itemClass} />
+              ) : (
+                <SpacerTopViewImage item={item} className={itemClass} />
+              )}
             </g>
           )}
         </g>
@@ -3040,43 +3313,72 @@ export default function BeadsPreview2D() {
         return null;
       }
 
+      const hitRadius = getRingDragHitRadius(item, { isCharm: false });
+
       if (item.type === "spacer") {
         return (
-          <g
-            key={getItemKey(item, index)}
-            transform={`translate(${item.x} ${item.y}) rotate(${item.rotation ?? 0})`}
-          >
-            <image
-                href={item.asset.image}
-              x={-item.width / 2}
-              y={-item.height / 2}
-              width={item.width}
-              height={item.height}
-              className="beads-2d-svg-item beads-2d-svg-item--spacer"
-              preserveAspectRatio="xMidYMid slice"
+          <g key={getItemKey(item, index)} className="beads-2d-draggable-wrap">
+            <circle
+              cx={item.x}
+              cy={item.y}
+              r={hitRadius}
+              className="beads-2d-drag-hit"
+              onPointerDown={(event) => handleItemPointerDown(event, item, index)}
+              onClick={(event) => {
+                event.stopPropagation();
+                handleItemClick(item);
+              }}
             />
+            <g
+              className="beads-2d-ring-item beads-2d-draggable-visual"
+              transform={`translate(${item.x} ${item.y}) rotate(${item.rotation ?? 0})`}
+              pointerEvents="none"
+            >
+              {item.asset?.topViewLabel ? (
+                <RoundSpacerTopView item={item} className="beads-2d-svg-item beads-2d-svg-item--spacer" />
+              ) : (
+                <SpacerTopViewImage
+                  item={item}
+                  className="beads-2d-svg-item beads-2d-svg-item--spacer"
+                />
+              )}
+            </g>
           </g>
         );
       }
 
       return (
-        <g
-          key={getItemKey(item, index)}
-          transform={`translate(${item.x} ${item.y}) rotate(${item.rotation ?? 0})`}
-        >
-          <BeadGemVisual
-            href={item.asset.image}
-            width={item.width}
-            height={item.height}
-            layer="face"
-            lightingAngleDeg={getBeadOutwardLightingAngleDeg(
-              item.x,
-              item.y,
-              CENTER_X,
-              CENTER_Y,
-              item.rotation ?? 0
-            )}
+        <g key={getItemKey(item, index)} className="beads-2d-draggable-wrap">
+          <circle
+            cx={item.x}
+            cy={item.y}
+            r={hitRadius}
+            className="beads-2d-drag-hit"
+            onPointerDown={(event) => handleItemPointerDown(event, item, index)}
+            onClick={(event) => {
+              event.stopPropagation();
+              handleItemClick(item);
+            }}
           />
+          <g
+            className="beads-2d-ring-item beads-2d-draggable-visual"
+            transform={`translate(${item.x} ${item.y}) rotate(${item.rotation ?? 0})`}
+            pointerEvents="none"
+          >
+            <BeadGemVisual
+              href={item.asset.image}
+              width={item.width}
+              height={item.height}
+              layer="face"
+              lightingAngleDeg={getBeadOutwardLightingAngleDeg(
+                item.x,
+                item.y,
+                CENTER_X,
+                CENTER_Y,
+                item.rotation ?? 0
+              )}
+            />
+          </g>
         </g>
       );
     });
@@ -3121,6 +3423,63 @@ export default function BeadsPreview2D() {
       draggable: true,
       getTransitionClass: getCharmTransitionClass,
     });
+
+  const renderSelectionArrow = () => {
+    if (activeSlotIndex == null || !selectedVisualItem || dragMeta) {
+      return null;
+    }
+
+    let itemOffset = 18;
+    if (selectedVisualItem.type === "charm") {
+      itemOffset = 42;
+    } else if (selectedVisualItem.width) {
+      itemOffset = selectedVisualItem.width / 2 + 3;
+    }
+    const itemBottomY = CENTER_Y + visualStringRadius + itemOffset;
+    const arrowTipY = Math.min(PREVIEW_VIEW_SIZE - 32, itemBottomY + 8);
+    const arrowBaseY = Math.min(PREVIEW_VIEW_SIZE - 6, arrowTipY + 22);
+    const arrowX = CENTER_X;
+
+    return (
+      <g
+        className="beads-2d-selection-arrow"
+        style={{ cursor: "pointer" }}
+        onClick={(e) => {
+          e.stopPropagation();
+          setActiveSlotIndex(null);
+          clearPreviewFocus();
+        }}
+      >
+        {/* Invisible wider hit region for easy tapping on touch displays */}
+        <path
+          d={`M ${arrowX} ${arrowBaseY} L ${arrowX} ${arrowTipY} M ${arrowX - 7} ${arrowTipY + 9} L ${arrowX} ${arrowTipY} L ${arrowX + 7} ${arrowTipY + 9}`}
+          stroke="transparent"
+          strokeWidth="24"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+        />
+        {/* White outline for high contrast on all surfaces */}
+        <path
+          d={`M ${arrowX} ${arrowBaseY} L ${arrowX} ${arrowTipY} M ${arrowX - 7} ${arrowTipY + 9} L ${arrowX} ${arrowTipY} L ${arrowX + 7} ${arrowTipY + 9}`}
+          stroke="rgba(255, 255, 255, 0.95)"
+          strokeWidth="5.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+        />
+        {/* Sleek dark arrow */}
+        <path
+          d={`M ${arrowX} ${arrowBaseY} L ${arrowX} ${arrowTipY} M ${arrowX - 7} ${arrowTipY + 9} L ${arrowX} ${arrowTipY} L ${arrowX + 7} ${arrowTipY + 9}`}
+          stroke="#171717"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+        />
+      </g>
+    );
+  };
 
   const draggedItem = dragMeta
     ? dragMeta.item ?? settledItems.find((item) => item.id === dragMeta.id)
@@ -3206,7 +3565,7 @@ export default function BeadsPreview2D() {
 
   const charmGhostParts = settlingCharmParts ?? dragCharmParts;
 
-  const quantity = isManualMode ? manualItems.length : pattern.filter((entry) => entry.type !== "charm").length;
+  const quantity = pattern.length;
 
   return (
     <div
@@ -3265,24 +3624,29 @@ export default function BeadsPreview2D() {
               cy={CENTER_Y}
               r={visualStringRadius}
               fill="none"
-              stroke="#2a2a2a"
+              stroke={selectedThreadColor?.stroke2d || selectedThreadColor?.color || "#181818"}
               strokeWidth={PREVIEW_STRING_STROKE_WIDTH}
               strokeLinecap="round"
               pointerEvents="none"
             />
 
-            <g className="beads-2d-bead-shadows-layer" pointerEvents="none">
-              {renderRingItemShadowPass()}
-              {renderCharmShadowPass()}
+            <g
+              className={`beads-2d-ring-visual${ringPreviewArtReady ? " is-art-ready" : ""}`}
+              pointerEvents="none"
+            >
+              <g className="beads-2d-bead-shadows-layer" pointerEvents="none">
+                {renderRingItemShadowPass()}
+                {renderCharmShadowPass()}
+              </g>
+
+              {useManualRingRendering
+                ? ringItems.map((item, index) => renderManualRingItem(item, index))
+                : renderPresetRingItems()}
+
+              {renderCharmLinkLayer({ getTransitionClass: getCharmTransitionClass })}
+
+              {useManualRingRendering ? renderManualCharmDrops() : renderPresetCharmDrops()}
             </g>
-
-            {useManualRingRendering
-              ? ringItems.map((item, index) => renderManualRingItem(item, index))
-              : renderPresetRingItems()}
-
-            {renderCharmLinkLayer({ getTransitionClass: getCharmTransitionClass })}
-
-            {useManualRingRendering ? renderManualCharmDrops() : renderPresetCharmDrops()}
 
             {/*
               One marker for the whole drag, moved by the drag loop rather than re-rendered
@@ -3332,15 +3696,17 @@ export default function BeadsPreview2D() {
                   className="beads-2d-ghost-bead-face"
                   transform={`rotate(${beadGhostFaceRotation})`}
                 >
-                  <image
-                    href={ghostItem.asset.image}
-                    x={-ghostItem.width / 2}
-                    y={-ghostItem.height / 2}
-                    width={ghostItem.width}
-                    height={ghostItem.height}
-                    className="beads-2d-svg-item beads-2d-svg-item--spacer"
-                    preserveAspectRatio="xMidYMid slice"
-                  />
+                  {ghostItem.asset?.topViewLabel ? (
+                    <RoundSpacerTopView
+                      item={ghostItem}
+                      className="beads-2d-svg-item beads-2d-svg-item--spacer"
+                    />
+                  ) : (
+                    <SpacerTopViewImage
+                      item={ghostItem}
+                      className="beads-2d-svg-item beads-2d-svg-item--spacer"
+                    />
+                  )}
                 </g>
               )}
             </g>
@@ -3376,6 +3742,8 @@ export default function BeadsPreview2D() {
             </g>
             )}
           </g>
+
+          {renderSelectionArrow()}
         </svg>
 
         {(isManualMode || hasPresetRingSlots || charmDragActive) && (
@@ -3398,16 +3766,16 @@ export default function BeadsPreview2D() {
         </div>
       </div>
 
-      <div className="beads-2d-stats" aria-live="polite">
-        <div className="beads-2d-stat">
-          <span>Quantity</span>
-          <strong>{String(quantity)}</strong>
+   {/* <div className="beads-2d-stats" aria-live="polite">
+       <div className="beads-2d-stat">
+          <span className="theme3-section-heading">Quantity</span>
+          <strong className="theme3-section-heading">{String(quantity)}</strong>
         </div>
         <div className="beads-2d-stat beads-2d-stat--length">
-          <span>Length</span>
-          <strong>{displayLengthLabel}</strong>
+          <span className="theme3-section-heading">{t("option.length")}</span>
+          <strong className="theme3-section-heading">{displayLengthLabel}</strong>
         </div>
-    </div>
+    </div> */}
 
       {activeFlyInGhost &&
         typeof document !== "undefined" &&
@@ -3444,6 +3812,10 @@ export default function BeadsPreview2D() {
               />
             ) : activeFlyInGhost.type === "charm" && flyInCharmTargetItem ? (
               <BeadsFlyInCharmGhost targetItem={flyInCharmTargetItem} />
+            ) : activeFlyInGhost.asset?.topViewLabel ? (
+              <span className="beads-fly-in-ghost__model-token">
+                {activeFlyInGhost.asset.topViewLabel}
+              </span>
             ) : (
               <img src={activeFlyInGhost.asset.image} alt="" draggable={false} />
             )}

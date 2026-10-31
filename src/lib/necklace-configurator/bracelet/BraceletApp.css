@@ -2703,6 +2703,7 @@ button:focus{
             display: flex;
     justify-content: center;
     align-items: center;
+    display: none !important;
 }
 .arrow-icon {
   font-size: 20px;
@@ -3551,4 +3552,8 @@ button:focus{
 .theme3-root .gb-option-row--charm-2d .gb-card-option img {
   width: 70px;
   height: 70px;
+}
+.gemstone-icon-bn img{
+  width: 60px !important;
+  height: 60px !important;
 }

@@ -121,6 +121,18 @@ function playTone(params) {
   void ctx.resume().then(run).catch(() => {});
 }
 
+/** Turn beads click sounds off when the storefront disables audio entirely. */
+export function applyStorefrontBeadsSoundPolicy(audioEnabled) {
+  if (typeof audioEnabled !== "boolean" || audioEnabled) return;
+  soundEnabled = false;
+  try {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(SOUND_PREF_STORAGE_KEY, "off");
+    }
+  } catch {}
+  soundListeners.forEach((listener) => listener());
+}
+
 export function setBeadsSoundEnabled(enabled) {
   const next = Boolean(enabled);
   if (next === soundEnabled) {

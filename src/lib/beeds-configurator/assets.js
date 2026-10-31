@@ -32,7 +32,8 @@ const BEAD_IMAGE_FILES = [
 
 export const isSvgBeadAsset = (imageUrl) => /\.svg($|[?#])/i.test(String(imageUrl || ""));
 
-const SEPARATOR_IMAGE_FILES = [
+/** Existing spacer catalog — retained alongside the new GLB collection. */
+const LEGACY_SEPARATOR_IMAGE_FILES = [
   "s1.webp",
   "s2.webp",
   "s3.webp",
@@ -49,23 +50,155 @@ const SEPARATOR_IMAGE_FILES = [
   "s14.webp",
 ];
 
-export const BEADS_ASSET_BASE_URL = "/beeds-assets/beads";
+/**
+ * Square source photos used by the 3D bead material. The 3D preview mirrors
+ * each one into a seamless 2:1 UV texture before applying it to the bead GLB.
+ * The bead bracelet is now 3D-only, so this is also the sole source used for
+ * picker and selected-slot artwork. Do not fetch the retired flat icons under
+ * `/beeds-assets/beads`.
+ */
+export const BEAD_TEXTURE_BASE_URL = "/beeds-assets/bead-textures";
+const BEAD_TEXTURE_FILENAME_BY_KEY = {
+  amethyst: "amethyst.webp",
+  "clear-quartz": "clear_quartz.webp",
+  "green-quartz": "green_quartz.webp",
+  "jade-stone": "jade_stone.webp",
+  moonstone: "moonstone.webp",
+  "moss-stone": "moss_stone.webp",
+  "orange-quartz": "orange_quartz.webp",
+  "peach-quartz": "pink_quartz.webp",
+  pyrite: "black_pyrite.webp",
+  "sky-quartz": "sky_quartz.webp",
+  "tiger-eye": "tiger_eye.webp",
+  tuorquiose: "turquoise.webp",
+  "white-marble": "white_marble.webp",
+  "yellow-quartz": "yellow_quartz.webp",
+  "green-aventurine": "Green_Aventurine_1.webp",
+  "green-aventurine-1": "Green_Aventurine_1.webp",
+  green_aventurine_1: "Green_Aventurine_1.webp",
+  ruby: "Ruby.webp",
+  "tsp-moti": "TSP-moti.webp",
+  moti: "TSP-moti.webp",
+  agate: "agate.webp",
+  apatite: "apatite.webp",
+  "black-onyx": "black-onex.webp",
+  "black-onex": "black-onex.webp",
+  citrine: "citrine.webp",
+  lapis: "lepis.webp",
+  lepis: "lepis.webp",
+  "lapis-lazuli": "lepis.webp",
+  malachite: "malachite.webp",
+  "pink-tiger-eye": "pinktiser.webp",
+  pinktiser: "pinktiser.webp",
+  "pink-tiger": "pinktiser.webp",
+  "sun-stone": "sun-stone.webp",
+  sunstone: "sun-stone.webp",
+  rudraksh: "rudraksh.webp",
+  rudraksha: "rudraksh.webp",
+  "pearl-star": "pearl_star.webp",
+  pearl_star: "pearl_star.webp",
+  firosha: "firosha.webp",
+  firoza: "firosha.webp",
+  "amethyst-star": "amethyst_star.webp",
+  amethyst_star: "amethyst_star.webp",
+};
 export const SEPARATORS_ASSET_BASE_URL = "/beeds-assets/separators";
 export const SEPARATOR_MODEL_BASE_URL = "/bc-assets/spacer_models";
+const SPACER_ICON_ASSET_BASE_URL = "/beeds-assets/spacer-icons";
+const NEW_SPACER_TOP_VIEW_IMAGE = `${SEPARATORS_ASSET_BASE_URL}/new-spacer-top-view.png`;
+const NEW_SPACER_MODEL_KEYS = Array.from({ length: 19 }, (_, index) => `s${index + 1}`);
+// Spacer icon artwork is used only by the spacer catalogue. Keep the requested
+// first ten at the front of the new-spacer picker; s14 follows them.
+const SUPPLIED_SPACER_ICONS = [
+  { key: "s1", name: "Lotus" },
+  { key: "s19", name: "Sacred Geometry", extension: "png" },
+  { key: "s2", name: "Lotus Bloom" },
+  { key: "s3", name: "Om" },
+  { key: "s4", name: "Spacer S4" },
+  { key: "s5", name: "Solar Chakra" },
+  { key: "s6", name: "Heart Chakra" },
+  { key: "s7", name: "Throat Chakra" },
+  { key: "s8", name: "Silver Twister" },
+  { key: "s9", name: "Gold Twister" },
+  { key: "s10", name: "Anahata" },
+  { key: "s11", name: "Compass Rose" },
+  { key: "s12", name: "Amethyst Wheel" },
+  { key: "s13", name: "Circle Medallion" },
+  { key: "s14", name: "Tree of Life" },
+  { key: "s15", name: "Spacer S15" },
+  { key: "s18", name: "Spacer S18" },
+];
+const TOP_NEW_SPACER_KEYS = SUPPLIED_SPACER_ICONS.slice(0, 10).map(({ key }) => key);
+const SUPPLIED_SPACER_ICON_BY_KEY = Object.fromEntries(
+  SUPPLIED_SPACER_ICONS.map(({ key, extension = "webp" }) => [
+    key,
+    `${SPACER_ICON_ASSET_BASE_URL}/${key}.${extension}`,
+  ])
+);
+// S16 and S17 duplicate other catalogue pieces, so retain their files only
+// for existing saved designs and omit them from the shopper-facing picker.
+// s4, s8, s9, s12, s15, s18 have been restored to the Metalic Beads picker.
+// Icons for these beads are pending — they will fall back to the default
+// top-view placeholder until dedicated icon files are supplied.
+export const HIDDEN_NEW_SPACER_KEYS = [];
+const NEW_SPACER_KEYS = [
+  ...TOP_NEW_SPACER_KEYS,
+  ...NEW_SPACER_MODEL_KEYS.filter(
+    (key) =>
+      key !== "s16" &&
+      key !== "s17" &&
+      !TOP_NEW_SPACER_KEYS.includes(key)
+  ),
+];
+const LEGACY_SPACER_KEY_PREFIX = "legacy-";
 
 const SEPARATOR_MODEL_BY_KEY = {
-  s1: `${SEPARATOR_MODEL_BASE_URL}/plain-wheel-1.glb`,
-  s2: `${SEPARATOR_MODEL_BASE_URL}/stone-wheel-1.glb`,
-  s3: `${SEPARATOR_MODEL_BASE_URL}/hex-wheel-1.glb`,
+  // New catalog meshes supplied as s1.glb through s19.glb.
+  ...Object.fromEntries(
+    NEW_SPACER_MODEL_KEYS.map((key) => [key, `${SEPARATOR_MODEL_BASE_URL}/${key}.glb`])
+  ),
+  // Existing picker spacers keep their original shared 3D models.
+  ...Object.fromEntries(
+    LEGACY_SEPARATOR_IMAGE_FILES.map((filename) => {
+      const key = filename.replace(/\.webp$/i, "");
+      const sku = Number(key.slice(1));
+      const model =
+        sku >= 10 ? `${SEPARATOR_MODEL_BASE_URL}/glass-wheel-spacer.glb` :
+        sku >= 7  ? `${SEPARATOR_MODEL_BASE_URL}/twister-wheel.glb` :
+        `${SEPARATOR_MODEL_BASE_URL}/stone-wheel-1.glb`;
+      return [`${LEGACY_SPACER_KEY_PREFIX}${key}`, model];
+    })
+  ),
+  stoneWheel: `${SEPARATOR_MODEL_BASE_URL}/stone-wheel-1.glb`,
+  plainWheel: `${SEPARATOR_MODEL_BASE_URL}/plain-wheel-1.glb`,
+  hexWheel: `${SEPARATOR_MODEL_BASE_URL}/hex-wheel-1.glb`,
   /** S10–S14 colored glass wheel (faceted crystal body). */
   glassWheel: `${SEPARATOR_MODEL_BASE_URL}/glass-wheel-spacer.glb`,
+  /** S7–S9 twisted rope band (replaces scene.glb). */
+  twisterWheel: `${SEPARATOR_MODEL_BASE_URL}/twister-wheel.glb`,
   /** Export name: scene (81).glb — copy to public as scene-81.glb */
   scene81: `${SEPARATOR_MODEL_BASE_URL}/scene.glb`,
 };
 export const BEAD_STYLE_PREVIEW_BASE_URL = "/beeds-assets/styles";
 
-export const BEADS = BEAD_IMAGE_FILES.map((filename) => {
+/** Smallest selectable bead size; used as the layout reference (scale 1.0). */
+export const REFERENCE_BEAD_MM = 6;
+
+export const BEAD_SIZES = [
+  { id: "6mm", label: "6mm", mm: 6 },
+  { id: "8mm", label: "8mm", mm: 8 },
+  { id: "10mm", label: "10mm", mm: 10 },
+  { id: "12mm", label: "12mm", mm: 12 },
+];
+
+export const LIMITED_BEAD_SIZES_8_10 = [
+  { id: "8mm", label: "8mm", mm: 8 },
+  { id: "10mm", label: "10mm", mm: 10 },
+];
+
+export const BASE_BEADS = BEAD_IMAGE_FILES.map((filename) => {
   const key = beadAssetKeyFromFilename(filename);
+  const texture = `${BEAD_TEXTURE_BASE_URL}/${BEAD_TEXTURE_FILENAME_BY_KEY[key]}`;
   let collection = "all";
   if (key === "amethyst") collection = "amethyst";
   else if (key === "pyrite") collection = "pyrite";
@@ -74,52 +207,459 @@ export const BEADS = BEAD_IMAGE_FILES.map((filename) => {
   return {
     key,
     name: formatBeedsAssetLabel(filename),
-    image: `${BEADS_ASSET_BASE_URL}/${filename}`,
+    // `image` remains as a compatibility alias for UI paths that render an
+    // asset image, but deliberately points at the material texture rather
+    // than the retired 2D icon file.
+    image: texture,
+    texture,
+    // Quartz-family stones and amethyst are lightly translucent in the 3D
+    // preview; all other photographed stones remain solid/opaque.
+    materialType:  key.includes("quartz") ? "quartz" : "solid",
     collection,
+    sizes: BEAD_SIZES,
     price: 8,
   };
 });
 
-export const SEPARATORS = SEPARATOR_IMAGE_FILES.map((filename) => ({
-  key: filename.replace(/\.webp$/i, ""),
-  name: filename.replace(/\.webp$/i, "").toUpperCase(),
-  image: `${SEPARATORS_ASSET_BASE_URL}/${filename}`,
+const NEW_BEAD_DEFINITIONS = [
+  {
+    key: "green-aventurine",
+    aliases: ["green_aventurine_1", "green-aventurine-1", "green_aventurine"],
+    name: "Green Aventurine",
+    textureFile: "Green_Aventurine_1.webp",
+    materialType: "quartz",
+    collection: "quartz",
+    sizes: LIMITED_BEAD_SIZES_8_10,
+    price: 8,
+  },
+  {
+    key: "ruby",
+    aliases: ["ruby"],
+    name: "Ruby",
+    textureFile: "Ruby.webp",
+    materialType: "quartz",
+    collection: "quartz",
+    sizes: LIMITED_BEAD_SIZES_8_10,
+    price: 8,
+  },
+  {
+    key: "tsp-moti",
+    aliases: ["moti", "tsp_moti", "tsp-moti"],
+    name: "TSP Moti",
+    textureFile: "TSP-moti.webp",
+    materialType: "solid",
+    collection: "all",
+    sizes: LIMITED_BEAD_SIZES_8_10,
+    price: 8,
+  },
+  {
+    key: "agate",
+    aliases: ["agate"],
+    name: "Agate",
+    textureFile: "agate.webp",
+    materialType: "solid",
+    collection: "all",
+    sizes: LIMITED_BEAD_SIZES_8_10,
+    price: 8,
+  },
+  {
+    key: "apatite",
+    aliases: ["apatite"],
+    name: "Apatite",
+    textureFile: "apatite.webp",
+    materialType: "solid",
+    collection: "all",
+    sizes: LIMITED_BEAD_SIZES_8_10,
+    price: 8,
+  },
+  {
+    key: "black-onyx",
+    aliases: ["black-onex", "black_onex", "black_onyx", "black-onyx"],
+    name: "Black Onyx",
+    textureFile: "black-onex.webp",
+    materialType: "solid",
+    collection: "all",
+    sizes: LIMITED_BEAD_SIZES_8_10,
+    price: 8,
+  },
+  {
+    key: "citrine",
+    aliases: ["citrine"],
+    name: "Citrine",
+    textureFile: "citrine.webp",
+    materialType: "quartz",
+    collection: "quartz",
+    sizes: LIMITED_BEAD_SIZES_8_10,
+    price: 8,
+  },
+  {
+    key: "lapis",
+    aliases: ["lepis", "lapis-lazuli", "lapis_lazuli"],
+    name: "Lapis Lazuli",
+    textureFile: "lepis.webp",
+    materialType: "solid",
+    collection: "all",
+    sizes: LIMITED_BEAD_SIZES_8_10,
+    price: 8,
+  },
+  {
+    key: "malachite",
+    aliases: ["malachite"],
+    name: "Malachite",
+    textureFile: "malachite.webp",
+    materialType: "solid",
+    collection: "all",
+    sizes: LIMITED_BEAD_SIZES_8_10,
+    price: 8,
+  },
+  {
+    key: "pink-tiger-eye",
+    aliases: ["pinktiser", "pink-tiger", "pink_tiger", "pink_tiger_eye"],
+    name: "Pink Tiger Eye",
+    textureFile: "pinktiser.webp",
+    materialType: "solid",
+    collection: "all",
+    sizes: LIMITED_BEAD_SIZES_8_10,
+    price: 8,
+  },
+  {
+    key: "sun-stone",
+    aliases: ["sunstone", "sun_stone"],
+    name: "Sunstone",
+    textureFile: "sun-stone.webp",
+    materialType: "solid",
+    collection: "all",
+    sizes: LIMITED_BEAD_SIZES_8_10,
+    price: 8,
+  },
+];
+
+export const NEW_BEADS = NEW_BEAD_DEFINITIONS.map((def) => {
+  const texture = `${BEAD_TEXTURE_BASE_URL}/${def.textureFile}`;
+  return {
+    key: def.key,
+    aliases: def.aliases,
+    name: def.name,
+    image: texture,
+    texture,
+    materialType: def.materialType,
+    collection: def.collection,
+    sizes: def.sizes,
+    price: def.price,
+  };
+});
+
+/** GLB-model beads — the 3D model has colours baked in and needs no texture wrap. */
+const BEAD_MODEL_BASE_URL = "/bc-assets/bead_models";
+
+export const GLB_BEADS = [
+  {
+    key: "rudraksh",
+    aliases: ["rudraksha", "rudraksh"],
+    name: "Rudraksh",
+    image: `${BEAD_TEXTURE_BASE_URL}/rudraksh.webp`,
+    /** No texture wrap — colour is authored inside the GLB. */
+    texture: null,
+    /** Signals the 3D preview to render the GLB directly instead of the glass-bead shell. */
+    materialType: "glb",
+    modelUrl: `${BEAD_MODEL_BASE_URL}/rudraksh.glb`,
+    collection: "all",
+    sizes: LIMITED_BEAD_SIZES_8_10,
+    price: 8,
+  },
+  {
+    key: "pearl-star",
+    aliases: ["pearl_star", "pearl-star", "pearlstar"],
+    name: "Pearl Star",
+    image: `${BEAD_TEXTURE_BASE_URL}/pearl_star.webp`,
+    texture: null,
+    materialType: "glb",
+    modelUrl: `${BEAD_MODEL_BASE_URL}/pearl_star.glb`,
+    collection: "all",
+    sizes: LIMITED_BEAD_SIZES_8_10,
+    price: 8,
+    tiltInViewMode: true,
+  },
+  {
+    key: "firosha",
+    aliases: ["firosha", "firoza", "firoze", "firosha-star", "firosha_star"],
+    name: "Firosha",
+    image: `${BEAD_TEXTURE_BASE_URL}/firosha.webp`,
+    texture: null,
+    materialType: "glb",
+    modelUrl: `${BEAD_MODEL_BASE_URL}/Firosha.glb`,
+    collection: "all",
+    sizes: LIMITED_BEAD_SIZES_8_10,
+    price: 8,
+    tiltInViewMode: true,
+  },
+  {
+    key: "amethyst-star",
+    aliases: ["amethyst_star", "amethyst-star", "amethyststar"],
+    name: "Amethyst Star",
+    image: `${BEAD_TEXTURE_BASE_URL}/amethyst_star.webp`,
+    texture: null,
+    materialType: "glb",
+    modelUrl: `${BEAD_MODEL_BASE_URL}/amethyst_star.glb`,
+    collection: "all",
+    sizes: LIMITED_BEAD_SIZES_8_10,
+    price: 8,
+    tiltInViewMode: true,
+  },
+];
+
+export const BEADS = [
+  ...BASE_BEADS,
+  ...NEW_BEADS,
+  ...GLB_BEADS,
+];
+
+export function isBeadSizeSupported(assetKey, sizeId) {
+  if (!assetKey || !sizeId) return true;
+  const bead = BEADS.find(
+    (b) => b.key === assetKey || b.aliases?.includes(assetKey)
+  );
+  if (!bead || !bead.sizes || bead.sizes.length === 0) return true;
+  const normalized = String(sizeId).toLowerCase();
+  return bead.sizes.some(
+    (s) => s.id.toLowerCase() === normalized || s.label.toLowerCase() === normalized
+  );
+}
+
+export function getAvailableBeadSizes(assetKey) {
+  if (!assetKey) return BEAD_SIZES;
+  const bead = BEADS.find(
+    (b) => b.key === assetKey || b.aliases?.includes(assetKey)
+  );
+  return bead?.sizes || BEAD_SIZES;
+}
+
+/**
+ * Override images for Classic S7–S9 twister-band spacers.
+ */
+const LEGACY_SPACER_TWISTER_IMAGE_OVERRIDE = {
+  s7: "s7-rose.webp",
+  s8: "s8-silver.webp",
+  s9: "s9-gold.webp",
+};
+
+/**
+ * Override images for Classic S10–S14 glass-bead spacers.
+ * Keys are the originalKey (e.g. "s10"), values are paths under SEPARATORS_ASSET_BASE_URL.
+ * These are also used as the 2D bracelet icons so the catalogue thumbnail and
+ * the on-string 2D sprite both show the same gem image.
+ */
+const LEGACY_SPACER_GEM_IMAGE_OVERRIDE = {
+  s10: "white.webp",
+  s11: "pink.webp",
+  s12: "purple.webp",
+  s13: "blue.webp",
+  s14: "green.webp",
+};
+
+export const CLASSIC_SEPARATORS = LEGACY_SEPARATOR_IMAGE_FILES.map((filename) => {
+  const originalKey = filename.replace(/\.webp$/i, "");
+  const key = `${LEGACY_SPACER_KEY_PREFIX}${originalKey}`;
+  const overrideFile =
+    LEGACY_SPACER_GEM_IMAGE_OVERRIDE[originalKey] ??
+    LEGACY_SPACER_TWISTER_IMAGE_OVERRIDE[originalKey];
+  const image = overrideFile
+    ? `${SEPARATORS_ASSET_BASE_URL}/${overrideFile}`
+    : `${SEPARATORS_ASSET_BASE_URL}/${filename}`;
+  return {
+    key,
+    name: `Classic ${originalKey.toUpperCase()}`,
+    image,
+    modelUrl: SEPARATOR_MODEL_BY_KEY[key],
+    price: 4,
+  };
+});
+
+export const SEPARATORS = [
+  ...NEW_SPACER_KEYS.map((key) => ({
+    key,
+    name: SUPPLIED_SPACER_ICONS.find((icon) => icon.key === key)?.name || key.toUpperCase(),
+    image: SUPPLIED_SPACER_ICON_BY_KEY[key] || NEW_SPACER_TOP_VIEW_IMAGE,
+    modelUrl: SEPARATOR_MODEL_BY_KEY[key],
+    price: 4,
+  })),
+  ...CLASSIC_SEPARATORS,
+];
+
+/**
+ * Metalic Beads — spacer models offered in two fixed sizes (8 mm and 10 mm).
+ * Each entry exposes a `sizes` array so the picker can present a size selector
+ * identical to the one used for stone beads.
+ */
+export const METALIC_BEAD_SIZE_FILTERS = [
+  { id: "all", label: "All" },
+  { id: "8", label: "8", mm: 8 },
+  { id: "10", label: "10", mm: 10 },
+];
+
+export const METALIC_BEAD_SIZES = [
+  { id: "8mm", label: "8mm", mm: 8 },
+  { id: "10mm", label: "10mm", mm: 10 },
+];
+
+export const DEFAULT_METALIC_BEAD_SIZE_ID = "8mm";
+export const DEFAULT_METALIC_SIZE_FILTER = "all";
+
+export const METALIC_BEADS = SUPPLIED_SPACER_ICONS.filter(
+  ({ key }) => !HIDDEN_NEW_SPACER_KEYS.includes(key)
+).map(({ key, name }) => ({
+  key: `metalic-${key}`,
+  /** The underlying spacer asset key, e.g. "s1". */
+  spacerKey: key,
+  name,
+  image: SUPPLIED_SPACER_ICON_BY_KEY[key] || NEW_SPACER_TOP_VIEW_IMAGE,
+  modelUrl: SEPARATOR_MODEL_BY_KEY[key],
+  sizes: METALIC_BEAD_SIZES,
   price: 4,
 }));
+
+/**
+ * Produce picker grid items for the Metalic Beads tab, mirroring the shape
+ * that `getBeadPickerGridItems` produces for stone beads.
+ * When filter is "all" every size gets its own card; otherwise one card per spacer.
+ */
+export function getMetalicBeadPickerGridItems(sizeFilter = "all") {
+  const normalizedFilter = String(sizeFilter ?? "all").toLowerCase();
+
+  if (normalizedFilter === "all") {
+    return METALIC_BEADS.flatMap((asset) =>
+      METALIC_BEAD_SIZES.map((size) => ({
+        key: `${asset.key}__${size.id}`,
+        asset,
+        sizeId: size.id,
+        sizeLabel: size.label,
+        showSizeInLabel: false,
+      }))
+    );
+  }
+
+  const mm = normalizedFilter.replace(/mm$/i, "");
+  const sizeLabel = `${mm}mm`;
+  return METALIC_BEADS.map((asset) => ({
+    key: `${asset.key}__${sizeLabel}`,
+    asset,
+    sizeId: sizeLabel,
+    sizeLabel,
+    showSizeInLabel: false,
+  }));
+}
 
 const BEADS_CHARM_ASSET_BASE = "/beeds-assets/charms";
 
 /** Default 3D spacer mesh until per-SKU GLBs exist. */
-export const SPACER_STONE_3D_MODEL = SEPARATOR_MODEL_BY_KEY.s2;
+export const SPACER_STONE_3D_MODEL = SEPARATOR_MODEL_BY_KEY.stoneWheel;
 export const SPACER_GLB_URLS = Object.values(SEPARATOR_MODEL_BY_KEY);
 
-/** S1–S6 stone-wheel spacers (stone-wheel-1.glb pavé band). */
+/**
+ * Fine-tuning for the new round spacer GLBs in the 3D bead bracelet.
+ *
+ * `position` uses local Three.js units after the spacer has been placed on the
+ * bracelet string. `rotationDeg` is local X/Y/Z rotation in degrees, and
+ * `sizeScale` is that model's independent 3D diameter multiplier. Change
+ * these values here to align a model precisely; they are deliberately not
+ * exposed to shoppers in the frontend.
+ */
+export const ROUND_SPACER_3D_TRANSFORMS = {
+  s1: { position: [0, 0, 0], rotationDeg: [0, 0, 0], sizeScale: 1 },
+  s2: { position: [0, 0, 0], rotationDeg: [0, 0, 0], sizeScale: 1.2 },
+  s3: { position: [0, 0, 0], rotationDeg: [0, 0, 0], sizeScale: 1.2 },
+  s4: { position: [0, 0, 0], rotationDeg: [0, 0, 0], sizeScale: 1.1 },
+  s5: { position: [0, 0, 0], rotationDeg: [0, 0, 0], sizeScale: 1.1 },
+  s6: { position: [0, 0, 0], rotationDeg: [0, 0, 0], sizeScale: 1.1 },
+  s7: { position: [0, 0, 0], rotationDeg: [0, 0, 0], sizeScale: 1.1 },
+  s8: { position: [0, 0, 0], rotationDeg: [0, 0, 0], sizeScale: 1.1 },
+  s9: { position: [0, 0, 0], rotationDeg: [0, 0, 0], sizeScale: 1.1 },
+  s10: { position: [0, 0, 0], rotationDeg: [0, 0, 0], sizeScale: 1.1 },
+  s11: { position: [0, 0, 0], rotationDeg: [0, 0, 0], sizeScale: 1.1 },
+  s12: { position: [0, 0, 0], rotationDeg: [0, 0, 0], sizeScale: 1.35 },
+  s13: { position: [0, 0, 0], rotationDeg: [0, 0, 0], sizeScale: 1.1 },
+  s14: { position: [0, 0, 0], rotationDeg: [0, 0, 0], sizeScale: 1.1 },
+  // S15 is a round spacer, so it must use the active bead size (for example,
+  // the 8 mm bead size) just like every other round catalog spacer.
+  s15: { position: [0, 0, 0], rotationDeg: [-160, 0, 0], sizeScale: 0.9 },
+  s16: { position: [0, 0, 0], rotationDeg: [0, 0, 0], sizeScale: 1 },
+  s17: { position: [0, 0, 0], rotationDeg: [0, 0, 0], sizeScale: 1 },
+  s18: { position: [0, 0, 0], rotationDeg: [0, 0, 0], sizeScale: 1.2 },
+  s19: { position: [0, 0, 0], rotationDeg: [0, 0, 0], sizeScale: 1.1 },
+};
+/*const SUPPLIED_SPACER_ICONS = [
+  { key: "s1", name: "Lotus" },
+  { key: "s19", name: "Sacred Geometry", extension: "png" },
+  { key: "s2", name: "Lotus Bloom" },
+  { key: "s3", name: "Om" },
+  { key: "s4", name: "Spacer S4" },
+  { key: "s5", name: "Solar Chakra" },
+  { key: "s6", name: "Heart Chakra" },
+  { key: "s7", name: "Throat Chakra" },
+  { key: "s8", name: "Silver Twister" },
+  { key: "s9", name: "Gold Twister" },
+  { key: "s10", name: "Anahata" },
+  { key: "s11", name: "Compass Rose" },
+  { key: "s12", name: "Amethyst Wheel" },
+  { key: "s13", name: "Circle Medallion" },
+  { key: "s14", name: "Tree of Life" },
+  { key: "s15", name: "Spacer S15" },
+  { key: "s18", name: "Spacer S18" },
+];*/
+const DEFAULT_ROUND_SPACER_3D_TRANSFORM = {
+  position: [0, 0, 0],
+  rotationDeg: [0, 0, 0],
+  sizeScale: 1,
+};
+
+export function getRoundSpacer3DTransform(assetKey) {
+  return ROUND_SPACER_3D_TRANSFORMS[String(assetKey || "").toLowerCase()] ||
+    DEFAULT_ROUND_SPACER_3D_TRANSFORM;
+}
+
+function getSpacerSku(assetKey) {
+  const match = /^(?:legacy-)?s(\d+)$/i.exec(String(assetKey || ""));
+  return match ? Number(match[1]) : null;
+}
+
+export function isCatalogSpacerSku(assetKey) {
+  const normalized = String(assetKey || "").toLowerCase();
+  return NEW_SPACER_MODEL_KEYS.includes(normalized);
+}
+
+/** S1–S6 use the pavé material treatment in 3D. */
 export function isStoneWheelSpacerSku(assetKey) {
-  const match = /^s(\d+)$/i.exec(String(assetKey || ""));
-  if (!match) {
-    return false;
-  }
-  const sku = Number(match[1]);
-  return sku >= 1 && sku <= 6;
+  const sku = getSpacerSku(assetKey);
+  return sku !== null && sku >= 1 && sku <= 6;
+}
+
+/** All new catalog spacer top views occupy a bead-sized slot in the bracelet layout. */
+export function isRoundSpacerSku(assetKey) {
+  const sku = getSpacerSku(assetKey);
+  return isCatalogSpacerSku(assetKey) && sku !== null && sku >= 1 && sku <= 19;
 }
 
 /** S1–S6 and S10–S14: preset PBR metal + gems in 3D (not WebP on gold). */
 export function isDiamondSpacerSku(assetKey) {
-  const match = /^s(\d+)$/i.exec(String(assetKey || ""));
-  if (!match) {
+  const sku = getSpacerSku(assetKey);
+  if (sku === null) {
     return false;
   }
-  const sku = Number(match[1]);
+  if (isCatalogSpacerSku(assetKey)) {
+    return sku >= 1 && sku <= 6;
+  }
   return (sku >= 1 && sku <= 6) || (sku >= 10 && sku <= 14);
 }
 
-/** S1/S4/S7 yellow gold · S2/S5/S8 silver · S3/S6/S9 rose gold. */
+/** Every new catalog spacer uses the yellow-gold finish in the 3D preview. */
 export function getSpacerMetalFinish(assetKey) {
-  const match = /^s(\d+)$/i.exec(String(assetKey || ""));
-  if (!match) {
+  if (isCatalogSpacerSku(assetKey)) {
     return "yellowGold";
   }
-  const sku = Number(match[1]);
+  const sku = getSpacerSku(assetKey);
+  if (sku === null) {
+    return "yellowGold";
+  }
   if (sku === 7) {
     return "yellowGold";
   }
@@ -143,15 +683,11 @@ export function getSpacerMetalFinish(assetKey) {
 
 /** S7–S9 metal-band WebP in 3D (gold / silver / rose), keyed by SKU not global picker. */
 export function resolveScene81MetalSpacerImageUrl(assetKey) {
-  const match = /^s(\d+)$/i.exec(String(assetKey || ""));
-  if (!match) {
+  const sku = getSpacerSku(assetKey);
+  if (isCatalogSpacerSku(assetKey) || sku === null || sku < 7 || sku > 9) {
     return null;
   }
-  const sku = Number(match[1]);
-  if (sku < 7 || sku > 9) {
-    return null;
-  }
-  const key = `s${sku}`;
+  const key = `${LEGACY_SPACER_KEY_PREFIX}s${sku}`;
   return SEPARATORS.find((item) => item.key === key)?.image ?? null;
 }
 
@@ -161,17 +697,16 @@ export function resolveScene81MetalSpacerImageUrl(assetKey) {
  * S7–S9: white pavé on metal band.
  */
 export function getSpacerDiamondVariant(assetKey) {
-  const match = /^s(\d+)$/i.exec(String(assetKey || ""));
-  if (!match) {
+  const sku = getSpacerSku(assetKey);
+  if (sku === null) {
     return "white";
   }
-  const sku = Number(match[1]);
-  if (sku >= 10 && sku <= 14) {
+  if (!isCatalogSpacerSku(assetKey) && sku >= 10 && sku <= 14) {
     const crystalBySku = {
       10: "crystalSilver",
       11: "crystalPink",
-      12: "crystalBlue",
-      13: "crystalRoyalBlue",
+      12: "crystalPurple",
+      13: "crystalBlue",
       14: "crystalEmerald",
     };
     return crystalBySku[sku] ?? "crystalSilver";
@@ -196,49 +731,41 @@ export function isPlainWheel3DModel(modelUrl) {
   return /plain-wheel|glass-wheel-spacer|scene-81|scene\.glb/i.test(String(modelUrl || ""));
 }
 
-/** S7–S9 metal band (scene-81.glb), same string tangent as S10–S14 plain wheel. */
+/** S7–S9 twisted rope band (twister-wheel.glb). */
+export function isTwisterWheelModel(modelUrl) {
+  return /twister-wheel/i.test(String(modelUrl || ""));
+}
+
+/** S7–S9 metal band — now uses twister-wheel.glb. */
 export function isScene81MetalSpacerSku(assetKey) {
-  const match = /^s(\d+)$/i.exec(String(assetKey || ""));
-  if (!match) {
-    return false;
-  }
-  const sku = Number(match[1]);
-  return sku >= 7 && sku <= 9;
+  const sku = getSpacerSku(assetKey);
+  return !isCatalogSpacerSku(assetKey) && sku !== null && sku >= 7 && sku <= 9;
 }
 
 export function isHexSpacerSku(assetKey) {
-  const match = /^s(\d+)$/i.exec(String(assetKey || ""));
-  if (!match) {
-    return false;
-  }
-  const sku = Number(match[1]);
-  return sku >= 10 && sku <= 14;
+  const sku = getSpacerSku(assetKey);
+  return !isCatalogSpacerSku(assetKey) && sku !== null && sku >= 10 && sku <= 14;
 }
 
-/** S1–S6 stone wheel; S7–S9 scene-81; S10–S14 plain wheel crystal. */
+/** Resolve the exact GLB picked in the catalog while preserving the original spacer set. */
 export function resolveSpacer3DModelUrl(assetKey) {
-  const match = /^s(\d+)$/i.exec(String(assetKey || "s2"));
-  const sku = match ? Number(match[1]) : 2;
-  if (sku >= 10 && sku <= 14) {
-    return SEPARATOR_MODEL_BY_KEY.glassWheel;
+  const normalizedKey = String(assetKey || DEFAULT_SEPARATOR_KEY).toLowerCase();
+  const catalogModelUrl = SEPARATORS.find((item) => item.key === normalizedKey)?.modelUrl;
+  if (catalogModelUrl) {
+    return catalogModelUrl;
   }
-  if (sku >= 7 && sku <= 9) {
-    return SEPARATOR_MODEL_BY_KEY.scene81;
+  // Keep a previously saved S16/S17 design renderable even though those
+  // duplicate models are no longer offered in the picker.
+  if (NEW_SPACER_MODEL_KEYS.includes(normalizedKey)) {
+    return SEPARATOR_MODEL_BY_KEY[normalizedKey];
   }
-  if (sku >= 1 && sku <= 6) {
-    return SEPARATOR_MODEL_BY_KEY.s2;
-  }
-  return SEPARATOR_MODEL_BY_KEY.s2;
+  return SEPARATOR_MODEL_BY_KEY.stoneWheel;
 }
 
 /** S10–S14 colored faceted crystal (glass-wheel-spacer.glb in 3D). */
 export function isColoredCrystalSpacerSku(assetKey) {
-  const match = /^s(\d+)$/i.exec(String(assetKey || ""));
-  if (!match) {
-    return false;
-  }
-  const sku = Number(match[1]);
-  return sku >= 10 && sku <= 14;
+  const sku = getSpacerSku(assetKey);
+  return !isCatalogSpacerSku(assetKey) && sku !== null && sku >= 10 && sku <= 14;
 }
 
 const withCharmBail = (charm) => ({
@@ -247,16 +774,58 @@ const withCharmBail = (charm) => ({
   ...charm,
 });
 
+// Spacer artwork must never populate the Charms picker. Retain these entries
+// only to render previously saved designs that referenced them as charms.
+const RETIRED_SPACER_ICON_CHARMS = SUPPLIED_SPACER_ICONS.map(({ key, name }) =>
+  withCharmBail({
+    key: `spacer-${key}`,
+    name,
+    image: SUPPLIED_SPACER_ICON_BY_KEY[key],
+    price: 50,
+    bailY: 0.07,
+  })
+);
+
 export const BEAD_CHARMS = [
   withCharmBail({ key: "cat-face", name: "Cat Face", image: `${BEADS_CHARM_ASSET_BASE}/cat-face.png`, price: 50 }),
   withCharmBail({ key: "daisy", name: "Daisy", image: `${BEADS_CHARM_ASSET_BASE}/daisy.png`, price: 50 }),
   withCharmBail({ key: "flower", name: "Flower", image: `${BEADS_CHARM_ASSET_BASE}/flower.png`, price: 50 }),
   withCharmBail({ key: "heart", name: "Heart", image: `${BEADS_CHARM_ASSET_BASE}/heart.png`, price: 50, bailY: 0.14 }),
-  withCharmBail({ key: "kitten", name: "Kitten", image: `${BEADS_CHARM_ASSET_BASE}/kitten.png`, price: 50 }),
-  withCharmBail({ key: "moon-2", name: "Moon", image: `${BEADS_CHARM_ASSET_BASE}/moon-2.png`, price: 50 }),
-  withCharmBail({ key: "moon", name: "Crescent Moon", image: `${BEADS_CHARM_ASSET_BASE}/moon.png`, price: 50 }),
+  withCharmBail({
+    key: "kitten",
+    name: "Kitten",
+    image: `${BEADS_CHARM_ASSET_BASE}/kitten.png`,
+    price: 50,
+    bailX: 0.44,
+    bailY: 0.09,
+  }),
+  withCharmBail({
+    key: "moon-2",
+    name: "Moon",
+    image: `${BEADS_CHARM_ASSET_BASE}/moon-2.png`,
+    price: 50,
+    bailX: 0.51,
+    bailY: 0.1,
+    bailY3d: 0.05,
+  }),
+  withCharmBail({
+    key: "moon",
+    name: "Crescent Moon",
+    image: `${BEADS_CHARM_ASSET_BASE}/moon.png`,
+    price: 50,
+    bailX: 0.57,
+    bailY: 0.1,
+    bailY3d: 0.055,
+  }),
   withCharmBail({ key: "paw", name: "Paw", image: `${BEADS_CHARM_ASSET_BASE}/paw.png`, price: 50 }),
-  withCharmBail({ key: "puppy", name: "Puppy", image: `${BEADS_CHARM_ASSET_BASE}/puppy.png`, price: 50 }),
+  withCharmBail({
+    key: "puppy",
+    name: "Puppy",
+    image: `${BEADS_CHARM_ASSET_BASE}/puppy.png`,
+    price: 50,
+    bailX: 0.45,
+    bailY: 0.05,
+  }),
   withCharmBail({
     key: "rainbow",
     name: "Rainbow",
@@ -275,19 +844,12 @@ export const BEAD_CHARMS = [
     bailY: 0.08,
     holeR: 0.03,
   }),
-  withCharmBail({
-    key: "hello-kitty",
-    name: "Hello Kitty",
-    image: `${BEADS_CHARM_ASSET_BASE}/hello-kitty.png`,
-    price: 50,
-    aspect: 0.85,
-    bailY: 0.1,
-    holeR: 0.028,
-  }),
+
 ];
 
 /** Retired charms — still resolve for saved designs, not offered in the picker. */
 const BEAD_CHARMS_RETIRED = [
+  ...RETIRED_SPACER_ICON_CHARMS,
   { key: "leaf", name: "Leaf", image: `${BEADS_CHARM_ASSET_BASE}/leaf.png`, price: 50 },
   {
     key: "shooting-star",
@@ -304,7 +866,7 @@ export const BEAD_JEWELRY_CATEGORIES = [
 /** Manual build — empty string; also available in the style picker. */
 export const EMPTY_BEAD_STYLE = {
   id: "empty",
-  label: "Empty",
+  label: "Custom Bracelet",
   preview: "empty",
   previewSvg: `${BEAD_STYLE_PREVIEW_BASE_URL}/empty.svg`,
   manual: true,
@@ -391,16 +953,6 @@ export const BEAD_COLLECTIONS = [
   { id: "pyrite", label: "Pyrite" },
 ];
 
-/** Smallest selectable bead size; used as the layout reference (scale 1.0). */
-export const REFERENCE_BEAD_MM = 6;
-
-export const BEAD_SIZES = [
-  { id: "6mm", label: "6mm", mm: 6 },
-  { id: "8mm", label: "8mm", mm: 8 },
-  { id: "10mm", label: "10mm", mm: 10 },
-  { id: "12mm", label: "12mm", mm: 12 },
-];
-
 export const BEAD_GRID_SIZE_FILTERS = [
   { id: "all", label: "All" },
   { id: "6", label: "6" },
@@ -425,31 +977,48 @@ export function getBeadPickerGridItems(beads, gridSizeFilter) {
   const normalizedFilter = String(gridSizeFilter ?? "all").toLowerCase();
 
   if (normalizedFilter === "all") {
-    return beads.flatMap((asset) =>
-      BEAD_PICKER_SIZE_OPTIONS.map((size) => ({
+    return beads.flatMap((asset) => {
+      const sizes =
+        asset.sizes && asset.sizes.length > 0
+          ? asset.sizes
+          : BEAD_PICKER_SIZE_OPTIONS;
+      return sizes.map((size) => ({
         key: `${asset.key}__${size.id}`,
         asset,
         sizeId: size.id,
         sizeLabel: size.label,
-        showSizeInLabel: true,
-      }))
-    );
+        showSizeInLabel: false,
+      }));
+    });
   }
 
   const sizeLabel = `${normalizedFilter}mm`;
-  return beads.map((asset) => ({
-    key: asset.key,
-    asset,
-    sizeId: sizeLabel,
-    sizeLabel,
-    showSizeInLabel: false,
-  }));
+  return beads
+    .filter((asset) => {
+      const sizes =
+        asset.sizes && asset.sizes.length > 0
+          ? asset.sizes
+          : BEAD_PICKER_SIZE_OPTIONS;
+      return sizes.some(
+        (s) =>
+          s.id.toLowerCase() === sizeLabel ||
+          s.label.toLowerCase() === sizeLabel
+      );
+    })
+    .map((asset) => ({
+      key: `${asset.key}__${sizeLabel}`,
+      asset,
+      sizeId: sizeLabel,
+      sizeLabel,
+      showSizeInLabel: false,
+    }));
 }
 
 export const BEAD_CUSTOMIZE_TABS = [
   { id: "beads", label: "Beads" },
   { id: "charms", label: "Charms" },
   { id: "spacers", label: "Spacers" },
+  { id: "metalic-beads", label: "Metalic Beads" },
 ];
 
 /** Hidden from UI for now — underlying style/charm data unchanged. */
@@ -472,9 +1041,19 @@ export const DEFAULT_BEAD_SIZE_ID = "10mm";
 /** Initial load — showcase a filled preset bracelet. */
 export const DEFAULT_STYLE_ID = "full-bead";
 export const DEFAULT_LENGTH_ID = "5";
-/** Reset — start manual building on a free-size empty string. */
+/** Thread / cord colour options. */
+export const THREAD_COLORS = [
+  { id: "red", label: "Red", color: "#dc2626", preview3d: "#b91c1c", stroke2d: "#dc2626" },
+  { id: "black", label: "Black", color: "#181818", preview3d: "#111111", stroke2d: "#181818" },
+  { id: "yellow", label: "Yellow", color: "#eab308", preview3d: "#ca8a04", stroke2d: "#ca8a04" },
+  { id: "green", label: "Green", color: "#16a34a", preview3d: "#15803d", stroke2d: "#16a34a" },
+  { id: "white", label: "White", color: "#ffffff", preview3d: "#f8fafc", stroke2d: "#cbd5e1" },
+];
+export const DEFAULT_THREAD_COLOR_ID = "black";
+export const RESET_THREAD_COLOR_ID = "black";
+/** Reset — start manual building on an empty 4" string. */
 export const RESET_STYLE_ID = "empty";
-export const RESET_LENGTH_ID = FREE_SIZE_LENGTH_ID;
+export const RESET_LENGTH_ID = "4";
 /** @deprecated Charm limit is gap/space based (`getValidCharmGaps`, `MAX_CHARMS_ON_EMPTY_RING`). */
 export const MAX_BEAD_CHARMS = 8;
 /** Fixed render/capacity size for all beads in the 2D preview. */
@@ -522,7 +1101,10 @@ export const resolvePatternAsset = (type, assetKey) => {
       BEAD_CHARMS[0]
     );
   }
-  return BEADS.find((item) => item.key === assetKey) || BEADS[0];
+  return (
+    BEADS.find((item) => item.key === assetKey || item.aliases?.includes(assetKey)) ||
+    BEADS[0]
+  );
 };
 
 export const buildBeadPattern = ({
@@ -534,15 +1116,21 @@ export const buildBeadPattern = ({
 }) => {
   if (styleId === "empty") return [];
 
-  const beadItem = bead || BEADS.find((item) => item.key === DEFAULT_BEAD_KEY) || BEADS[0];
+  const beadItem =
+    bead ||
+    BEADS.find((item) => item.key === DEFAULT_BEAD_KEY || item.aliases?.includes(DEFAULT_BEAD_KEY)) ||
+    BEADS[0];
   const spacerItem = separator || SEPARATORS[0];
+  const resolvedSizeId = isBeadSizeSupported(beadItem.key, defaultSizeId)
+    ? defaultSizeId
+    : (beadItem.sizes?.[0]?.id || DEFAULT_BEAD_SIZE_ID);
   const items = [];
 
   for (let index = 0; index < quantity; index += 1) {
     if (styleId === "style-1") {
       items.push(
         index % 2 === 0
-          ? { type: "bead", asset: beadItem, sizeId: defaultSizeId }
+          ? { type: "bead", asset: beadItem, sizeId: resolvedSizeId }
           : { type: "spacer", asset: spacerItem }
       );
       continue;
@@ -552,7 +1140,7 @@ export const buildBeadPattern = ({
       items.push(
         index % 3 === 2
           ? { type: "spacer", asset: spacerItem }
-          : { type: "bead", asset: beadItem, sizeId: defaultSizeId }
+          : { type: "bead", asset: beadItem, sizeId: resolvedSizeId }
       );
       continue;
     }
@@ -561,12 +1149,12 @@ export const buildBeadPattern = ({
       items.push(
         index === 0
           ? { type: "charm", asset: BEAD_CHARMS[0] }
-          : { type: "bead", asset: beadItem, sizeId: defaultSizeId }
+          : { type: "bead", asset: beadItem, sizeId: resolvedSizeId }
       );
       continue;
     }
 
-    items.push({ type: "bead", asset: beadItem, sizeId: defaultSizeId });
+    items.push({ type: "bead", asset: beadItem, sizeId: resolvedSizeId });
   }
 
   return items;

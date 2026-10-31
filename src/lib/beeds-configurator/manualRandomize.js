@@ -1,4 +1,8 @@
-import { getValidCharmGaps, pickNearestValidCharmGap } from "./beadRingDrag";
+import {
+  getCharmAssetsFromItems,
+  getValidCharmGaps,
+  pickNearestValidCharmGap,
+} from "./beadRingDrag";
 
 /** Empty-string manual build: show randomize after this many beads on the string. */
 export const MANUAL_RANDOMIZE_MIN_BEADS = 10;
@@ -9,15 +13,31 @@ export const MANUAL_RANDOMIZE_STEP_MS = 90;
 /** Matches the swap pop in beads-randomize.css, plus a frame of slack. */
 export const MANUAL_RANDOMIZE_POP_MS = 320;
 
-/** Every slot type the shuffle re-skins, using only keys already on the string. */
-const SHUFFLED_TYPES = ["bead", "spacer", "charm"];
+/**
+ * Slot types whose artwork can be re-shuffled in place. Charms are deliberately
+ * excluded: randomize moves them to new gaps on the ring, but must preserve the
+ * selected charm (including its colour/finish).
+ */
+const SHUFFLED_ASSET_TYPES = ["bead", "spacer"];
 
 export function countManualBeads(manualItems) {
   return manualItems.filter((item) => item.type === "bead").length;
 }
 
-function getKeysOfType(manualItems, type) {
-  return manualItems.filter((item) => item.type === type).map((item) => item.assetKey);
+function getVariantsOfType(manualItems, type) {
+  return manualItems
+    .filter((item) => item.type === type)
+    .map((item) => ({
+      assetKey: item.assetKey,
+      // A bead's material and size are one variant. Separating them lets a large
+      // purple bead become a small purple bead after shuffle, which is not a
+      // configuration the customer selected.
+      beadSizeId: type === "bead" ? item.sizeId : undefined,
+    }));
+}
+
+function getVariantId(variant) {
+  return `${variant.assetKey}:${variant.beadSizeId ?? ""}`;
 }
 
 function shuffleArray(values) {
@@ -31,9 +51,7 @@ function shuffleArray(values) {
 
 /** Bead/spacer sequence the charm gap indices are measured against. */
 function getRingSegmentEntries(manualItems) {
-  return manualItems
-    .filter((item) => item.type === "bead" || item.type === "spacer")
-    .map((item) => ({ type: item.type }));
+  return manualItems.filter((item) => item.type === "bead" || item.type === "spacer");
 }
 
 /**
@@ -72,43 +90,60 @@ function buildCharmGapStep(manualItems) {
     return null;
   }
 
-  const wanted = pickSpreadCharmGaps(segmentCount, charms.length);
-  const occupied = new Set();
-  const gaps = [];
+  const charmAssets = getCharmAssetsFromItems(charms);
+  // A random spread can occasionally recreate the current layout. Retry a few
+  // times so clicking Shuffle reliably moves a charm instead of only changing
+  // bead artwork.
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const wanted = pickSpreadCharmGaps(segmentCount, charms.length);
+    const occupied = new Set();
+    const gaps = [];
 
-  shuffleArray(charms).forEach((charm, i) => {
-    const ringGap = pickNearestValidCharmGap(
-      wanted[i],
-      segmentCount,
-      occupied,
-      segmentEntries
-    );
-    if (ringGap == null) {
-      return;
+    shuffleArray(charms).forEach((charm, i) => {
+      const ringGap = pickNearestValidCharmGap(
+        wanted[i],
+        segmentCount,
+        occupied,
+        segmentEntries,
+        { charmAssets }
+      );
+      if (ringGap == null) {
+        return;
+      }
+      occupied.add(ringGap);
+      gaps.push({ charmId: charm.id, ringGap });
+    });
+
+    // A charm left out would keep its old gap and could land on top of a re-dealt one.
+    if (gaps.length < charms.length) {
+      continue;
     }
-    occupied.add(ringGap);
-    gaps.push({ charmId: charm.id, ringGap });
-  });
 
-  const moved = gaps.some(
-    ({ charmId, ringGap }) =>
-      charms.find((charm) => charm.id === charmId)?.ringGap !== ringGap
-  );
+    const moved = gaps.some(
+      ({ charmId, ringGap }) =>
+        charms.find((charm) => charm.id === charmId)?.ringGap !== ringGap
+    );
+    if (moved) {
+      return { kind: "charmGaps", gaps };
+    }
+  }
 
-  return moved ? { kind: "charmGaps", gaps } : null;
+  return null;
 }
 
-/** Reshuffled keys for one type, nudged so a no-op shuffle still changes something. */
-function shuffleKeysOfType(manualItems, type) {
-  const keys = getKeysOfType(manualItems, type);
-  if (new Set(keys).size < 2) {
+/** Reshuffled complete bead/spacer variants, nudged so a no-op still changes something. */
+function shuffleVariantsOfType(manualItems, type) {
+  const variants = getVariantsOfType(manualItems, type);
+  if (new Set(variants.map(getVariantId)).size < 2) {
     return null;
   }
 
-  let shuffled = shuffleArray(keys);
-  if (shuffled.every((key, i) => key === keys[i])) {
-    shuffled = [...keys];
-    const swapAt = shuffled.findIndex((key, i) => i > 0 && key !== shuffled[0]);
+  let shuffled = shuffleArray(variants);
+  if (shuffled.every((variant, i) => getVariantId(variant) === getVariantId(variants[i]))) {
+    shuffled = [...variants];
+    const swapAt = shuffled.findIndex(
+      (variant, i) => i > 0 && getVariantId(variant) !== getVariantId(shuffled[0])
+    );
     if (swapAt < 0) {
       return null;
     }
@@ -123,7 +158,11 @@ export function canManualRandomizeBracelet(manualItems) {
   if (countManualBeads(manualItems) < MANUAL_RANDOMIZE_MIN_BEADS) {
     return false;
   }
-  if (SHUFFLED_TYPES.some((type) => new Set(getKeysOfType(manualItems, type)).size > 1)) {
+  if (
+    SHUFFLED_ASSET_TYPES.some(
+      (type) => new Set(getVariantsOfType(manualItems, type).map(getVariantId)).size > 1
+    )
+  ) {
     return true;
   }
   return Boolean(buildCharmGapStep(manualItems));
@@ -131,9 +170,10 @@ export function canManualRandomizeBracelet(manualItems) {
 
 /**
  * Shuffle plan for the whole string: charms are re-dealt across the gaps first, then each
- * bead, spacer and charm slot takes a key borrowed from another slot of its own type.
- * Nothing new is pulled from the catalogue and no slot changes type, so the bracelet keeps
- * its length and its charm-per-gap layout.
+ * bead and spacer slots take a complete variant borrowed from another slot of their own
+ * type. Charms keep their selected artwork and are only re-dealt across the gaps. Nothing
+ * new is pulled from the catalogue and no slot changes type, so the bracelet keeps its
+ * length and its charm-per-gap layout.
  */
 export function buildManualRandomizePlan(manualItems) {
   if (countManualBeads(manualItems) < MANUAL_RANDOMIZE_MIN_BEADS) {
@@ -141,10 +181,10 @@ export function buildManualRandomizePlan(manualItems) {
   }
 
   const shuffledByType = new Map();
-  SHUFFLED_TYPES.forEach((type) => {
-    const shuffled = shuffleKeysOfType(manualItems, type);
+  SHUFFLED_ASSET_TYPES.forEach((type) => {
+    const shuffled = shuffleVariantsOfType(manualItems, type);
     if (shuffled) {
-      shuffledByType.set(type, { keys: shuffled, cursor: 0 });
+      shuffledByType.set(type, { variants: shuffled, cursor: 0 });
     }
   });
 
@@ -154,17 +194,21 @@ export function buildManualRandomizePlan(manualItems) {
     if (!shuffle) {
       return;
     }
-    const assetKey = shuffle.keys[shuffle.cursor];
+    const variant = shuffle.variants[shuffle.cursor];
     shuffle.cursor += 1;
-    if (!assetKey || assetKey === item.assetKey) {
+    if (
+      !variant?.assetKey ||
+      (variant.assetKey === item.assetKey &&
+        (item.type !== "bead" || variant.beadSizeId === item.sizeId))
+    ) {
       return;
     }
     assetSteps.push({
       kind: "asset",
       index,
       type: item.type,
-      assetKey,
-      beadSizeId: item.sizeId,
+      assetKey: variant.assetKey,
+      beadSizeId: item.type === "bead" ? variant.beadSizeId : item.sizeId,
     });
   });
 

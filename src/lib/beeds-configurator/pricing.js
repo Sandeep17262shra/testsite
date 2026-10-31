@@ -82,6 +82,7 @@ export function buildPatternCustomizeSummaryLines(pattern = []) {
 
     lines.push({
       key: "beads",
+      count: beads.length,
       title: `Beads (Qty ${beads.length})`,
       detail: formatGroupedDetail(groups),
       price: groups.reduce((total, group) => total + group.totalPrice, 0),
@@ -97,6 +98,7 @@ export function buildPatternCustomizeSummaryLines(pattern = []) {
 
     lines.push({
       key: "charms",
+      count: charms.length,
       title: `Charms (Qty ${charms.length})`,
       detail: formatGroupedDetail(groups),
       price: groups.reduce((total, group) => total + group.totalPrice, 0),
@@ -112,6 +114,7 @@ export function buildPatternCustomizeSummaryLines(pattern = []) {
 
     lines.push({
       key: "spacers",
+      count: spacers.length,
       title: `Spacers (Qty ${spacers.length})`,
       detail: formatGroupedDetail(groups),
       price: groups.reduce((total, group) => total + group.totalPrice, 0),
@@ -119,4 +122,24 @@ export function buildPatternCustomizeSummaryLines(pattern = []) {
   }
 
   return lines;
+}
+
+function pieceCountLabel(count, singular, plural) {
+  if (!count) return "";
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+/** Preview title from what is actually on the string, same shape as the other configurators. */
+export function buildBeadPreviewLabel(pattern = [], { styleLabel = "", displayLengthLabel = "", pieceLabels = {} } = {}) {
+  const beadCount = pattern.filter((item) => item.type === "bead").length;
+  const spacerCount = pattern.filter((item) => item.type === "spacer").length;
+  const charmCount = pattern.filter((item) => item.type === "charm").length;
+  const details = [
+    displayLengthLabel,
+    pieceCountLabel(beadCount, pieceLabels.bead || "Bead", pieceLabels.beads || "Beads"),
+    pieceCountLabel(spacerCount, pieceLabels.spacer || "Spacer", pieceLabels.spacers || "Spacers"),
+    pieceCountLabel(charmCount, pieceLabels.charm || "Charm", pieceLabels.charms || "Charms"),
+  ].filter(Boolean);
+
+  return [styleLabel, details.length ? `(${details.join(", ")})` : ""].filter(Boolean).join(" ");
 }

@@ -43,15 +43,22 @@ const PARTS_DIAMONDWISE = ["diamondwise", "diamond"];
 const PARTS_NO_HEAD = ["ring", "band"];
 const WEDDING_BAND_MODEL_SHANKS = new Set(["CHANNEL", "PLATE-PRONG"]);
 
-const getRingLayer = (ringHead, ringShank, ringSideSetting) => {
+const getRingLayer = (ringHead, ringShank, ringSideSetting, weddingBandCoverage, engagementBandCoverage) => {
   // A wedding ring is rendered without a head. For its Pave and Channel
-  // styles, use the matching-band geometry; engagement rings retain their
-  // regular shank assets, even when they use those same style IDs.
+  // styles, use the matching-band geometry; engagement rings use their
+  // dedicated engagement coverage assets.
   if (ringHead === "NO-HEAD" && WEDDING_BAND_MODEL_SHANKS.has(ringShank)) {
-    return `wedding-band:${ringShank}`;
+    return `wedding-band:${ringShank}:${weddingBandCoverage || "3_4"}`;
   }
 
-  return ringSideSetting === "PLAIN" ? `shank:${ringShank}` : `setting:${ringSideSetting}`;
+  if (ringSideSetting === "PLAIN") {
+    if (WEDDING_BAND_MODEL_SHANKS.has(ringShank)) {
+      return `shank:${ringShank}:${engagementBandCoverage || "3_4"}`;
+    }
+    return `shank:${ringShank}`;
+  }
+
+  return `setting:${ringSideSetting}`;
 };
 
 // Safety net: if a model 404s or a part never reports (bad data, dead network),
@@ -77,27 +84,37 @@ export const SceneStageProvider = ({ children }) => {
     ringBand,
     ringMatchingBand,
     diamondWiseDesignId,
+    twoStoneLeft,
+    twoStoneRight,
+    weddingBandCoverage,
+    engagementBandCoverage,
   } = useContext(RingContext);
   const { shape, diamondSize } = useContext(DiamondContext);
 
   const isDiamondWise = Boolean(getDiamondWiseDesignById(diamondWiseDesignId));
 
   const target = useMemo(() => {
-    const ringLayer = getRingLayer(ringHead, ringShank, ringSideSetting);
+    const ringLayer = getRingLayer(ringHead, ringShank, ringSideSetting, weddingBandCoverage, engagementBandCoverage);
 
     return {
       isDiamondWise,
       ringShank,
       ringHead,
       ringSideSetting,
+      weddingBandCoverage: weddingBandCoverage || "3_4",
+      engagementBandCoverage: engagementBandCoverage || "3_4",
       ringBand,
       ringMatchingBand,
       diamondWiseDesignId,
       shape,
       diamondSize,
+      twoStoneLeft,
+      twoStoneRight,
       parts: {
         ring: ringLayer,
-        head: `${ringHead}|${shape}`,
+        head: ringHead === "TWO-STONE"
+          ? `TWO-STONE|${shape || twoStoneLeft || "round"}|${twoStoneRight || "pear"}`
+          : `${ringHead}|${shape}`,
         diamond: shape,
         diamondwise: `${diamondWiseDesignId}|${ringShank}`,
         band: ringBand === "Yes" ? `band:${ringMatchingBand}` : "none",
@@ -108,18 +125,22 @@ export const SceneStageProvider = ({ children }) => {
     ringShank,
     ringHead,
     ringSideSetting,
+    weddingBandCoverage,
+    engagementBandCoverage,
     ringBand,
     ringMatchingBand,
     diamondWiseDesignId,
     shape,
     diamondSize,
+    twoStoneLeft,
+    twoStoneRight,
   ]);
 
-  const isHaloTarget = ringHead === "HALO";
+  const isSelfContainedTarget = ringHead === "HALO" || ringHead === "CLAW-SET" || ringHead === "HIDDEN-HALO" || ringHead === "TWO-STONE";
   const isNoHeadTarget = ringHead === "NO-HEAD";
   const requiredParts = isDiamondWise
     ? PARTS_DIAMONDWISE
-    : isHaloTarget
+    : isSelfContainedTarget
     ? PARTS_HALO
     : isNoHeadTarget
     ? PARTS_NO_HEAD

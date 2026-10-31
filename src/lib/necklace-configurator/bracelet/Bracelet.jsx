@@ -420,10 +420,83 @@ function braceletLocalToScene(localPos, braceletPath, scaleFallback) {
 // Position/rotation now come from getPointPlacement()/getOrbitCharmTransform()
 // above. Only `scale` still comes from the hand-tuned BRACELET_CHARM_POSITIONS data,
 // since per-charm/per-bracelet size still needs manual tuning.
+
+// ════════════════════════════════════════════════════════════════════════════
+// ─── 3D CHARM SIZE OVERRIDES ─────────────────────────────────────────────────
+// Set the display size for every 3D GLB charm here.
+// Format: [x, y, z]  — use equal values for uniform scaling.
+// These take priority over anything stored in BRACELET_CHARM_POSITIONS.
+// ════════════════════════════════════════════════════════════════════════════
+const GLB_CHARM_SCALE_OVERRIDES = {
+  "/bc-assets/bracelet_models/CHARMS1.glb": [20, 20, 20],  // Classic Butterfly
+  "/bc-assets/bracelet_models/CHARMS2.glb": [15, 15, 15],  // Elegant Floral
+  "/bc-assets/bracelet_models/CHARMS3.glb": [0.07, 0.07, 0.07],  // Starfish
+  "/bc-assets/bracelet_models/CHARMS4.glb": [0.05, 0.05, 0.05],  // Modern Star
+  "/bc-assets/bracelet_models/CHARMS5.glb": [0.05, 0.05, 0.05],  // Sphere Locket
+  "/bc-assets/bracelet_models/CHARMS6.glb": [0.1, 0.1, 0.1],  // Silken Tassel
+  "/bc-assets/bracelet_models/CHARMS7.glb": [0.07, 0.07, 0.07],  // Classic Heart
+  "/bc-assets/bracelet_models/CHARMS8.glb": [0.02, 0.02, 0.02],  // Gladiator Helmet
+  "/bc-assets/bracelet_models/princess.glb": [0.013, 0.013, 0.013],  // Princess Charm
+  "/bc-assets/bracelet_models/patel.glb":    [0.035, 0.035, 0.035],     // Pear Petal Charm
+  "/bc-assets/bracelet_models/elephant.glb": [0.015, 0.015, 0.015],  // Elephant Charm
+  "/bc-assets/bracelet_models/camel.glb":    [0.017, 0.017, 0.017],  // Camel Charm
+};
+// ════════════════════════════════════════════════════════════════════════════
+
+// These recently-added charm assets were exported one quarter-turn from the
+// bracelet's hanging frame. Rotate them counter-clockwise in the visible charm
+// plane so the bail points back toward the chain (green reference direction),
+// rather than away from it (red reference direction).
+const GLB_CHARM_ROTATION_OVERRIDES = {
+  "/bc-assets/bracelet_models/princess.glb": [Math.PI / 2, Math.PI / 1 , 0],
+  "/bc-assets/bracelet_models/patel.glb":    [Math.PI / 2, 0 , 0],
+  "/bc-assets/bracelet_models/elephant.glb": [-Math.PI / 2, 0 , 0],
+  "/bc-assets/bracelet_models/camel.glb":    [-Math.PI / 2, 0 , 0],
+};
+
+// ─── NEW 3D CHARM POSITION SETTERS ─────────────────────────────────────────
+// Each value is a local [x, y, z] nudge from the shared automatic chain
+// anchor. Leave [0, 0, 0] to use the automatic placement exactly; edit a
+// charm's three values below to fine-tune only that model without changing
+// the existing 3D charms or the selected bracelet slot.
+const GLB_CHARM_POSITION_OFFSETS = {
+  "/bc-assets/bracelet_models/princess.glb": [0, -0.13, 0.11],
+  "/bc-assets/bracelet_models/patel.glb":    [0, -0.2, 0.05],
+  "/bc-assets/bracelet_models/elephant.glb": [-0.03, -0.14, 0],
+  "/bc-assets/bracelet_models/camel.glb":    [0.03, -0.14, 0],
+};
+
+// A physical bail ring is mounted at each new charm's shared chain anchor.
+// Adjust `offset`, `ringR`, or `ringTube` here if a particular GLB needs
+// additional clearance; existing 3D charms are deliberately unaffected.
+const GLB_CHARM_BAIL_CONFIG = {
+  "/bc-assets/bracelet_models/princess.glb": { ringR: 0.025, ringTube: 0.003, offset: [0, 0.1, -0.08] },
+  "/bc-assets/bracelet_models/patel.glb":    { ringR: 0.03, ringTube: 0.003, offset: [0, 0.17, -0.02] },
+  "/bc-assets/bracelet_models/elephant.glb": { ringR: 0.040, ringTube: 0.005, offset: [0.03, 0.1, 0.04] },
+  "/bc-assets/bracelet_models/camel.glb":    { ringR: 0.03, ringTube: 0.005, offset: [-0.03, 0.11, 0.04] },
+};
+
 function getGLBCharmScale(braceletPath, charmPath) {
+  // 1. Per-charm override block above (highest priority)
+  if (GLB_CHARM_SCALE_OVERRIDES[charmPath]) {
+    return GLB_CHARM_SCALE_OVERRIDES[charmPath];
+  }
+  // 2. Legacy per-bracelet/per-charm data in BRACELET_CHARM_POSITIONS
   const entries = BRACELET_CHARM_POSITIONS[braceletPath]?.[charmPath];
   const first = entries?.[0];
-  return first?.scale ?? [20, 20, 20];
+  return first?.scale ?? [0.01, 0.01, 0.01];
+}
+
+function getGLBCharmRotation(charmPath) {
+  return GLB_CHARM_ROTATION_OVERRIDES[charmPath] ?? [0, 0, 0];
+}
+
+function getGLBCharmPositionOffset(charmPath) {
+  return GLB_CHARM_POSITION_OFFSETS[charmPath] ?? [0, 0, 0];
+}
+
+function getGLBCharmBailConfig(charmPath) {
+  return GLB_CHARM_BAIL_CONFIG[charmPath] ?? null;
 }
 // ─────────────────────────────────────────────────────────────────────────────
 // Remove solid-colour backgrounds via corner flood-fill
@@ -960,7 +1033,7 @@ function getAnchorOffset(path, obj, anchorMode = 'top') {
   return offset;
 }
 
-const GLBCharmModel = ({ path, position, rotation, scale, onClick, bodyColor, gemstoneColor, modelRotation = [0, 0, 0], anchorMode = 'top' }) => {
+const GLBCharmModel = ({ path, position, rotation, scale, onClick, bodyColor, gemstoneColor, modelRotation = [0, 0, 0], anchorMode = 'top', bailConfig = null }) => {
   const [model, setModel]               = useState(null);
   const [currentPath, setCurrentPath]   = useState(null);
   const [anchorOffset, setAnchorOffset] = useState(null);
@@ -1005,7 +1078,7 @@ const GLBCharmModel = ({ path, position, rotation, scale, onClick, bodyColor, ge
             return;
           }
 
-          child.material = createRingMetalMaterial(bodyColor || '#DBDBDB');
+          child.material = createRingMetalMaterial(bodyColor || '#C0C0C0');
         });
 
         // Measure the anchor while the stone is still visible, then hide it -
@@ -1029,15 +1102,32 @@ const GLBCharmModel = ({ path, position, rotation, scale, onClick, bodyColor, ge
   // The translation itself must be scaled: this <primitive> is scaled
   // directly, so its own position offset must be pre-multiplied by that
   // same scale to land at the correct point once scaling is applied.
-  const innerPosition = [
-    -anchorOffset.x * scale[0],
-    -anchorOffset.y * scale[1],
-    -anchorOffset.z * scale[2],
-  ];
+  // Rotate around the charm's bail rather than its arbitrary file origin.
+  // This lets per-model orientation corrections preserve the connection to
+  // the bracelet link instead of making the charm slide sideways.
+  const innerPosition = new THREE.Vector3(
+    anchorOffset.x * scale[0],
+    anchorOffset.y * scale[1],
+    anchorOffset.z * scale[2],
+  )
+    .applyEuler(new THREE.Euler(...modelRotation))
+    .multiplyScalar(-1)
+    .toArray();
 
   return (
     <group position={position} rotation={rotation} onClick={onClick}>
       <primitive object={model} position={innerPosition} rotation={modelRotation} scale={scale} />
+
+      {bailConfig && (
+        <CharmBail
+          topY={bailConfig.offset[1]}
+          offsetX={bailConfig.offset[0]}
+          offsetZ={bailConfig.offset[2]}
+          ringR={bailConfig.ringR}
+          ringTube={bailConfig.ringTube}
+          metalColor={bodyColor || '#C0C0C0'}
+        />
+      )}
 
       {gemGeometry && (
         <mesh
@@ -1191,7 +1281,7 @@ const AxesLines = () => { const r = useRef(); return <group ref={r} />; };
 // distance is also OrbitControls' minDistance, so the default framing is the
 // largest the chain can ever appear - identical for every chain style.
 const DESKTOP_ORBIT_TARGET = [0, 0.6, 0];
-const DESKTOP_CHAIN_VIEW_DISTANCE = 1.8;
+const DESKTOP_CHAIN_VIEW_DISTANCE = 1.5;
 // Zoom-out limit (desktop): the smallest the chain may appear.
 const DESKTOP_CHAIN_MAX_VIEW_DISTANCE = 2.0;
 const CAMERA_POSITIONS = {
@@ -1311,7 +1401,7 @@ const CharmPopIn = ({ children, position = [0, 0, 0], rotation = [0, 0, 0], anim
 // When a charm is added (or swapped - `animKey` changes) it appears flat, the
 // way charms used to sit, then drops on its chain: a damped swing that
 // overshoots a little past the rest angle and settles at CHARM_HANG_ANGLE.
-const CHARM_HANG_ANGLE = Math.PI / 4;  // 45deg, the resting tilt
+const CHARM_HANG_ANGLE = Math.PI /2;  // 45deg, the resting tilt
 const HANG_FALL_DELAY = 0.3;           // s - let the pop-in land flat first
 const HANG_FALL_DURATION = 2;          // s - swing length before snapping to rest
 const HANG_DAMPING = 3;                // how fast the swing dies out
@@ -1365,12 +1455,14 @@ const Bracelet = () => {
     return () => media.removeEventListener('change', updateIsMobile);
   }, []);
   const {
+    selectedBracelet,
     braceletPath, charms, setCharms,
+    braceletMetal, braceletPurity, braceletSize,
     namePendant,
     materialPropsBracelet, materialProps, texture,
     pendantMetalHex,
     setHighlightedIndex, highlightedIndex,
-    setSelectedIndex, cameraView, setCameraView,
+    setSelectedIndex, cameraView, setCameraView, activeCharmSlot, setActiveCharmSlot,
     capture, resetObj, setResetObj, loader,
   } = useContext(BraceletContext);
 
@@ -1468,7 +1560,20 @@ useEffect(() => {
 
   useEffect(() => {
     if (!share) return;
-    const config = { type: 'bracelet', braceletPath, charms, namePendant, materialPropsBracelet, materialProps, pendantMetalHex, cameraView };
+    const config = {
+      type: 'bracelet',
+      selectedBracelet,
+      braceletPath,
+      braceletMetal,
+      braceletPurity,
+      braceletSize,
+      charms,
+      namePendant,
+      materialPropsBracelet,
+      materialProps,
+      pendantMetalHex,
+      cameraView,
+    };
     let encoded;
     try { encoded = Base64.encode(JSON.stringify(config)); } catch { return; }
     const url = parentUrl ? new URL(parentUrl) : new URL(window.location.href);
@@ -1477,7 +1582,7 @@ useEffect(() => {
     setShareUrl(finalUrl);
     navigator.clipboard.writeText(finalUrl).catch(console.error);
     setShare(false);
-  }, [share, braceletPath, charms, namePendant, materialPropsBracelet, cameraView, parentUrl]);
+  }, [share, selectedBracelet, braceletPath, braceletMetal, braceletPurity, braceletSize, charms, namePendant, materialPropsBracelet, cameraView, parentUrl]);
 
   const [scale]  = useState(30);
   const groupRef = useRef();
@@ -1499,7 +1604,11 @@ const deleteCharm = index => {
     if (now - lastDeleteMs.current < 350) return;
     lastDeleteMs.current = now;
 
-    setCharms(charms.filter((_, charmIndex) => charmIndex !== index));
+    const updated = charms.filter((_, charmIndex) => charmIndex !== index);
+    const focusIndex = updated.length ? Math.max(0, index - 1) : 0;
+    setCharms(updated);
+    setActiveCharmSlot(focusIndex);
+    setCameraView(updated.length ? `charmProduct-${focusIndex}` : '');
 };
 
   const handlePlaceholderClick = index => {
@@ -1547,6 +1656,49 @@ const deleteCharm = index => {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [charms, braceletPath, braceletPoints, scale, isNameChain, nameChainGeom.gapHalfAngle]);
+
+  // Keep the newest charm at the front-centre of the product view. As more
+  // charms are distributed around the bracelet, this rotates the same product
+  // framing toward the just-added slot instead of leaving it off to one side.
+  const braceletCameraViews = useMemo(() => {
+    const activePosition = charmRenderData[activeCharmSlot]?.position;
+    const [x = 0, , z = 1] = activePosition || [];
+    const radialLength = Math.hypot(x, z) || 1;
+    const basePosition = CAMERA_POSITIONS.charmsOnly.desktop;
+    const horizontalDistance = Math.hypot(basePosition[0], basePosition[2]);
+    // Keep the same rotation around the bracelet, but use the low product-shot
+    // elevation so the chain reads as a front/side profile rather than a
+    // top-down oval.
+    const productViewHeight = DESKTOP_ORBIT_TARGET[1] + 0.45;
+    const position = [
+      (x / radialLength) * horizontalDistance,
+      productViewHeight,
+      (z / radialLength) * horizontalDistance,
+    ];
+    const viewName = `charmProduct-${activeCharmSlot ?? 0}`;
+
+    return {
+      // The View button's standard presets must share OrbitControls' product
+      // target. Generic CameraController presets aim at world y=0, while the
+      // bracelet centre is y=0.6, causing the side and front views to sit high.
+      top: {
+        position: scaleFromTarget([0, DESKTOP_ORBIT_TARGET[1] + DESKTOP_CHAIN_VIEW_DISTANCE, 0.001], DESKTOP_ORBIT_TARGET, mobileFitFactor),
+        target: DESKTOP_ORBIT_TARGET,
+      },
+      side: {
+        position: scaleFromTarget([DESKTOP_CHAIN_VIEW_DISTANCE, DESKTOP_ORBIT_TARGET[1], 0], DESKTOP_ORBIT_TARGET, mobileFitFactor),
+        target: DESKTOP_ORBIT_TARGET,
+      },
+      front: {
+        position: scaleFromTarget([0, DESKTOP_ORBIT_TARGET[1], DESKTOP_CHAIN_VIEW_DISTANCE], DESKTOP_ORBIT_TARGET, mobileFitFactor),
+        target: DESKTOP_ORBIT_TARGET,
+      },
+      [viewName]: {
+        position: scaleFromTarget(position, DESKTOP_ORBIT_TARGET, mobileFitFactor),
+        target: DESKTOP_ORBIT_TARGET,
+      },
+    };
+  }, [activeCharmSlot, charmRenderData, mobileFitFactor]);
 
   return (
     <div style={{ height: '100%', width: '100%', background: '#f8f8f8', position: 'relative' }}>
@@ -1675,16 +1827,23 @@ const deleteCharm = index => {
 
             // kind === 'glb' (regular 3D charms)
             const glbScale = getGLBCharmScale(braceletPath, path);
+            const glbRotation = getGLBCharmRotation(path);
+            const glbPositionOffset = getGLBCharmPositionOffset(path);
+            const glbBailConfig = getGLBCharmBailConfig(path);
             return (
               <CharmPopIn key={charm.id ?? i} animKey={charmSignature(charm)} position={position} rotation={rotation} wobble={false}>
                 <HangFromChain hinge={hingeOffset} animKey={charmSignature(charm)}>
                 <group scale={charmScale}>
                   <GLBCharmModel
                     path={path}
-                    position={[0, 0, 0]}
+                    position={glbPositionOffset}
                     rotation={[0, 0, 0]}
+                    modelRotation={glbRotation}
                     scale={glbScale}
                     anchorMode={anchorMode}
+                    bailConfig={glbBailConfig}
+                    bodyColor={charm.bodyColor}
+                    gemstoneColor={charm.gemstoneColor}
                     onClick={e => { e.stopPropagation(); deleteCharm(i); }}
                   />
                 </group>
@@ -1713,7 +1872,11 @@ const deleteCharm = index => {
         </group>
 
         <AxesLines />
-        <CameraController view={cameraView} setView={setCameraView} />
+        <CameraController
+          view={cameraView}
+          setView={setCameraView}
+          customViewPositions={braceletCameraViews}
+        />
         {capture && <Capture targetGroup={groupRef} />}
         {/* minDistance is how far IN the shopper can zoom. On desktop it equals
             DESKTOP_CHAIN_VIEW_DISTANCE (measured from the ring centre), so the

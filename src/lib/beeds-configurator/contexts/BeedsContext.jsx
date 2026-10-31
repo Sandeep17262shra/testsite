@@ -1,4 +1,13 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   BEADS,
   BEAD_LENGTHS,
@@ -10,6 +19,9 @@ import {
   DEFAULT_BEAD_SIZE_ID,
   DEFAULT_STYLE_ID,
   DEFAULT_LENGTH_ID,
+  DEFAULT_THREAD_COLOR_ID,
+  RESET_THREAD_COLOR_ID,
+  THREAD_COLORS,
   RESET_STYLE_ID,
   RESET_LENGTH_ID,
   isManualStringStyle,
@@ -17,6 +29,8 @@ import {
   SEPARATORS,
   isFreeSizeLength,
   isCharmCustomizationEnabled,
+  isRoundSpacerSku,
+  isBeadSizeSupported,
   resolveLengthOption,
   resolvePatternAsset,
 } from "../assets";
@@ -28,6 +42,7 @@ import {
   getManualCapacityRingRadius,
 } from "../dynamicLength";
 import {
+  getCharmAssetsFromItems,
   getCharmOccupiedGaps,
   getCharmPlacementSegmentCount,
   getNextCharmOnlyRingGap,
@@ -78,7 +93,7 @@ const getDefaultCharm = () => BEAD_CHARMS.find((item) => item.key === DEFAULT_CH
 const getDefaultLength = () => BEAD_LENGTHS.find((item) => item.id === "5") || BEAD_LENGTHS[0];
 const MANUAL_CAPACITY_OPTIONS = {
   closedLoop: true,
-  maxRadiusRatio: MAX_LAYOUT_RADIUS_RATIO,
+  maxRadiusRatio: 1,
 };
 
 /** Fixed-length preset bracelets — no extra radius slack; beads must fit the string. */
@@ -86,6 +101,17 @@ const PRESET_CAPACITY_OPTIONS = {
   closedLoop: true,
   maxRadiusRatio: 1,
 };
+
+function presetCapacityPatternFitsAt(capacityPattern, layoutRadius, beadSizeId) {
+  return (
+    patternFitsOnRing(capacityPattern, layoutRadius, beadSizeId, PRESET_CAPACITY_OPTIONS) &&
+    patternFitsFixedStringLength(capacityPattern, layoutRadius, beadSizeId)
+  );
+}
+
+function presetSlotItemsFitAtSize(items, layoutRadius, beadSizeId) {
+  return presetCapacityPatternFitsAt(toCapacityPattern(items, beadSizeId), layoutRadius, beadSizeId);
+}
 
 /** Build the slot list after a customize replace, or null when the swap is not allowed. */
 function buildCustomizeSlotReplacement(items, index, { type, assetKey, beadSizeId, defaultSizeId }) {
@@ -100,10 +126,17 @@ function buildCustomizeSlotReplacement(items, index, { type, assetKey, beadSizeI
     nextItem = {
       ...current,
       assetKey,
-      ...(type === "bead" ? { sizeId: beadSizeId } : {}),
+      ...(type === "bead" || (type === "spacer" && isRoundSpacerSku(assetKey))
+        ? { sizeId: beadSizeId || defaultSizeId }
+        : {}),
     };
   } else if (current.type === "bead" && type === "spacer") {
-    nextItem = { id: current.id, type: "spacer", assetKey };
+    nextItem = {
+      id: current.id,
+      type: "spacer",
+      assetKey,
+      ...(isRoundSpacerSku(assetKey) ? { sizeId: beadSizeId || defaultSizeId } : {}),
+    };
   } else if (current.type === "spacer" && type === "bead") {
     nextItem = { id: current.id, type: "bead", assetKey, sizeId: beadSizeId };
   } else if (current.type === "charm" && (type === "bead" || type === "spacer")) {
@@ -111,7 +144,9 @@ function buildCustomizeSlotReplacement(items, index, { type, assetKey, beadSizeI
       id: current.id,
       type,
       assetKey,
-      ...(type === "bead" ? { sizeId: beadSizeId } : {}),
+      ...(type === "bead" || (type === "spacer" && isRoundSpacerSku(assetKey))
+        ? { sizeId: beadSizeId || defaultSizeId }
+        : {}),
     };
   } else {
     return null;
@@ -138,7 +173,10 @@ function slotItemsFromPattern(pattern, defaultSizeId, createId) {
             : item.type === "spacer"
               ? DEFAULT_SEPARATOR_KEY
               : DEFAULT_CHARM_KEY),
-        ...(item.type === "bead" ? { sizeId: item.sizeId || defaultSizeId } : {}),
+        ...(item.type === "bead" ||
+        (item.type === "spacer" && isRoundSpacerSku(assetKey))
+          ? { sizeId: item.sizeId || defaultSizeId }
+          : {}),
         ...(item.type === "charm" && Number.isFinite(item.ringGap)
           ? { ringGap: item.ringGap }
           : {}),
@@ -154,25 +192,18 @@ function slotItemsFromPattern(pattern, defaultSizeId, createId) {
 }
 
 /**
- * Rebuild the strung run for a new style or bead size while keeping the charms the shopper
- * picked. Charms hang in the gaps instead of taking up thread, so a different bead layout is
- * no reason to drop them — but a plain re-seed replaces the whole slot list, which is how they
- * were being lost. Any charms the fresh pattern carries are ignored while the shopper has
- * their own, so switching back and forth cannot duplicate them.
+ * Keep the shopper's charms on a new bead/spacer run. Gap indexes are scaled when the
+ * run length changes so a charm stays in the same part of the bracelet.
  */
-function reseedPresetSlotItems(currentItems, pattern, defaultSizeId, createId) {
-  const seeded = slotItemsFromPattern(pattern, defaultSizeId, createId);
+function rehomeCharmsOntoRing(currentItems, nextRingItems) {
+  const ringItems = cloneSlotItems(nextRingItems);
   const keptCharms = currentItems.filter((item) => item.type === "charm");
   if (!keptCharms.length) {
-    return seeded;
+    return ringItems;
   }
 
   const previousRingCount = currentItems.filter((item) => item.type !== "charm").length;
-  const nextRingItems = seeded.filter((item) => item.type !== "charm");
-  const nextRingCount = nextRingItems.length;
-
-  // A gap index only means something relative to the run it was measured on, so a run that
-  // changed length needs them scaled — kept as-is, every charm slides round the bracelet.
+  const nextRingCount = ringItems.length;
   const rehomedCharms = keptCharms.map((charm) => {
     if (
       !Number.isFinite(charm.ringGap) ||
@@ -186,8 +217,39 @@ function reseedPresetSlotItems(currentItems, pattern, defaultSizeId, createId) {
     return { ...charm, ringGap: ((scaled % nextRingCount) + nextRingCount) % nextRingCount };
   });
 
-  // Settles collisions and anything that scaled onto an invalid gap.
-  return applyCharmGapsToSlotItems([...nextRingItems, ...rehomedCharms]);
+  return applyCharmGapsToSlotItems([...ringItems, ...rehomedCharms]);
+}
+
+/**
+ * Rebuild the strung run for a new style or bead size while keeping the charms the shopper
+ * picked. Charms hang in the gaps instead of taking up thread, so a different bead layout is
+ * no reason to drop them — but a plain re-seed replaces the whole slot list, which is how they
+ * were being lost. Any charms the fresh pattern carries are ignored while the shopper has
+ * their own, so switching back and forth cannot duplicate them.
+ */
+function reseedPresetSlotItems(currentItems, pattern, defaultSizeId, createId) {
+  const seeded = slotItemsFromPattern(pattern, defaultSizeId, createId);
+  const nextRingItems = seeded.filter((item) => item.type !== "charm");
+  return rehomeCharmsOntoRing(currentItems, nextRingItems);
+}
+
+/**
+ * Keep the shopper's beads and spacers when the bracelet length changes.
+ * A longer length keeps every current bead and spacer (including ones that
+ * replaced the style default) and appends only the extra default slots.
+ * A shorter length drops slots from the end.
+ */
+function fitUserRingToTemplate(userRing, templateRing) {
+  if (!userRing.length) {
+    return cloneSlotItems(templateRing);
+  }
+  if (userRing.length === templateRing.length) {
+    return cloneSlotItems(userRing);
+  }
+  if (userRing.length < templateRing.length) {
+    return [...cloneSlotItems(userRing), ...cloneSlotItems(templateRing.slice(userRing.length))];
+  }
+  return cloneSlotItems(userRing.slice(0, templateRing.length));
 }
 
 function computeCharmRingGapForInsert(items, nextItem, insertIndex) {
@@ -204,7 +266,10 @@ function patternSeedFromPreset(pattern) {
   return JSON.stringify(
     pattern.map((item) => ({
       type: item.type,
-      ...(item.type === "bead" ? { sizeId: item.sizeId } : {}),
+      ...(item.type === "bead" ||
+      (item.type === "spacer" && isRoundSpacerSku(item.assetKey))
+        ? { sizeId: item.sizeId }
+        : {}),
     }))
   );
 }
@@ -288,15 +353,18 @@ export const BeedsProvider = ({ children }) => {
   const [jewelryCategory, setJewelryCategory] = useState("bead-bracelet");
   const [styleId, setStyleId] = useState(DEFAULT_STYLE_ID);
   const [lengthId, setLengthId] = useState(DEFAULT_LENGTH_ID);
+  const [threadColorId, setThreadColorId] = useState(DEFAULT_THREAD_COLOR_ID);
   const [customizeTab, setCustomizeTab] = useState("beads");
   const [collectionId, setCollectionId] = useState("all");
   const [sizeId, setSizeId] = useState(DEFAULT_BEAD_SIZE_ID);
   const [selectedBeadKey, setSelectedBeadKey] = useState(DEFAULT_BEAD_KEY);
   const [selectedSeparatorKey, setSelectedSeparatorKey] = useState(DEFAULT_SEPARATOR_KEY);
   const [selectedCharmKey, setSelectedCharmKey] = useState(DEFAULT_CHARM_KEY);
+  const [activeSlotIndex, setActiveSlotIndex] = useState(null);
   const [manualItems, setManualItems] = useState([]);
   const [presetSlotItems, setPresetSlotItems] = useState([]);
   const presetSlotSeedRef = useRef("");
+  const lengthStyleSnapshotRef = useRef({ lengthId: DEFAULT_LENGTH_ID, styleId: DEFAULT_STYLE_ID });
   /** Per bracelet style — restore customize state when switching styles (necklace chain-ref pattern). */
   const styleDesignCacheRef = useRef(new Map());
   const [flyInAnimation, setFlyInAnimation] = useState(null);
@@ -315,7 +383,12 @@ export const BeedsProvider = ({ children }) => {
   const randomizeTimerRef = useRef(null);
   const [showResetPopup, setShowResetPopup] = useState(false);
   const selectedBead = useMemo(
-    () => BEADS.find((bead) => bead.key === selectedBeadKey) || getDefaultBead(),
+    () =>
+      BEADS.find(
+        (bead) =>
+          bead.key === selectedBeadKey ||
+          bead.aliases?.includes(selectedBeadKey)
+      ) || getDefaultBead(),
     [selectedBeadKey]
   );
 
@@ -327,6 +400,14 @@ export const BeedsProvider = ({ children }) => {
   const selectedCharm = useMemo(
     () => BEAD_CHARMS.find((item) => item.key === selectedCharmKey) || getDefaultCharm(),
     [selectedCharmKey]
+  );
+
+  const selectedThreadColor = useMemo(
+    () =>
+      THREAD_COLORS.find((item) => item.id === threadColorId) ||
+      THREAD_COLORS.find((item) => item.id === DEFAULT_THREAD_COLOR_ID) ||
+      THREAD_COLORS[0],
+    [threadColorId]
   );
 
   const activeLength = useMemo(() => resolveLengthOption(lengthId), [lengthId]);
@@ -587,7 +668,10 @@ export const BeedsProvider = ({ children }) => {
         id: item.id,
         type: item.type,
         asset: resolvePatternAsset(item.type, item.assetKey),
-        ...(item.type === "bead" ? { sizeId: item.sizeId || sizeId } : {}),
+        ...(item.type === "bead" ||
+        (item.type === "spacer" && isRoundSpacerSku(item.assetKey))
+          ? { sizeId: item.sizeId || sizeId }
+          : {}),
       })),
     [sizeId]
   );
@@ -598,12 +682,16 @@ export const BeedsProvider = ({ children }) => {
       const ringEntries = [];
       const charmEntries = [];
 
-      items.forEach((item) => {
+      items.forEach((item, index) => {
         const entry = {
           id: item.id,
           type: item.type,
           asset: resolvePatternAsset(item.type, item.assetKey),
-          ...(item.type === "bead" ? { sizeId: item.sizeId || sizeId } : {}),
+          slotIndex: index,
+          ...(item.type === "bead" ||
+          (item.type === "spacer" && isRoundSpacerSku(item.assetKey))
+            ? { sizeId: item.sizeId || sizeId }
+            : {}),
         };
         if (item.type === "charm") {
           charmEntries.push({
@@ -626,8 +714,17 @@ export const BeedsProvider = ({ children }) => {
     if (isManualMode) {
       return buildPatternFromSlotItems(manualItems);
     }
-    return buildPatternFromSlotItems(presetSlotItems);
-  }, [isManualMode, manualItems, presetSlotItems, buildPatternFromSlotItems]);
+    if (presetSlotItems.length > 0) {
+      return buildPatternFromSlotItems(presetSlotItems);
+    }
+    return presetFill.pattern;
+  }, [
+    isManualMode,
+    manualItems,
+    presetSlotItems,
+    buildPatternFromSlotItems,
+    presetFill.pattern,
+  ]);
 
   useEffect(() => {
     const items = isManualMode ? manualItems : presetSlotItems;
@@ -669,7 +766,11 @@ export const BeedsProvider = ({ children }) => {
     }
     const segmentCount = segmentEntries.length;
     const occupied = getCharmOccupiedGaps(pattern);
-    return getValidCharmGaps(segmentCount, occupied, segmentEntries).length > 0;
+    return (
+      getValidCharmGaps(segmentCount, occupied, segmentEntries, {
+        charmAssets: getCharmAssetsFromItems(pattern),
+      }).length > 0
+    );
   }, [isManualMode, manualItems, presetSlotItems, pattern]);
 
   const presetCapacityPattern = useMemo(
@@ -691,7 +792,13 @@ export const BeedsProvider = ({ children }) => {
       }
       const normalized = {
         type: candidate.type,
-        ...(candidate.type === "bead" ? { sizeId: candidate.sizeId || sizeId } : {}),
+        ...(candidate.type === "bead" ||
+        (candidate.type === "spacer" && isRoundSpacerSku(candidate.assetKey))
+          ? { sizeId: candidate.sizeId || sizeId }
+          : {}),
+        ...(candidate.type === "spacer" && candidate.assetKey
+          ? { assetKey: candidate.assetKey }
+          : {}),
       };
       return presetCapacityPatternFits([...presetCapacityPattern, normalized]);
     },
@@ -726,7 +833,20 @@ export const BeedsProvider = ({ children }) => {
 
   const canReplaceCustomizeSlotAt = useCallback(
     (index, { type, assetKey, beadSizeId = sizeId } = {}) => {
-      const items = isManualMode ? manualItems : presetSlotItems;
+      if (type === "bead" && !isBeadSizeSupported(assetKey, beadSizeId)) {
+        return false;
+      }
+
+      // A preset is initially rendered from its template rather than stored as
+      // editable slots. Materialize that template for the first item-level
+      // change so a spacer can be swapped independently instead of changing
+      // every preset spacer through `selectedSeparator`.
+      const items =
+        !isManualMode && presetSlotItems.length === 0
+          ? slotItemsFromPattern(presetFill.pattern, sizeId, createManualItemId)
+          : isManualMode
+            ? manualItems
+            : presetSlotItems;
       const replacement = buildCustomizeSlotReplacement(items, index, {
         type,
         assetKey,
@@ -737,11 +857,18 @@ export const BeedsProvider = ({ children }) => {
         return false;
       }
 
+      // A selected spacer is a replacement, never an addition. Let shoppers
+      // mix Classic and catalog spacers even when the catalog spacer has a
+      // larger visual footprint than the classic thin spacer it replaces.
+      if (items[index]?.type === "spacer" && type === "spacer") {
+        return true;
+      }
+
       return slotItemsFitCapacity(replacement.candidate, {
         skipCharmCapacity: replacement.touchesCharm,
       });
     },
-    [isManualMode, manualItems, presetSlotItems, sizeId, slotItemsFitCapacity]
+    [isManualMode, manualItems, presetSlotItems, presetFill.pattern, sizeId, slotItemsFitCapacity]
   );
 
   const canApplyBeadSizeToAllPresetSlots = useCallback(
@@ -762,24 +889,79 @@ export const BeedsProvider = ({ children }) => {
     [isManualMode, presetSlotItems, presetPatternFits]
   );
 
+  const buildPresetReseedAtBeadSize = useCallback(
+    (beadSizeId) => {
+      const fill = buildTightFilledPattern({
+        styleId,
+        ringRadius,
+        bead: selectedBead,
+        separator: selectedSeparator,
+        charm: selectedCharm,
+        defaultSizeId: beadSizeId,
+      });
+      const items = reseedPresetSlotItems(
+        presetSlotItems,
+        fill.pattern,
+        beadSizeId,
+        createManualItemId
+      );
+      return { fill, items };
+    },
+    [
+      styleId,
+      ringRadius,
+      selectedBead,
+      selectedSeparator,
+      selectedCharm,
+      presetSlotItems,
+    ]
+  );
+
+  /**
+   * A preset size change refills the string (more small beads, fewer large ones)
+   * so the run stays packed. Same-count shrink leaves visible gaps.
+   */
+  const canChangePresetBeadSize = useCallback(
+    (beadSizeId, candidateAssetKey = selectedBeadKey) => {
+      if (isManualMode) {
+        return false;
+      }
+      if (!isBeadSizeSupported(candidateAssetKey, beadSizeId)) {
+        return false;
+      }
+      if (!presetSlotItems.some((item) => item.type === "bead")) {
+        return false;
+      }
+      const { fill, items } = buildPresetReseedAtBeadSize(beadSizeId);
+      if (!fill.pattern.some((entry) => entry.type === "bead")) {
+        return false;
+      }
+      return presetSlotItemsFitAtSize(items, fill.layoutRingRadius, beadSizeId);
+    },
+    [isManualMode, presetSlotItems, buildPresetReseedAtBeadSize, selectedBeadKey]
+  );
+
   const canAddBead = useCallback(
-    (beadSizeId = sizeId) => {
-      const candidate = { type: "bead", sizeId: beadSizeId };
+    (beadSizeId = sizeId, candidateAssetKey = selectedBeadKey) => {
+      if (!isBeadSizeSupported(candidateAssetKey, beadSizeId)) {
+        return false;
+      }
+      const candidate = { type: "bead", sizeId: beadSizeId, assetKey: candidateAssetKey };
       if (isManualMode) {
         return canAddManualItem(candidate);
       }
       return canAddPresetItem(candidate);
     },
-    [isManualMode, canAddManualItem, canAddPresetItem, sizeId]
+    [isManualMode, canAddManualItem, canAddPresetItem, sizeId, selectedBeadKey]
   );
 
   const canAddSpacer = useCallback(() => {
-    const candidate = { type: "spacer" };
+    const candidate = { type: "spacer", assetKey: selectedSeparatorKey };
     if (isManualMode) {
       return canAddManualItem(candidate);
     }
     return canAddPresetItem(candidate);
-  }, [isManualMode, canAddManualItem, canAddPresetItem]);
+  }, [isManualMode, canAddManualItem, canAddPresetItem, selectedSeparatorKey]);
 
   const canAddMore = canAddBead() || canAddSpacer() || canAddCharm();
   const isStringFull = isManualMode && !canAddMore;
@@ -842,11 +1024,31 @@ export const BeedsProvider = ({ children }) => {
     [sizeId]
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (isManualMode) {
       presetSlotSeedRef.current = "";
+      lengthStyleSnapshotRef.current = { lengthId, styleId };
       return;
     }
+
+    const previous = lengthStyleSnapshotRef.current;
+    const lengthChanged = previous.lengthId !== lengthId;
+    const styleChanged = previous.styleId !== styleId;
+    lengthStyleSnapshotRef.current = { lengthId, styleId };
+
+    // Length changes must not rebuild the style template. That was dropping
+    // swapped beads and spacers. Keep the current run and only grow or trim it.
+    if (lengthChanged && !styleChanged) {
+      presetSlotSeedRef.current = presetPatternSeed;
+      setPresetSlotItems((current) => {
+        const seeded = slotItemsFromPattern(presetFill.pattern, sizeId, createManualItemId);
+        const templateRing = seeded.filter((item) => item.type !== "charm");
+        const userRing = current.filter((item) => item.type !== "charm");
+        return rehomeCharmsOntoRing(current, fitUserRingToTemplate(userRing, templateRing));
+      });
+      return;
+    }
+
     if (presetPatternSeed === presetSlotSeedRef.current) {
       return;
     }
@@ -854,7 +1056,7 @@ export const BeedsProvider = ({ children }) => {
     setPresetSlotItems((current) =>
       reseedPresetSlotItems(current, presetFill.pattern, sizeId, createManualItemId)
     );
-  }, [isManualMode, presetPatternSeed, presetFill.pattern, sizeId]);
+  }, [isManualMode, presetPatternSeed, presetFill.pattern, sizeId, lengthId, styleId]);
 
   const insertSlotItem = useCallback((items, nextItem, insertIndex) => {
     const at = Number.isFinite(insertIndex)
@@ -870,6 +1072,9 @@ export const BeedsProvider = ({ children }) => {
       if (!isManualMode) {
         return false;
       }
+      if (type === "bead" && !isBeadSizeSupported(assetKey, beadSizeId)) {
+        return false;
+      }
 
       if (type === "charm") {
         if (!canAddCharm()) {
@@ -877,7 +1082,9 @@ export const BeedsProvider = ({ children }) => {
         }
       } else {
         const candidate =
-          type === "bead" ? { type: "bead", sizeId: beadSizeId } : { type: "spacer" };
+          type === "bead"
+            ? { type: "bead", sizeId: beadSizeId }
+            : { type: "spacer", assetKey };
         if (!canAddManualItem(candidate)) {
           return false;
         }
@@ -888,7 +1095,9 @@ export const BeedsProvider = ({ children }) => {
         id: nextId,
         type,
         assetKey,
-        ...(type === "bead" ? { sizeId: beadSizeId } : {}),
+        ...(type === "bead" || (type === "spacer" && isRoundSpacerSku(assetKey))
+          ? { sizeId: beadSizeId }
+          : {}),
       };
       if (type === "charm") {
         const ringGap = computeCharmRingGapForInsert(
@@ -944,6 +1153,9 @@ export const BeedsProvider = ({ children }) => {
       if (isManualMode) {
         return false;
       }
+      if (type === "bead" && !isBeadSizeSupported(assetKey, beadSizeId)) {
+        return false;
+      }
 
       if (type === "charm") {
         if (!canAddCharm()) {
@@ -951,7 +1163,9 @@ export const BeedsProvider = ({ children }) => {
         }
       } else {
         const candidate =
-          type === "bead" ? { type: "bead", sizeId: beadSizeId } : { type: "spacer" };
+          type === "bead"
+            ? { type: "bead", sizeId: beadSizeId }
+            : { type: "spacer", assetKey };
         if (!canAddPresetItem(candidate)) {
           return false;
         }
@@ -962,7 +1176,9 @@ export const BeedsProvider = ({ children }) => {
         id: nextId,
         type,
         assetKey,
-        ...(type === "bead" ? { sizeId: beadSizeId } : {}),
+        ...(type === "bead" || (type === "spacer" && isRoundSpacerSku(assetKey))
+          ? { sizeId: beadSizeId }
+          : {}),
       };
       if (type === "charm") {
         const ringGap = computeCharmRingGapForInsert(
@@ -1068,7 +1284,11 @@ export const BeedsProvider = ({ children }) => {
       const segmentCount = getCharmPlacementSegmentCount(pattern);
       const occupied = getCharmOccupiedGaps(pattern, charmId);
       const normalizedGap = normalizeCharmGapIndex(ringGap, segmentCount);
-      if (!isValidCharmGap(normalizedGap, segmentCount, occupied, segmentEntries)) {
+      if (
+        !isValidCharmGap(normalizedGap, segmentCount, occupied, segmentEntries, {
+          charmAssets: getCharmAssetsFromItems(pattern),
+        })
+      ) {
         return;
       }
 
@@ -1259,9 +1479,46 @@ export const BeedsProvider = ({ children }) => {
     [isManualMode, presetPatternFits, sizeId, presetSlotItems, recordDesignUndoPoint]
   );
 
+  const applyPresetBeadSizeChange = useCallback(
+    (beadSizeId, assetKey = selectedBeadKey) => {
+      if (isManualMode || !canChangePresetBeadSize(beadSizeId, assetKey)) {
+        return false;
+      }
+
+      const { fill, items } = buildPresetReseedAtBeadSize(beadSizeId);
+      const next = items.map((item) =>
+        item.type === "bead" ? { ...item, assetKey, sizeId: beadSizeId } : item
+      );
+
+      if (!presetSlotItemsFitAtSize(next, fill.layoutRingRadius, beadSizeId)) {
+        return false;
+      }
+
+      recordDesignUndoPoint();
+      presetSlotSeedRef.current = patternSeedFromPreset(fill.pattern);
+      setSizeId(beadSizeId);
+      setPresetSlotItems(next);
+      setSelectedBeadKey(assetKey);
+      playBeadMoveSound();
+      return true;
+    },
+    [
+      isManualMode,
+      canChangePresetBeadSize,
+      buildPresetReseedAtBeadSize,
+      selectedBeadKey,
+      recordDesignUndoPoint,
+    ]
+  );
+
   const applySpacerToAllPresetSpacerSlots = useCallback(
     (assetKey, options = {}) => {
-      const items = isManualMode ? manualItems : presetSlotItems;
+      const items =
+        !isManualMode && presetSlotItems.length === 0
+          ? slotItemsFromPattern(presetFill.pattern, sizeId, createManualItemId)
+          : isManualMode
+            ? manualItems
+            : presetSlotItems;
       if (!items.some((item) => item.type === "spacer")) {
         return false;
       }
@@ -1311,6 +1568,7 @@ export const BeedsProvider = ({ children }) => {
       isManualMode,
       manualItems,
       presetSlotItems,
+      presetFill.pattern,
       presetPatternFits,
       slotItemsFitCapacity,
       recordDesignUndoPoint,
@@ -1369,7 +1627,8 @@ export const BeedsProvider = ({ children }) => {
         index < 0 ||
         index >= manualItems.length ||
         manualItems[index]?.type !== "bead" ||
-        manualItems[index]?.sizeId === nextSizeId
+        manualItems[index]?.sizeId === nextSizeId ||
+        !isBeadSizeSupported(manualItems[index]?.assetKey, nextSizeId)
       ) {
         return;
       }
@@ -1401,9 +1660,23 @@ export const BeedsProvider = ({ children }) => {
         recordUndo = true,
         playSound = true,
         flyIn = true,
+        // A shuffle only permutes variants already on the string. Its final
+        // composition therefore has the same capacity as the starting one,
+        // even though a single in-progress swap can briefly add one large bead
+        // and fail the normal capacity check on a tightly filled bracelet.
+        skipCapacityCheck = false,
       } = {}
     ) => {
-      const items = isManualMode ? manualItems : presetSlotItems;
+      if (type === "bead" && !isBeadSizeSupported(assetKey, beadSizeId)) {
+        return false;
+      }
+
+      const items =
+        !isManualMode && presetSlotItems.length === 0
+          ? slotItemsFromPattern(presetFill.pattern, sizeId, createManualItemId)
+          : isManualMode
+            ? manualItems
+            : presetSlotItems;
       const replacement = buildCustomizeSlotReplacement(items, index, {
         type,
         assetKey,
@@ -1414,7 +1687,10 @@ export const BeedsProvider = ({ children }) => {
         return false;
       }
 
+      const isSpacerSwap = items[index]?.type === "spacer" && type === "spacer";
       if (
+        !skipCapacityCheck &&
+        !isSpacerSwap &&
         !slotItemsFitCapacity(replacement.candidate, {
           skipCharmCapacity: replacement.touchesCharm,
         })
@@ -1456,6 +1732,7 @@ export const BeedsProvider = ({ children }) => {
       isManualMode,
       manualItems,
       presetSlotItems,
+      presetFill.pattern,
       sizeId,
       slotItemsFitCapacity,
       queueFlyInAnimation,
@@ -1488,6 +1765,62 @@ export const BeedsProvider = ({ children }) => {
   const removeLastManualItem = useCallback(() => {
     setManualItems((items) => items.slice(0, -1));
   }, []);
+
+  const selectSlotIndex = useCallback(
+    (index) => {
+      if (index == null) {
+        setActiveSlotIndex(null);
+        return;
+      }
+      let items = isManualMode ? manualItems : presetSlotItems;
+      if (!isManualMode && items.length === 0 && presetFill?.pattern?.length > 0) {
+        items = slotItemsFromPattern(presetFill.pattern, sizeId, createManualItemId);
+        setPresetSlotItems(items);
+      }
+      if (index >= 0 && index < items.length) {
+        setActiveSlotIndex(index);
+        const targetItem = items[index];
+        if (targetItem?.type === "bead") {
+          setCustomizeTab("beads");
+        } else if (targetItem?.type === "spacer") {
+          const spacerKey = targetItem.assetKey || targetItem.asset?.key;
+          if (isRoundSpacerSku(spacerKey)) {
+            setCustomizeTab("metalic-beads");
+          } else {
+            setCustomizeTab("spacers");
+          }
+        } else if (targetItem?.type === "charm") {
+          setCustomizeTab("charms");
+        }
+      }
+    },
+    [isManualMode, manualItems, presetSlotItems, presetFill, sizeId, setCustomizeTab]
+  );
+
+  const selectSlotById = useCallback(
+    (id) => {
+      if (!id) {
+        setActiveSlotIndex(null);
+        return;
+      }
+      let items = isManualMode ? manualItems : presetSlotItems;
+      if (!isManualMode && items.length === 0 && presetFill?.pattern?.length > 0) {
+        items = slotItemsFromPattern(presetFill.pattern, sizeId, createManualItemId);
+        setPresetSlotItems(items);
+      }
+      let index = items.findIndex((item) => item.id === id);
+      if (index < 0 && pattern?.length > 0) {
+        const patternIdx = pattern.findIndex((p) => p.id === id);
+        if (patternIdx >= 0 && patternIdx < items.length) {
+          index = patternIdx;
+        }
+      }
+      if (index >= 0) {
+        selectSlotIndex(index);
+      }
+    },
+    [isManualMode, manualItems, presetSlotItems, presetFill, sizeId, pattern, selectSlotIndex]
+  );
 
   /**
    * The whole charm set moves in one write: gaps hold a single charm each, so applying a
@@ -1569,10 +1902,10 @@ export const BeedsProvider = ({ children }) => {
   }, [isManualMode, isManualRandomizing, manualItems]);
 
   /**
-   * Randomize plays on the ring itself: charms re-deal across the gaps, then every bead,
-   * spacer and charm swaps its asset in place, staggered, instead of flying in from the
-   * picker. Refs keep the latest slot writer without re-running this effect when
-   * manualItems changes mid-sequence.
+   * Randomize plays on the ring itself: charms re-deal across the gaps while preserving
+   * their selected artwork, then beads and spacers swap assets in place, staggered,
+   * instead of flying in from the picker. Refs keep the latest slot writer without
+   * re-running this effect when manualItems changes mid-sequence.
    */
   useEffect(() => {
     const session = manualRandomizeSessionRef.current;
@@ -1619,6 +1952,7 @@ export const BeedsProvider = ({ children }) => {
         recordUndo: false,
         playSound,
         flyIn: false,
+        skipCapacityCheck: true,
       });
 
       if (!ok) {
@@ -1662,6 +1996,7 @@ export const BeedsProvider = ({ children }) => {
 
       cancelManualRandomize();
       setFlyInAnimation(null);
+      setActiveSlotIndex(null);
       setStyleId(nextStyleId);
 
       // Charms follow the shopper rather than the style: only the strung beads and spacers
@@ -1723,6 +2058,7 @@ export const BeedsProvider = ({ children }) => {
   const resetConfiguration = () => {
     styleDesignCacheRef.current.clear();
     styleUndoStacksRef.current.clear();
+    lengthStyleSnapshotRef.current = { lengthId: RESET_LENGTH_ID, styleId: RESET_STYLE_ID };
     bumpUndoRevision();
     presetSlotSeedRef.current = "";
     setJewelryCategory("bead-bracelet");
@@ -1734,7 +2070,9 @@ export const BeedsProvider = ({ children }) => {
     setSelectedBeadKey(DEFAULT_BEAD_KEY);
     setSelectedSeparatorKey(DEFAULT_SEPARATOR_KEY);
     setSelectedCharmKey(DEFAULT_CHARM_KEY);
+    setThreadColorId(RESET_THREAD_COLOR_ID);
     cancelManualRandomize();
+    setActiveSlotIndex(null);
     setManualItems([]);
     setPresetSlotItems([]);
     setFlyInAnimation(null);
@@ -1749,11 +2087,19 @@ export const BeedsProvider = ({ children }) => {
     lengthId,
     setLengthId,
     selectLengthId,
+    threadColorId,
+    setThreadColorId,
+    selectedThreadColor,
+    threadColors: THREAD_COLORS,
     canUndoDesign,
     undoDesignStep,
     displayLengthLabel,
     dynamicLengthInches,
     isFreeSizeLayout,
+    activeSlotIndex,
+    setActiveSlotIndex,
+    selectSlotIndex,
+    selectSlotById,
     customizeTab,
     setCustomizeTab,
     collectionId,
@@ -1790,6 +2136,8 @@ export const BeedsProvider = ({ children }) => {
     canAddBead,
     canReplaceCustomizeSlotAt,
     canApplyBeadSizeToAllPresetSlots,
+    canChangePresetBeadSize,
+    applyPresetBeadSizeChange,
     canAddSpacer,
     canAddCharm,
     charmCount,

@@ -22,18 +22,38 @@ export function BeadsFlyInBeadGhost({
       overflow="visible"
       aria-hidden="true"
     >
-      <BeadGemDefs idPrefix={idPrefix} />
-      <BeadGemPortableStack
-        href={ghost.asset.image}
-        width={w}
-        height={h}
-        rotation={0}
-        shadowGroupRef={shadowGroupRef}
-        faceScaleRef={faceScaleRef}
-        faceGroupRef={faceGroupRef}
-        shineWrapRef={shineWrapRef}
-        idPrefix={idPrefix}
-      />
+      {ghost.asset?.topViewLabel ? (
+        <g>
+          <circle r={Math.min(w, h) / 2} fill="#bdbdbd" stroke="#202020" strokeWidth={1.2} />
+          <text
+            x="0"
+            y="0"
+            textAnchor="middle"
+            dominantBaseline="central"
+            fill="#171717"
+            fontSize={Math.max(10, Math.min(w, h) * 0.45)}
+            fontWeight="700"
+            fontFamily="Arial, sans-serif"
+          >
+            {ghost.asset.topViewLabel}
+          </text>
+        </g>
+      ) : (
+        <>
+          <BeadGemDefs idPrefix={idPrefix} />
+          <BeadGemPortableStack
+            href={ghost.asset.image}
+            width={w}
+            height={h}
+            rotation={0}
+            shadowGroupRef={shadowGroupRef}
+            faceScaleRef={faceScaleRef}
+            faceGroupRef={faceGroupRef}
+            shineWrapRef={shineWrapRef}
+            idPrefix={idPrefix}
+          />
+        </>
+      )}
     </svg>
   );
 }

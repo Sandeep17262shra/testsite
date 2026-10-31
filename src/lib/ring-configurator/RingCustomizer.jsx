@@ -1,4 +1,5 @@
 import React, { forwardRef, useContext, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { useClickSound } from "./hooks/useClickSound";
 import { CameraViewContext } from "./contexts/CameraViewContext";
 import { DiamondContext } from "./contexts/DiamondContext";
 import { LoaderContext } from "./contexts/LoaderContext";
@@ -8,6 +9,12 @@ import { ShareContext } from "./contexts/ShareContext";
 import initialPrice from "./data/data.json";
 import apiData from "./data/api-data.json";
 import { getTheme3Sections } from "./configuratorConfig";
+import { useUiText } from "./useUiText";
+import {
+  GUIDE_LABEL_KEYS,
+  engravingFontKey,
+  stoneCategoryKey,
+} from "./uiTranslations";
 import { calculateFinalRingPrice } from "./utility/calculateFInalRingDiamondPrice";
 import { Base64 } from "js-base64";
 import {
@@ -20,11 +27,16 @@ import {
   getColoredDiamondExtraPrice,
   getGemstoneExtraPrice,
   getMatchingBandPrice,
+  getSideStonePrice,
+  getBandWidthPrice,
+  getSideStoneCarat,
   getAvailableCaratSizes,
   getDefaultCarat,
 } from "./utility/storePriceHelper";
-import { getCurrencyRate, getFancyPriceFactor, getRingSizeType, getSummaryTaxLabel, normalizeRingSizeSystem } from "./utility/Parentconfig";
-import { isDiamondWiseParentUrl } from "./priceConfig";
+import { useStoreContext, useStorefrontControls } from "./contexts/StoreContext";
+import { ringSizeSystemForStorefront } from "./ringSizes";
+import { getCurrencyRate, getFancyPriceFactor, getRingSizeType, normalizeRingSizeSystem } from "./utility/Parentconfig";
+import { isDiamondWiseParentUrl, isJDemo364ParentUrl } from "./priceConfig";
 import { FANCY_BASE_COLORS } from "./data/fancyDiamondColors";
 import {
   DIAMONDWISE_DESIGN_NONE,
@@ -38,6 +50,7 @@ import {
   isMatchingBandCompatible,
   isShapeCompatible,
 } from "./utility/shankCompatibility";
+import { getMetalProductId } from "./data/productIds";
 
 const GOLD_COLORS = {
   white: "#f1f1ef",
@@ -62,7 +75,7 @@ const styleOptions = [
   { label: "Channel", shank: "CHANNEL", sideSetting: "PLAIN", image: "/images/basic-bands/channel.webp?v3" }, // sideSetting was "CHANNEL" (separate diamond-overlay layer) - changed to "PLAIN" for the same reason as Pave above: underlying GLB now IS CHANNEL-2's single unified mesh
   { label: "Cathedral", shank: "CATHEDRAL", sideSetting: "PLAIN", image: "/images/basic-bands/cathedral.webp?v3" },
   { label: "Split", shank: "SPLIT", sideSetting: "PLAIN", image: "/images/basic-bands/split.webp?v3" },
-  { label: "Twisted", shank: "TWISTED", sideSetting: "PLAIN", image: "/images/basic-bands/twisted.webp?v3" },
+  { label: "Twisted", shank: "TWISTED", sideSetting: "PLAIN", image: "/images/basic-bands/twisted.webp?v5" },
   { label: "Wide Plain", shank: "WIDE-PLAIN", sideSetting: "PLAIN", image: "/images/basic-bands/wide-plain.webp?v3" },
 
   // New default-only shanks (see priceConfig.js STORE_AVAILABLE_OPTIONS.default).
@@ -78,11 +91,14 @@ const styleOptions = [
   // Channel II / Plate Prong II removed from picker (2026-09-18): their geometry
   // is now what Channel/Pave use directly, so keeping them as separate options
   // would just duplicate Channel/Pave. Ids/assets left untouched on disk.
-  { label: "Twisted II", shank: "TWISTED-2", sideSetting: "PLAIN", image: "/images/basic-bands/twisted-2.webp?v3" },
-  { label: "Fluted", shank: "FLUTED", sideSetting: "PLAIN", image: "/images/basic-bands/fluted.webp?v3" },
-  { label: "Braided", shank: "BRAIDED", sideSetting: "PLAIN", image: "/images/basic-bands/braided.webp?v3" },
+  { label: "Twisted II", shank: "TWISTED-2", sideSetting: "PLAIN", image: "/images/basic-bands/twisted2.webp?v4" },
+  { label: "Fluted", shank: "FLUTED", sideSetting: "PLAIN", image: "/images/basic-bands/fluted.webp?v4" },
+  { label: "Braided", shank: "BRAIDED", sideSetting: "PLAIN", image: "/images/basic-bands/braided.webp?v4" },
   { label: "Cathedral Stone", shank: "CATHEDRAL-SIDE-STONE", sideSetting: "PLAIN", image: "/images/basic-bands/cathedral-side-stone.webp?v3" },
   { label: "Side Bezel Stones", shank: "SIDE-BEZEL-STONES", sideSetting: "PLAIN", image: "/images/basic-bands/side-bezel-stones.webp?v4" },
+  { label: "Tapered Baguette", shank: "BAGUETTE-SIDE-STONE", sideSetting: "PLAIN", image: "/images/basic-bands/tapered-baguette.webp" },
+  { label: "Pear Side Stone", shank: "PEAR-SIDE-STONE", sideSetting: "PLAIN", image: "/images/basic-bands/pear-sidestone.webp" },
+  { label: "Half Moon", shank: "HALF-MOON-SIDE-STONE", sideSetting: "PLAIN", image: "/images/basic-bands/half-moon.webp?v2" },
 ];
 
 const SHAPE_SPRITE_POSITIONS = {
@@ -117,18 +133,25 @@ const shapeOptions = [
   { label: "Moval", value: "moval", image: "/images/shape-Moval.webp?v=3", imageClassName: "moval-shape-icon" },
 ];
 
+export const TWO_STONE_SHAPES = new Set([
+  "round", "pear", "princess", "emerald", "cushion", "marquise", "oval", "heart", "asscher", "radiant"
+]);
+
 const caratOptions = [0.25, 0.50, 0.75, 1, 1.25, 1.50, 1.75, 2, 2.25, 2.50, 2.75, 3, 3.25, 3.50, 3.75, 4, 4.25, 4.50, 4.75, 5,];
+const BAND_WIDTH_SHANKS = new Set(["WIDE-PLAIN", "CATHEDRAL", "SIDE-BEZEL-STONES"]);
 
 const settingOptions = [
-  { label: "4 Prongs", head: "4-PRONG", headStyle: "plain", image: "/images/basic-heads/4-prongs.webp?v2" },
-  { label: "Halo", head: "HALO", headStyle: "halo", image: "/images/basic-heads/single-halo.webp?v2" },
-  { label: "6 Prongs", head: "6-PRONG", headStyle: "plain", image: "/images/basic-heads/6-prongs.webp?v2" },
-  { label: "Double Halo", head: "DOUBLE-HALO", headStyle: "double-halo", image: "/images/basic-heads/double-halo.webp" },
-  { label: "Bezel", head: "BEZEL", headStyle: "bezel", image: "/images/basic-heads/bezel.webp?v2" },
-  { label: "Three Stone", head: "OVAL", headStyle: "three-stone", image: "/images/basic-heads/three-stone.webp?v2" },
-  { label: "Hidden Halo", head: "HIDDEN-HALO", headStyle: "hidden-halo", image: "/images/basic-heads/hidden-halo.webp?v2" },
-  { label: "Two Stone", head: "TWO-STONE", headStyle: "two-stone", image: "/images/basic-heads/two-stone.webp" },
-  { label: "Tulip", head: "TULIP", headStyle: "tulip", image: "/images/basic-heads/tulip.webp" },
+  { label: "4 Prongs", head: "4-PRONG", headStyle: "plain", image: "/images/basic-heads/4-prongs.webp?v5" },
+  { label: "Halo", head: "HALO", headStyle: "halo", image: "/images/basic-heads/single-halo.webp?v5" },
+  { label: "6 Prongs", head: "6-PRONG", headStyle: "plain", image: "/images/basic-heads/6-prongs.webp?v5" },
+  { label: "Double Halo", head: "DOUBLE-HALO", headStyle: "double-halo", image: "/images/basic-heads/double-halo.webp?v5" },
+  { label: "Bezel", head: "BEZEL", headStyle: "bezel", image: "/images/basic-heads/bezel.webp?v5" },
+  { label: "Three Stone", head: "OVAL", headStyle: "three-stone", image: "/images/basic-heads/three-stone.webp?v5" },
+  { label: "Hidden Halo", head: "HIDDEN-HALO", headStyle: "hidden-halo", image: "/images/basic-heads/hidden-halo.webp?v5" },
+  { label: "Hidden Halo 2", head: "HIDDEN-HALO-2", headStyle: "hidden-halo-2", image: "/images/basic-heads/hidden-halo-2.webp?v5" },
+  { label: "Two Stone", head: "TWO-STONE", headStyle: "two-stone", image: "/images/basic-heads/two-stone.webp?v5" },
+  { label: "Tulip", head: "TULIP", headStyle: "tulip", image: "/images/basic-heads/tulip.webp?v5" },
+  { label: "Claw Set", head: "CLAW-SET", headStyle: "claw-set", image: "/images/basic-heads/claw-set.webp?v5" },
 ];
 
 const metalOptions = [
@@ -198,6 +221,14 @@ const stoneTypeOptions = [
   { label: "Gemstones", activeTab: "Fancy-Gemstone", colorType: "fancygem", diamondOrigin: "Lab" },
 ];
 const fancyDiamondOptions = ["Yellow", "Blue", "Red", "Green", "Orange", "Pink", "Brown", "Purple", "Black", "Peach"];
+// Keep the catalogue values stable for pricing, rendering, and saved configs,
+// while presenting the customer-facing diamond names in the configurator.
+const FANCY_DIAMOND_DISPLAY_NAMES = {
+  Orange: "Cognac",
+  Brown: "Chocolate",
+  Peach: "Champagne",
+};
+const formatFancyDiamondLabel = (color) => FANCY_DIAMOND_DISPLAY_NAMES[color] || color;
 // Display order of the colored diamond swatches. OptionRow switches to its
 // two-line grid at COLORED_DIAMOND_MAX_ONE_ROW swatches; that grid fills
 // column by column, so the two rows are interleaved to read left to right.
@@ -439,21 +470,47 @@ const TULIP_INCOMPATIBLE_SHANKS = ["CATHEDRAL", "SPLIT", "TWISTED"];
 // into a single unified mesh with the metal (see Ring.jsx NEW_DEFAULT_SHANKS) —
 // there is no separate hidden-halo ring of stones under the head the way the
 // standard heads expect for a double halo, so it is disabled for all of them.
-const DOUBLE_HALO_INCOMPATIBLE_SHANKS = ["FRENCH-PAVE", "PAVE-STONES", "8-STONES", "MULTI-ROW", "TWISTED-2", "FLUTED", "BRAIDED", "CATHEDRAL-SIDE-STONE", "SIDE-BEZEL-STONES"];
-const MATCHING_BAND_COMPATIBLE_SHANKS = ["PLAIN", "CATHEDRAL", "KNIFE-EDGE", "SPLIT", "CHANNEL", "PLATE-PRONG", "FRENCH-PAVE", "PAVE-STONES", "8-STONES", "MULTI-ROW", "TWISTED-2", "FLUTED", "BRAIDED", "CATHEDRAL-SIDE-STONE", "SIDE-BEZEL-STONES"];
-// These 11 new default-only shanks (see priceConfig.js STORE_AVAILABLE_OPTIONS.default)
-// have their diamonds/texture baked directly into the shank mesh itself, with
-// no flat, engravable inner-band surface the way PLAIN/CHANNEL/etc. do — so
-// engraving is disabled for all of them, the same way it already is for
-// DiamondWise presets (fixed setting geometry).
-const ENGRAVING_INCOMPATIBLE_SHANKS = ["FRENCH-PAVE", "PAVE-STONES", "8-STONES", "MULTI-ROW", "TWISTED-2", "FLUTED", "BRAIDED", "CATHEDRAL-SIDE-STONE", "SIDE-BEZEL-STONES"];
-const THREE_STONE_SHAPE_TO_HEAD = {
-  round: { head: "HALF-MOON", threestone: "half-moon" },
-  princess: { head: "TRAPEZOID", threestone: "trapezoid" },
-  oval: { head: "OVAL", threestone: "oval" },
-  pear: { head: "PEAR", threestone: "pear" },
-  emerald: { head: "BAGUETTE", threestone: "baguette" },
-};
+const DOUBLE_HALO_INCOMPATIBLE_SHANKS = ["FRENCH-PAVE", "PAVE-STONES", "8-STONES", "MULTI-ROW", "TWISTED-2", "FLUTED", "BRAIDED", "CATHEDRAL-SIDE-STONE", "SIDE-BEZEL-STONES", "BAGUETTE-SIDE-STONE", "PEAR-SIDE-STONE", "HALF-MOON-SIDE-STONE", "BAGUETTE", "PEAR"];
+const MATCHING_BAND_COMPATIBLE_SHANKS = ["PLAIN", "CATHEDRAL", "KNIFE-EDGE", "SPLIT", "CHANNEL", "PLATE-PRONG", "FRENCH-PAVE", "PAVE-STONES", "8-STONES", "MULTI-ROW", "TWISTED-2", "FLUTED", "BRAIDED", "CATHEDRAL-SIDE-STONE", "SIDE-BEZEL-STONES", "BAGUETTE-SIDE-STONE", "PEAR-SIDE-STONE", "HALF-MOON-SIDE-STONE", "BAGUETTE", "PEAR"];
+// All shanks support the engraving feature.
+const ENGRAVING_INCOMPATIBLE_SHANKS = [];
+export const THREE_STONE_SIDE_OPTIONS = [
+  { label: "Oval",     head: "OVAL",     threestone: "oval",     spritePosition: SHAPE_SPRITE_POSITIONS.Oval },
+  { label: "Round",   head: "ROUND",    threestone: "round",    spritePosition: SHAPE_SPRITE_POSITIONS.Round },
+  { label: "Pear",    head: "PEAR",     threestone: "pear",     spritePosition: SHAPE_SPRITE_POSITIONS.Pear },
+  { label: "Emerald", head: "BAGUETTE", threestone: "baguette", spritePosition: SHAPE_SPRITE_POSITIONS.Emerald },
+  { label: "Princess", head: "TRAPEZOID", threestone: "trapezoid", spritePosition: SHAPE_SPRITE_POSITIONS.Princess },
+];
+
+const SIDE_STONE_COLOR_OPTIONS = [
+  { label: "Colorless", value: "colorless", color: "#FFFFFF", spritePosition: SPRITE_POSITIONS.moissanite },
+  // These mirror the gemstone names and material colours. They deliberately
+  // are not filtered by store configuration: every colour is available for a
+  // three-stone ring's side stones.
+  { label: "Blue Sapphire", value: "blue-sapphire", color: "#0047AB", spritePosition: SPRITE_POSITIONS["blue-sapphire"] },
+  { label: "Green Emerald", value: "green-emerald", color: "#4AE2A1", spritePosition: SPRITE_POSITIONS["green-emerald"] },
+  { label: "Green Sapphire", value: "green-sapphire", color: "#00AB55", spritePosition: SPRITE_POSITIONS["green-sapphire"] },
+  { label: "Moissanite", value: "moissanite", color: "#FFFFFF", spritePosition: SPRITE_POSITIONS.moissanite },
+  { label: "Pink Sapphire", value: "pink-sapphire", color: "#D1008F", spritePosition: SPRITE_POSITIONS["pink-sapphire"] },
+  { label: "Red Ruby", value: "red-ruby", color: "#B71C1C", spritePosition: SPRITE_POSITIONS["red-ruby"] },
+  { label: "Yellow Sapphire", value: "yellow-sapphire", color: "#FFA94D", spritePosition: SPRITE_POSITIONS["yellow-sapphire"] },
+];
+
+// Two-stone left/right stone shape options — one entry per available GLB.
+export const TWO_STONE_LEFT_OPTIONS = [
+  { label: "Round",    value: "round",    spritePosition: SHAPE_SPRITE_POSITIONS.Round },
+  { label: "Pear",     value: "pear",     spritePosition: SHAPE_SPRITE_POSITIONS.Pear },
+  { label: "Oval",     value: "oval",     spritePosition: SHAPE_SPRITE_POSITIONS.Oval },
+  { label: "Cushion",  value: "cushion",  spritePosition: SHAPE_SPRITE_POSITIONS.Cushion },
+  { label: "Emerald",  value: "emerald",  spritePosition: SHAPE_SPRITE_POSITIONS.Emerald },
+  { label: "Princess", value: "princess", spritePosition: SHAPE_SPRITE_POSITIONS.Princess },
+  { label: "Marquise", value: "marquise", spritePosition: SHAPE_SPRITE_POSITIONS.Marquise },
+  { label: "Heart",    value: "heart",    spritePosition: SHAPE_SPRITE_POSITIONS.Heart },
+  { label: "Asscher",  value: "asscher",  spritePosition: SHAPE_SPRITE_POSITIONS.Asscher },
+  { label: "Radiant",  value: "radiant",  spritePosition: SHAPE_SPRITE_POSITIONS.Radiant },
+];
+
+export const TWO_STONE_RIGHT_OPTIONS = TWO_STONE_LEFT_OPTIONS;
 
 // Hidden Halo now has its own per-shape head model for every stone shape
 // (see objects/Head.jsx shapeDataForHiddenHalo), so it is no longer round-only.
@@ -470,6 +527,7 @@ const MATCHING_BAND_STYLE_LABELS = {
 
 const THEME3_GUIDE_META = {
   "center-stone-shape": { section: "shape", label: "Stone" },
+  "side-stone-shape": { section: "shape", label: "Side Stone" },
   "stone-type": { section: "shape", label: "Category" },
   "target-carat": { section: "shape", label: "Carat" },
   "cut-clarity": { section: "shape", label: "Cut / Clarity" },
@@ -519,12 +577,14 @@ const THEME3_STONE_GUIDE_FEATURES = new Set([
   "gemstone",
 ]);
 
-const getTheme3GuideMeta = (feature, fallbackSection = "") => {
+const getTheme3GuideMeta = (feature, fallbackSection = "", translate) => {
   const meta = THEME3_GUIDE_META[feature] || {};
+  const labelKey = GUIDE_LABEL_KEYS[feature];
+  const translatedLabel = labelKey && translate ? translate(labelKey) : "";
   return {
     feature,
     section: meta.section || fallbackSection || feature,
-    label: meta.label || String(feature || "").replace(/-/g, " "),
+    label: translatedLabel || meta.label || String(feature || "").replace(/-/g, " "),
   };
 };
 
@@ -575,10 +635,11 @@ const getMatchingBandStyleLabel = (value) =>
     .replace(/\b\w/g, (char) => char.toUpperCase());
 
 function OptionRow({ title, children, guide, className, price, parent, hovered, maxOneRow, titleExtra, showHoverDelta = true }) {
+  const t = useUiText();
   const trackRef = useRef(null);
   const dragStateRef = useRef(null);
   const suppressClickRef = useRef(false);
-  const guideMeta = guide ? getTheme3GuideMeta(guide) : null;
+  const guideMeta = guide ? getTheme3GuideMeta(guide, "", t) : null;
 
   useEffect(() => {
     const track = trackRef.current;
@@ -651,10 +712,10 @@ function OptionRow({ title, children, guide, className, price, parent, hovered, 
       data-theme3-guide-label={guideMeta?.label}
     >
       <div className="gb-option-title" style={{ justifyContent: 'space-between' }}>
-        <span style={T3_SUBHEADER_STYLE}>{title}</span>
+        <span className="theme3-section-heading" style={T3_SUBHEADER_STYLE}>{title}</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           {showHoverDelta && hovered && hovered.delta !== 0 && (
-            <span className="gb-option-title-price" style={{ fontSize: '12px', fontWeight: 700, color: '#303030' }}>
+            <span className="gb-option-title-price theme3-section-heading">
               {hovered.delta > 0 ? '+' : ''}{formatStoreCurrency(hovered.delta, parent)}
             </span>
           )}
@@ -680,9 +741,9 @@ function OptionRow({ title, children, guide, className, price, parent, hovered, 
 function Theme3SectionHeader({ step, total, title, sectionId, isActive = false, price, parent }) {
   return (
     <header className={`theme3-option-section-header${isActive ? " is-active" : ""}`}>
-      <h3 style={T3_SECTION_STYLE}>{title}</h3>
+      <h3 className="theme3-section-heading" style={T3_SECTION_STYLE}>{title}</h3>
       {price != null && price !== 0 && (
-        <span className="theme3-section-header-price" style={T3_SECTION_STYLE}>
+        <span className="theme3-section-header-price theme3-section-heading">
           {formatStoreCurrency(price, parent)}
         </span>
       )}
@@ -690,11 +751,11 @@ function Theme3SectionHeader({ step, total, title, sectionId, isActive = false, 
   );
 }
 
-function CardOption({ active, label, image, imageClassName = "", spritePosition, onClick, disabled = false, className = "", onMouseEnter, onMouseLeave, badge = null, delta = null, parent = null }) {
+function CardOption({ active, label, image, imageClassName = "", spritePosition, onClick, disabled = false, className = "", onMouseEnter, onMouseLeave, badge = null, delta = null, parent = null, bandWidthChoices = null }) {
   return (
     <button
       type="button"
-      className={`gb-card-option ${active ? "active" : ""} ${className}`}
+      className={`gb-card-option ${active ? "active" : ""} ${bandWidthChoices?.length ? "gb-card-option--with-band-width" : ""} ${className}`}
       onClick={onClick}
       disabled={disabled}
       onMouseEnter={onMouseEnter}
@@ -721,12 +782,53 @@ function CardOption({ active, label, image, imageClassName = "", spritePosition,
       ) : image ? (
         <img className={imageClassName} src={image} alt="" />
       ) : null}
-      <span style={{ ...T3_BODY_STYLE, fontWeight: 600 }}>{label}</span>
-      <span style={{ display: "block", fontSize: "10px", fontWeight: 400, color: "#555", lineHeight: 1.2, marginTop: "2px" }}>
-        {!active && delta !== null && delta !== 0 ? `${delta > 0 ? "+" : ""}${formatStoreCurrency(delta, parent)}` : ""}
-      </span>
+      <span className="theme3-option-box-label" style={{ fontWeight: 600 }}>{label}</span>
+      {!bandWidthChoices?.length && (
+        <span
+          className="theme3-option-box-price"
+          style={{ display: "block", fontSize: "10px", fontWeight: 400, lineHeight: 1.2, marginTop: "2px" }}
+        >
+          {!active && delta !== null && delta !== 0 ? `${delta > 0 ? "+" : ""}${formatStoreCurrency(delta, parent)}` : ""}
+        </span>
+      )}
+      {bandWidthChoices?.length ? (
+        <span className="gb-card-band-widths" role="radiogroup" aria-label={`Band width for ${label}`}>
+          {bandWidthChoices.map(({ width, selected, onSelect }) => (
+            <span
+              key={width}
+              className={`gb-card-band-width ${selected ? "active" : ""}`}
+              role="radio"
+              aria-checked={selected}
+              tabIndex={0}
+              onClick={(event) => {
+                event.stopPropagation();
+                onSelect();
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                event.stopPropagation();
+                onSelect();
+              }}
+            >
+              {width}
+            </span>
+          ))}
+        </span>
+      ) : null}
     </button>
   );
+}
+
+function renderOptionBoxLabel(label) {
+  if (typeof label === "string" || typeof label === "number") {
+    return <span className="theme3-option-box-label">{label}</span>;
+  }
+  const className = label?.props?.className;
+  if (typeof className === "string" && className.includes("theme3-option-box-label")) {
+    return label;
+  }
+  return <span className="theme3-option-box-label">{label}</span>;
 }
 
 function TextOption({ active, label, onClick, disabled = false, onMouseEnter, onMouseLeave, className, delta = null, parent = null }) {
@@ -736,13 +838,15 @@ function TextOption({ active, label, onClick, disabled = false, onMouseEnter, on
       className={`gb-text-option ${active ? "active" : ""}${className ? ` ${className}` : ""}`}
       onClick={onClick}
       disabled={disabled}
-      style={T3_BODY_STYLE}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      <span>{label}</span>
+      {renderOptionBoxLabel(label)}
       {delta !== null && delta !== 0 && !active && (
-        <span className="gb-delta-label" style={{ fontWeight: 400 }}>{delta > 0 ? "+" : ""}{formatStoreCurrency(delta, parent)}</span>
+        <span className="gb-delta-label theme3-option-box-price" style={{ fontWeight: 400 }}>
+          {delta > 0 ? "+" : ""}
+          {formatStoreCurrency(delta, parent)}
+        </span>
       )}
     </button>
   );
@@ -755,6 +859,7 @@ function CaratSlider({
   max = caratOptions[caratOptions.length - 1],
   step = 0.25,
 }) {
+  const t = useUiText();
   // Build the discrete stops between min/max at the given step or use provided stops
   const stops = useMemo(() => {
     if (Array.isArray(propStops) && propStops.length > 0) {
@@ -825,7 +930,7 @@ function CaratSlider({
           step={1}
           value={activeIndex}
           onChange={(event) => onChange(stops[Math.round(Number(event.target.value))])}
-          aria-label="Carat"
+          aria-label={t("option.carat")}
         />
       </div>
     </div>
@@ -833,7 +938,8 @@ function CaratSlider({
 }
 
 function CaratOptionRow({ title, guide, value, onChange, stops, min, max, step }) {
-  const guideMeta = guide ? getTheme3GuideMeta(guide) : null;
+  const t = useUiText();
+  const guideMeta = guide ? getTheme3GuideMeta(guide, "", t) : null;
   const displayVal = value !== undefined && value !== null ? `${Number(value).toFixed(2)} Ct` : "";
 
   return (
@@ -844,8 +950,8 @@ function CaratOptionRow({ title, guide, value, onChange, stops, min, max, step }
       data-theme3-guide-label={guideMeta?.label}
     >
       <div className="gb-option-title" style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: '8px', width: '100%' }}>
-        <span style={T3_SUBHEADER_STYLE}>{title}</span>
-        <span style={{ fontWeight: 700, color: '#111', fontSize: '13px', textTransform: 'none', letterSpacing: '-0.01em' }}>{displayVal}</span>
+        <span className="theme3-section-heading" style={T3_SUBHEADER_STYLE}>{title}</span>
+        <span className="theme3-carat-value">{displayVal}</span>
       </div>
       <CaratSlider value={value} onChange={onChange} stops={stops} min={min} max={max} step={step} />
     </section>
@@ -889,9 +995,7 @@ const getRingSizePrice = (parent, sizeMm) => {
 };
 
 const getIntensityPrice = (parent, intensity) => {
-  const index = intensityOptions.indexOf(intensity);
-  const rawPrice = index >= 0 ? 20 * index : 0;
-  return Math.round(rawPrice * getCurrencyRate(parent));
+  return 0;
 };
 
 const formatGemstoneLabel = (value) =>
@@ -904,13 +1008,27 @@ const RingCustomizer = forwardRef(({
   flow = "setting-only",
   activeTheme3Section,
   onTheme3SectionChange,
+  onResetClick,
 }, ref) => {
+  const t = useUiText();
+  const { ringSizes } = useStoreContext();
+  const storefrontControls = useStorefrontControls();
+  const stoneCategoryText = (option) => {
+    const key = stoneCategoryKey(option?.label);
+    return key ? t(key) : (option?.label || t("stone.category.colorlessLab"));
+  };
+  const qualityText = (quality) => quality || "";
+  const engravingFontText = (fontValue, fallback) => {
+    const key = engravingFontKey(fontValue);
+    return key ? t(key) : fallback;
+  };
+  const { playClick } = useClickSound();
   const { parent, currencyCode, setShare, priceConfigVersion } = useContext(ShareContext);
   // The DiamondWise head/shank designs are sample content on every store
   // EXCEPT DiamondWise's own, where they are the real catalogue - so the
   // "Demo Only" corner badge is shown everywhere else and hidden there.
   const isDiamondWiseStore = isDiamondWiseParentUrl(parent);
-  const demoOnlyBadge = isDiamondWiseStore ? null : "Demo Only";
+  const demoOnlyBadge = isDiamondWiseStore ? null : t("shell.demoOnlyBadge");
   const { setCameraView } = useContext(CameraViewContext);
   const { setResetObj } = useContext(LoaderContext);
   const {
@@ -924,6 +1042,7 @@ const RingCustomizer = forwardRef(({
     ringColor,
     headColor,
     bandWidth,
+    setBandWidth,
     styleShape,
     sizeOption,
     ringSize,
@@ -931,6 +1050,10 @@ const RingCustomizer = forwardRef(({
     engravingFont,
     engravingFocus,
     diamondWiseDesignId,
+    weddingBandCoverage,
+    setWeddingBandCoverage,
+    engagementBandCoverage,
+    setEngagementBandCoverage,
     setEngraving,
     setEngravingFont,
     setEngravingFocus,
@@ -948,6 +1071,10 @@ const RingCustomizer = forwardRef(({
     setHeadColor,
     setFinalRingPrice,
     setDiamondWiseDesignId,
+    twoStoneLeft,
+    twoStoneRight,
+    setTwoStoneLeft,
+    setTwoStoneRight,
   } = useContext(RingContext);
   const {
     shape,
@@ -962,6 +1089,7 @@ const RingCustomizer = forwardRef(({
     fancyDiamond,
     fancyDiamondIntensity,
     gemstone,
+    sideStoneColor,
     setShape,
     setDiamondSize,
     setCut,
@@ -974,6 +1102,7 @@ const RingCustomizer = forwardRef(({
     setFancyDiamond,
     setFancyDiamondIntensity,
     setGemstone,
+    setSideStoneColor,
   } = useContext(DiamondContext);
   const {
     shankTotal,
@@ -1025,6 +1154,7 @@ const RingCustomizer = forwardRef(({
   const theme3FooterRef = useRef(null);
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
   const engravingInputRef = useRef(null);
+  const engravingBlockRef = useRef(null);
   const [ringSizeOpen, setRingSizeOpen] = useState(false);
   const ringSizeDropdownRef = useRef(null);
   const isProgrammaticTheme3ScrollRef = useRef(false);
@@ -1070,7 +1200,7 @@ const RingCustomizer = forwardRef(({
     const option = settingOptions.find((opt) => opt.head === ringHead);
     if (option && headStyle !== option.headStyle) {
       setHeadstyle(option.headStyle);
-    } else if (["OVAL", "TRAPEZOID", "HALF-MOON", "PEAR", "BAGUETTE"].includes(ringHead.toUpperCase())) {
+    } else if (["OVAL", "TRAPEZOID", "ROUND", "PEAR", "BAGUETTE"].includes(ringHead.toUpperCase())) {
       if (headStyle !== "three-stone") setHeadstyle("three-stone");
     }
   }, [ringHead, headStyle, setHeadstyle]);
@@ -1108,10 +1238,12 @@ const RingCustomizer = forwardRef(({
       if (option.activeTab === "Fancy-Gemstone") {
         return availableGemstones.length > 0;
       }
-      // Colorless Lab and Colorless Natural tabs are always visible
-      return true;
+      // A colorless origin is selectable only when it has at least one active
+      // carat rule. This prevents Natural from being presented when every
+      // Natural carat is inactive or the origin is absent from the catalogue.
+      return availableDiamondTypes.includes(option.diamondOrigin);
     });
-  }, [availableFancyDiamonds.length, availableGemstones.length]);
+  }, [availableDiamondTypes, availableFancyDiamonds.length, availableGemstones.length]);
 
   const activeStoneTab =
     availableStoneTypeOptions.find((option) => option.activeTab === activeTab && option.diamondOrigin === (selectedQuality?.type || diamondType || "Lab"))?.activeTab ||
@@ -1127,26 +1259,8 @@ const RingCustomizer = forwardRef(({
   )
     ? activeTheme3Section
     : theme3Sections.find((section) => !section.disabled)?.id;
-  const upcomingTheme3Section = theme3Sections
-    .slice(theme3Sections.findIndex((section) => section.id === activeTheme3SectionId) + 1)
-    .find((section) => !section.disabled);
-  // "Choose Head" / "Choose Stone"... only lead the customer through once.
-  // After the last section has been reached the button stays "Add to Cart",
-  // even when scrolling back up (cleared again by Reset).
-  const [hasReachedTheme3FinalStep, setHasReachedTheme3FinalStep] = useState(false);
-  useEffect(() => {
-    if (!upcomingTheme3Section) setHasReachedTheme3FinalStep(true);
-  }, [upcomingTheme3Section]);
-  const nextTheme3Section = hasReachedTheme3FinalStep ? undefined : upcomingTheme3Section;
-  const theme3FooterLabel =
-    nextTheme3Section
-      ? THEME3_SECTION_CTA_LABEL[nextTheme3Section.id]
-      : isAddingTheme3ToCart
-      ? "Checking out..."
-      : "Checkout";
-  const theme3NextStepCopy = nextTheme3Section
-    ? THEME3_NEXT_STEP_COPY[nextTheme3Section.id] || `Choose ${nextTheme3Section.label}`
-    : "Add your ring to cart";
+  const theme3FooterLabel = isAddingTheme3ToCart ? t("cart.addingToCart") : t("cart.addToCart");
+  const theme3NextStepCopy = "Add your ring to cart";
   const selectedDiamondOrigin = selectedQuality?.type || diamondType || "Lab";
   const availableCaratSizes = useMemo(
     () => getAvailableCaratSizes(parent, selectedDiamondOrigin),
@@ -1170,9 +1284,12 @@ const RingCustomizer = forwardRef(({
     return pricedOptions.length > 0 ? pricedOptions : fallbackOptions;
   }, [availableDiamondTypes, defaultCarat, diamondSize, parent]);
   const qualityClarities = getStorePriceConfig(parent).availableOptions?.qualityClarities || {};
+  const qualityClaritiesByOrigin =
+    getStorePriceConfig(parent).availableOptions?.qualityClaritiesByOrigin || {};
   const headLabels = getStorePriceConfig(parent).availableOptions?.headLabels || {};
   const shankLabels = getStorePriceConfig(parent).availableOptions?.shankLabels || {};
   const matchingBandLabels = getStorePriceConfig(parent).availableOptions?.matchingBandLabels || {};
+  const metalLabels = getStorePriceConfig(parent).availableOptions?.metalLabels || {};
 
   useEffect(() => {
     if (availableCaratSizes.length > 0 && !availableCaratSizes.includes(Number(diamondSize))) {
@@ -1183,15 +1300,28 @@ const RingCustomizer = forwardRef(({
     () => filterAvailableOptions(apiData.ring.sideSetting, parent, "matchingBandStyles"),
     [parent]
   );
-  const availableHeadChoices = useMemo(() => getAvailableOptions(parent, "headStyles").flatMap((id) => {
-    const design = DIAMONDWISE_DESIGNS.find((item) => item.headId === id);
-    if (design) return [{ kind: "diamondwise", value: design }];
-    return settingOptions
-      .filter((option) => option.head === id)
-      .map((option) => ({ kind: "standard", value: option }));
-  }), [parent]);
+  const availableHeadChoices = useMemo(() => {
+    const headStyles = getAvailableOptions(parent, "headStyles");
+    const orderedHeadStyles = isJDemo364ParentUrl(parent)
+      ? [
+          ...headStyles.filter((id) => String(id).startsWith("dw-") || DIAMONDWISE_DESIGNS.some((d) => d.headId === id)),
+          ...headStyles.filter((id) => !String(id).startsWith("dw-") && !DIAMONDWISE_DESIGNS.some((d) => d.headId === id)),
+        ]
+      : headStyles;
+
+    return orderedHeadStyles.flatMap((id) => {
+      const design = DIAMONDWISE_DESIGNS.find((item) => item.headId === id);
+      if (design) return [{ kind: "diamondwise", value: design }];
+      return settingOptions
+        .filter((option) => option.head === id)
+        .map((option) => ({ kind: "standard", value: option }));
+    });
+  // The store URL is normally stable while its asynchronous catalogue is
+  // loading. Rebuild the cards when that catalogue arrives; otherwise this
+  // memo keeps the initial fallback list and shows every built-in head.
+  }, [parent, priceConfigVersion]);
   const availableShankChoices = useMemo(() => {
-    const activeHead = noHeadSelected ? "NO-HEAD" : (headStyle === "three-stone" ? "OVAL" : ringHead);
+    const activeHead = noHeadSelected ? "NO-HEAD" : (headStyle === "three-stone" ? "OVAL" : (headStyle === "two-stone" ? "TWO-STONE" : ringHead));
 
     return getAvailableOptions(parent, "shankStyles")
       .filter((shank) => isHeadCompatible(parent, shank, activeHead))
@@ -1203,6 +1333,49 @@ const RingCustomizer = forwardRef(({
           .map((option) => ({ kind: "standard", value: option }));
       });
   }, [headStyle, noHeadSelected, parent, ringHead]);
+
+  const availableSideStoneStyles = useMemo(
+    () => getAvailableOptions(parent, "sideStoneStyles"),
+    [parent]
+  );
+  const sideStoneLabels = useMemo(
+    () => getAvailableOptions(parent, "sideStoneLabels") || {},
+    [parent]
+  );
+
+  const availableSideOptions = useMemo(() => {
+    return THREE_STONE_SIDE_OPTIONS
+      .filter((opt) => {
+        if (!availableSideStoneStyles || availableSideStoneStyles.length === 0) return true;
+        const normThree = opt.threestone.toLowerCase();
+        const normHead = opt.head.toLowerCase();
+        const normLabel = opt.label.toLowerCase();
+        return availableSideStoneStyles.some((style) => {
+          const s = String(style).toLowerCase();
+          return s === normThree || s === normHead || s === normLabel;
+        });
+      })
+      .map((opt) => {
+        const dynamicLabel =
+          sideStoneLabels[opt.threestone] ||
+          sideStoneLabels[opt.head] ||
+          sideStoneLabels[opt.head.toLowerCase()] ||
+          opt.label;
+        return {
+          ...opt,
+          label: dynamicLabel,
+        };
+      });
+  }, [availableSideStoneStyles, sideStoneLabels]);
+
+  useEffect(() => {
+    if (headStyle === "three-stone" && availableSideOptions.length > 0) {
+      const match = availableSideOptions.find((opt) => opt.threestone === threestone);
+      if (!match) {
+        handleSideStone(availableSideOptions[0]);
+      }
+    }
+  }, [headStyle, availableSideOptions, threestone]);
 
   // When the current head restricts shanks to exactly one option, auto-select
   // it silently so the shank row can be hidden without stale state.
@@ -1222,10 +1395,12 @@ const RingCustomizer = forwardRef(({
 
   const selectedQualitySpec = getQualitySpec(selectedQuality?.quality);
   const selectedDiamondOriginLabel =
-    stoneTypeOptions.find((option) => option.activeTab === activeStoneTab && option.diamondOrigin === selectedDiamondOrigin)?.label ||
-    "Colorless Lab Grown";
+    stoneCategoryText(
+      stoneTypeOptions.find((option) => option.activeTab === activeStoneTab && option.diamondOrigin === selectedDiamondOrigin)
+    );
 
   const handleDiamondQuality = (quality) => {
+    playClick();
     const nextSpec = getQualitySpec(quality);
     const nextSelectedQuality = { type: selectedDiamondOrigin, quality };
     const diamondPrice = calculateTheme3DiamondPrice({ nextSelectedQuality });
@@ -1252,7 +1427,7 @@ const RingCustomizer = forwardRef(({
     if (!hasTheme3GuideInteractionStartedRef.current) return;
     if (!isDiamondPreviewFlow && THEME3_STONE_GUIDE_FEATURES.has(feature)) return;
 
-    const meta = getTheme3GuideMeta(feature, sectionOverride);
+    const meta = getTheme3GuideMeta(feature, sectionOverride, t);
     const eventKey = `${flow}:${meta.section}:${meta.feature}`;
     if (lastTheme3GuideEventRef.current === eventKey) return;
 
@@ -1371,6 +1546,8 @@ const RingCustomizer = forwardRef(({
     nextMatchingBandQuantity = matchingBandQuantity,
     nextEngraving = engraving,
     nextMatchingBandStyle = ringMatchingBand,
+    nextThreestone = threestone,
+    nextBandWidth = bandWidth,
     metalPriceKey,
   } = {}) => {
     const matchingBandPriceStyle =
@@ -1384,10 +1561,11 @@ const RingCustomizer = forwardRef(({
       nextShank,
       matchingBandPriceStyle,
       nextRingBand,
-      bandWidth,
+      nextBandWidth,
       styleShape,
       nextEngraving,
-      parent
+      parent,
+      nextThreestone
     );
     const matchingBandTotal = price.breakdown.matchingBandPrice * nextMatchingBandQuantity;
     const finalRingPrice =
@@ -1402,24 +1580,56 @@ const RingCustomizer = forwardRef(({
     setEngravingPrice(price.breakdown.engravingPrice);
     setShankTotal(
       price.breakdown.ringShankPrice +
+        price.breakdown.bandWidthPrice +
         price.breakdown.ringSideSettingPrice +
-        price.breakdown.metalPrice +
         matchingBandTotal +
-        price.breakdown.engravingPrice
+        price.breakdown.engravingPrice +
+        (nextHead === "NO-HEAD" ? price.breakdown.metalPrice : 0)
     );
-    setHeadTotal(price.breakdown.ringHeadStylePrice);
+    setHeadTotal(
+      price.breakdown.ringHeadStylePrice +
+        price.breakdown.metalPrice +
+        (price.breakdown.sideStonePrice || 0)
+    );
     setOtherTotal(0);
     setSummaryBlink(true);
   };
 
+  // getAvailableOptions supplies the built-in catalogue when the configurator
+  // is running standalone (for example, localhost:3000), while retaining the
+  // store-provided list for embedded storefronts.
+  const availableBandWidths = getAvailableOptions(parent, "bandWidths");
+  const isBandWidthEligible = BAND_WIDTH_SHANKS.has(String(ringShank || "").toUpperCase()) && availableBandWidths.length > 0;
+
+  const handleBandWidth = (width) => {
+    if (!isBandWidthEligible || width === bandWidth) return;
+    playClick();
+    setBandWidth(width);
+    applyRingPrice({ nextBandWidth: width });
+  };
+
+  useEffect(() => {
+    if (!isBandWidthEligible || availableBandWidths.includes(bandWidth)) return;
+    const defaultWidth = availableBandWidths[0];
+    setBandWidth(defaultWidth);
+    applyRingPrice({ nextBandWidth: defaultWidth });
+  }, [isBandWidthEligible, availableBandWidths, bandWidth]);
+
   const handleStyle = (option) => {
+    playClick();
     const isLeavingDiamondWiseDesign = Boolean(diamondWiseDesignId);
     if (isLeavingDiamondWiseDesign) setDiamondWiseDesignId(DIAMONDWISE_DESIGN_NONE);
 
     // Compatibility flows from the selected head to the available shanks.
     // A shank card can normally not reach this handler when incompatible, but
-    // keep this guard for keyboard/programmatic selection as well.
-    if (!isLeavingDiamondWiseDesign && !isHeadCompatible(parent, option.shank, ringHead)) return;
+    const activeHead = noHeadSelected
+      ? "NO-HEAD"
+      : headStyle === "three-stone"
+      ? "OVAL"
+      : headStyle === "two-stone"
+      ? "TWO-STONE"
+      : ringHead;
+    if (!isLeavingDiamondWiseDesign && !isHeadCompatible(parent, option.shank, activeHead)) return;
 
     const nextHead = isLeavingDiamondWiseDesign ? "4-PRONG" : ringHead;
 
@@ -1460,24 +1670,52 @@ const RingCustomizer = forwardRef(({
   };
 
   const handleShape = (option) => {
+    playClick();
     if (diamondWiseDesignId && option.value !== (selectedDiamondWiseDesign?.defaultShape || "marquise")) return;
     if (ROUND_ONLY_HEAD_STYLES.includes(headStyle) && option.value !== "round") return;
-    if (headStyle === "three-stone") {
-      const threeStoneSelection = THREE_STONE_SHAPE_TO_HEAD[option.value];
-      if (!threeStoneSelection) return;
-      setRingHead(threeStoneSelection.head);
-      setThreestone(threeStoneSelection.threestone);
-      applyRingPrice({ nextHead: threeStoneSelection.head });
-    }
+    if (headStyle === "two-stone" && !TWO_STONE_SHAPES.has(option.value)) return;
+    // Three-stone: center shape is now free — side stone shape stays as-is.
 
     const diamondPrice = calculateTheme3DiamondPrice({ nextShape: option.value });
     setShape(option.value);
+    if (headStyle === "two-stone") {
+      setTwoStoneLeft(option.value);
+    }
     setStoneTotal(diamondPrice);
     setCaratP(diamondPrice);
     setSummaryBlink(true);
   };
 
+  // Handles side-stone (sub-head) selection for Three-Stone rings.
+  const handleSideStone = (sideOption) => {
+    playClick();
+    setRingHead(sideOption.head);
+    setThreestone(sideOption.threestone);
+    applyRingPrice({ nextHead: sideOption.head, nextThreestone: sideOption.threestone });
+    setSummaryBlink(true);
+  };
+
+  const handleSideStoneColor = (color) => {
+    playClick();
+    setSideStoneColor(color);
+  };
+
+  // Handles left-stone shape selection for Two-Stone rings.
+  const handleTwoStoneLeft = (option) => {
+    playClick();
+    setTwoStoneLeft(option.value);
+    setSummaryBlink(true);
+  };
+
+  // Handles right-stone shape selection for Two-Stone rings.
+  const handleTwoStoneRight = (option) => {
+    playClick();
+    setTwoStoneRight(option.value);
+    setSummaryBlink(true);
+  };
+
   const handleStoneType = (option) => {
+    playClick();
     if (isDiamondWiseStore && option.diamondOrigin === "Natural") {
       setShowNaturalDiamondNotice(true);
       return;
@@ -1519,7 +1757,8 @@ const RingCustomizer = forwardRef(({
     if (labGrownOption) handleStoneType(labGrownOption);
   };
 
-  const handleCarat = (carat) => {
+  const handleCarat = (carat, shouldPlaySound = true) => {
+    if (shouldPlaySound) playClick();
     const diamondPrice = calculateTheme3DiamondPrice({ nextCarat: carat });
 
     setDiamondSize(carat);
@@ -1531,6 +1770,7 @@ const RingCustomizer = forwardRef(({
   };
 
   const handleDiamondWisePreset = (design, part) => {
+    playClick();
     if (!isDiamondPreviewFlow || !design) return;
 
     // Each DiamondWise design is a fixed head+shank set (5 total) — picking
@@ -1572,6 +1812,7 @@ const RingCustomizer = forwardRef(({
   };
 
   const handleFancyDiamond = (value) => {
+    playClick();
     const diamondPrice = calculateTheme3DiamondPrice({ nextFancyDiamond: value });
     setFancyDiamond(value);
     setFancyColorPrice(getColoredDiamondExtraPrice(parent, value));
@@ -1581,6 +1822,7 @@ const RingCustomizer = forwardRef(({
   };
 
   const handleFancyDiamondIntensity = (value) => {
+    playClick();
     const intensityPrice = getIntensityPrice(parent, value);
     const diamondPrice = calculateTheme3DiamondPrice({ nextFancyDiamondIntensity: value });
     setFancyDiamondIntensity(value);
@@ -1591,6 +1833,7 @@ const RingCustomizer = forwardRef(({
   };
 
   const handleGemstone = (value) => {
+    playClick();
     const diamondPrice = calculateTheme3DiamondPrice({ nextGemstone: value });
     setGemstone(value);
     setGemstonePrice(getGemstoneExtraPrice(parent, value));
@@ -1600,6 +1843,7 @@ const RingCustomizer = forwardRef(({
   };
 
   const handleSetting = (option) => {
+    playClick();
     const isLeavingDiamondWiseDesign = Boolean(diamondWiseDesignId);
     let nextShank = isLeavingDiamondWiseDesign ? "PLAIN" : ringShank;
 
@@ -1637,11 +1881,19 @@ const RingCustomizer = forwardRef(({
     }
 
     if (option.headStyle === "three-stone") {
-      nextShape = THREE_STONE_SHAPE_TO_HEAD[nextShape] ? nextShape : "oval";
-      const threeStoneSelection = THREE_STONE_SHAPE_TO_HEAD[nextShape];
-      nextHead = threeStoneSelection.head;
-      nextThreestone = threeStoneSelection.threestone;
-      nextShapeList = Object.keys(THREE_STONE_SHAPE_TO_HEAD).join(",");
+      // Keep the current center stone shape; default the side stone to OVAL.
+      nextHead = "OVAL";
+      nextThreestone = "oval";
+      nextShapeList = "round,princess,cushion,oval,radiant,pear,emerald,marquise,heart,asscher,moval";
+    }
+
+    if (option.headStyle === "two-stone") {
+      // Use the composite TWO-STONE head; keep current shape if valid, or fallback to round
+      nextHead = "TWO-STONE";
+      const validFirstShape = TWO_STONE_SHAPES.has(nextShape) ? nextShape : "round";
+      nextShape = validFirstShape;
+      setTwoStoneLeft(validFirstShape);
+      setTwoStoneRight("pear");
     }
 
     setRingHead(nextHead);
@@ -1657,6 +1909,7 @@ const RingCustomizer = forwardRef(({
     }
     applyRingPrice({
       nextHead,
+      nextThreestone,
       ...(nextShank !== ringShank && { nextShank }),
       ...(isLeavingDiamondWiseDesign && {
         nextShank,
@@ -1667,10 +1920,10 @@ const RingCustomizer = forwardRef(({
   };
 
   const handleNoHeadToggle = () => {
+    playClick();
     if (noHeadSelected) {
       setNoHeadSelected(false);
       if (engravingFocus) deactivateEngravingPreview();
-      setHasReachedTheme3FinalStep(false);
       onTheme3SectionChange?.("setting");
       const fallbackHead = getAvailableOptions(parent, "headStyles")[0] || "4-PRONG";
       const design = DIAMONDWISE_DESIGNS.find((item) => item.headId === fallbackHead);
@@ -1731,7 +1984,29 @@ const RingCustomizer = forwardRef(({
     });
   };
 
+  useEffect(() => {
+    if (!hasNoHeadCompatibility(parent)) return;
+    if (storefrontControls.wedding && !storefrontControls.engagement && !noHeadSelected) {
+      handleNoHeadToggle();
+    } else if (storefrontControls.engagement && !storefrontControls.wedding && noHeadSelected) {
+      handleNoHeadToggle();
+    }
+    // Intentionally only react to appearance flags so the toggle is not re-fired.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storefrontControls.engagement, storefrontControls.wedding]);
+
+  const handleWeddingBandCoverage = (coverage) => {
+    playClick();
+    setWeddingBandCoverage(coverage);
+  };
+
+  const handleEngagementBandCoverage = (coverage) => {
+    playClick();
+    setEngagementBandCoverage(coverage);
+  };
+
   const handleMetal = (option) => {
+    playClick();
     setPlatinum(option.platinum);
     setMetal(option.metal);
     setRingColor(option.color);
@@ -1742,6 +2017,7 @@ const RingCustomizer = forwardRef(({
   };
 
   const handleMetalColor = (option) => {
+    playClick();
     if (option.platinum || option.fixedPurity) {
       const metalName = option.fixedPurity || "Platinum";
       setPlatinum(Boolean(option.platinum));
@@ -1769,12 +2045,14 @@ const RingCustomizer = forwardRef(({
   };
 
   const handlePurity = (purity) => {
+    playClick();
     if (platinum || ["Titanium", "Silver", "Sterling Silver"].includes(metal)) return;
     setMetal(purity);
     applyRingPrice({ nextMetal: purity, metalPriceKey: purity });
   };
 
   const handleBiMetalSelect = (colorValue) => {
+    playClick();
     if (platinum || ["Titanium", "Silver", "Sterling Silver"].includes(metal)) return;
 
     if (colorValue === "none") {
@@ -1934,6 +2212,7 @@ const RingCustomizer = forwardRef(({
   const getQualityDelta = (quality) => calculateTheme3DiamondPrice({ nextSelectedQuality: { type: selectedDiamondOrigin, quality } }) - calculateTheme3DiamondPrice({});
 
   const handleSizeOption = (option) => {
+    playClick();
     const nextSystem = ringSizeSystems.find((system) => system.label === option);
     if (!nextSystem) return;
     setSizeOption(nextSystem.label);
@@ -1942,12 +2221,14 @@ const RingCustomizer = forwardRef(({
   };
 
   const handleRingSize = (value) => {
+    playClick();
     setRingSize(value);
     setRingSizeOpen(false);
     setSummaryBlink(true);
   };
 
   const handleMatchingBand = (option) => {
+    playClick();
     if (diamondWiseDesignId) return;
     if (option.quantity > 0 && !isMatchingBandCompatible(parent, ringHead, option.style || "PLAIN")) return;
 
@@ -1975,6 +2256,19 @@ const RingCustomizer = forwardRef(({
     setCameraView("perspective");
   };
 
+  useEffect(() => {
+    if (!engravingFocus) return undefined;
+
+    const handleEngravingClickOutside = (event) => {
+      if (!engravingBlockRef.current?.contains(event.target)) {
+        deactivateEngravingPreview();
+      }
+    };
+
+    document.addEventListener("pointerdown", handleEngravingClickOutside);
+    return () => document.removeEventListener("pointerdown", handleEngravingClickOutside);
+  }, [engravingFocus]);
+
   const handleEngravingChange = (event) => {
     const nextEngraving = trimEngraving(event.target.value);
     setEngraving(nextEngraving);
@@ -1982,6 +2276,7 @@ const RingCustomizer = forwardRef(({
   };
 
   const handleEngravingSymbol = (symbol) => {
+    playClick();
     const input = engravingInputRef.current;
     if (!input) return;
 
@@ -2007,6 +2302,7 @@ const RingCustomizer = forwardRef(({
   };
 
   const handleEngravingFont = (font) => {
+    playClick();
     setEngravingFont(font);
     activateEngravingPreview();
   };
@@ -2032,7 +2328,6 @@ const RingCustomizer = forwardRef(({
 
   const handleReset = () => {
     setIsResetActive(true);
-    setHasReachedTheme3FinalStep(false);
     if (resetTimeoutRef.current) clearTimeout(resetTimeoutRef.current);
     resetTimeoutRef.current = window.setTimeout(() => setIsResetActive(false), 2000);
 
@@ -2043,6 +2338,8 @@ const RingCustomizer = forwardRef(({
     const targetDWId = isDiamondwise ? "diamondwise-jul-ma-02" : DIAMONDWISE_DESIGN_NONE;
 
     setRingShank(targetShank);
+    setWeddingBandCoverage("3_4");
+    setEngagementBandCoverage("3_4");
     setRingSideSetting("PLAIN");
     setRingMatchingBand("PLAIN");
     setRingColor(GOLD_COLORS.yellow);
@@ -2052,9 +2349,15 @@ const RingCustomizer = forwardRef(({
     setPlatinum(false);
     setBiMetal("No");
     setRingBand("No");
-    const defaultSys = normalizeRingSizeSystem(getRingSizeType(parent));
-    setSizeOption(defaultSys);
-    setRingSize(ringSizeSystems.find((system) => system.label === defaultSys)?.value[0] || ringSizeSystems[0].value[0]);
+    const storefrontSystem = ringSizeSystemForStorefront(ringSizeSystems, ringSizes);
+    if (storefrontSystem) {
+      setSizeOption(storefrontSystem.label);
+      setRingSize(storefrontSystem.value[0]);
+    } else {
+      const defaultSys = normalizeRingSizeSystem(getRingSizeType(parent));
+      setSizeOption(defaultSys);
+      setRingSize(ringSizeSystems.find((system) => system.label === defaultSys)?.value[0] || ringSizeSystems[0].value[0]);
+    }
     setMatchingBandQuantity(0);
     setRingHead(targetHead);
     setHeadstyle("plain");
@@ -2066,6 +2369,7 @@ const RingCustomizer = forwardRef(({
     setFancyDiamond("Blue");
     setFancyDiamondIntensity("Light");
     setGemstone("blue-sapphire");
+    setSideStoneColor("colorless");
     setDiamondWiseDesignId(targetDWId);
     setSelectedQuality({ type: "Lab", quality: getDefaultQuality(parent) });
     setDiamondType("Lab");
@@ -2074,7 +2378,7 @@ const RingCustomizer = forwardRef(({
       setEngravingFont("Arial");
       deactivateEngravingPreview();
     }
-    handleCarat(defaultCarat);
+    handleCarat(defaultCarat, false);
     setContinueMessage("");
     applyRingPrice({
       nextMetal: "14K",
@@ -2120,14 +2424,18 @@ const RingCustomizer = forwardRef(({
     if (diamondWiseDesignId) return shapeValue !== (selectedDiamondWiseDesign?.defaultShape || "marquise");
     if (ROUND_ONLY_HEAD_STYLES.includes(headStyle)) return shapeValue !== "round";
     if (headStyle === "tulip") return !TULIP_COMPATIBLE_SHAPES.includes(shapeValue);
-    if (headStyle === "three-stone") return !THREE_STONE_SHAPE_TO_HEAD[shapeValue];
+    if (headStyle === "two-stone") return !TWO_STONE_SHAPES.has(shapeValue);
+    if (headStyle === "three-stone") return false;
     if (!isShapeCompatible(parent, ringHead, shapeValue)) return true;
     return false;
   };
 
   const isSettingActive = (option) => {
     if (option.headStyle === "three-stone") {
-      return headStyle === "three-stone" || ["OVAL", "TRAPEZOID", "HALF-MOON", "PEAR", "BAGUETTE"].includes(ringHead?.toUpperCase());
+      return headStyle === "three-stone" || ["OVAL", "TRAPEZOID", "ROUND", "PEAR", "BAGUETTE"].includes(ringHead?.toUpperCase());
+    }
+    if (option.headStyle === "two-stone") {
+      return ringHead === "TWO-STONE";
     }
     return ringHead === option.head;
   };
@@ -2136,7 +2444,13 @@ const RingCustomizer = forwardRef(({
   // can be selected after the head, not whether that head can be selected.
   const isSettingDisabled = () => false;
 
-  const compatibilityHead = noHeadSelected ? "NO-HEAD" : (headStyle === "three-stone" ? "OVAL" : ringHead);
+  const compatibilityHead = noHeadSelected
+    ? "NO-HEAD"
+    : headStyle === "three-stone"
+    ? "OVAL"
+    : headStyle === "two-stone"
+    ? "TWO-STONE"
+    : ringHead;
 
   const isStyleDisabled = (option) =>
     !isHeadCompatible(parent, option.shank, compatibilityHead) ||
@@ -2154,6 +2468,28 @@ const RingCustomizer = forwardRef(({
   const selectedDiamondWiseShank = getDiamondWiseDesignByShankId(ringShank);
   const displayStyleLabel = selectedDiamondWiseShank?.shankLabel || shankLabels[ringShank] || selectedStyle.label;
   const displaySettingLabel = selectedDiamondWiseDesign?.headLabel || headLabels[ringHead] || selectedSetting.label;
+  const formatSideStoneCaratLabel = (label, carat) =>
+    carat > 0 ? `${label} (${carat.toFixed(2)}ctw)` : label;
+  const formatSummarySideStoneCaratLabel = (label, carat) =>
+    carat > 0 ? `${label} · ${carat.toFixed(2)}ctw` : label;
+  const headSideStoneCarat = getSideStoneCarat(parent, "head", ringHead);
+  const shankSideStoneCarat = getSideStoneCarat(parent, "shank", ringShank);
+  const displayStyleLabelWithSideStoneCarat = formatSideStoneCaratLabel(
+    displayStyleLabel,
+    shankSideStoneCarat
+  );
+  const displaySettingLabelWithSideStoneCarat = formatSideStoneCaratLabel(
+    displaySettingLabel,
+    headSideStoneCarat
+  );
+  const displayStyleSummaryLabel = formatSummarySideStoneCaratLabel(
+    displayStyleLabel,
+    shankSideStoneCarat
+  );
+  const displaySettingSummaryLabel = formatSummarySideStoneCaratLabel(
+    displaySettingLabel,
+    headSideStoneCarat
+  );
   const displayShapeLabel = selectedDiamondWiseDesign
     ? (selectedDiamondWiseDesign.defaultShape || "marquise").replace(/^./, (letter) => letter.toUpperCase())
     : selectedShape.label;
@@ -2176,11 +2512,36 @@ const RingCustomizer = forwardRef(({
     metalColorOptions.find((option) => option.value === selectedMetalColorValue) || metalColorOptions[1];
   const selectedHeadMetalColorOption =
     metalColorOptions.find((option) => option.value === selectedHeadMetalColorValue) || selectedMetalColorOption;
-  const primaryMetalLabel = resolveMetalLabel({ metal, ringColor, platinum });
   const activePurity = platinum || metal === "Platinum" ? "Platinum" : metal;
-  const getMatchingBandDisplayLabel = (style) => matchingBandLabels[style] || getMatchingBandStyleLabel(style);
+  const getMetalColorOptionLabel = (option) => option.label;
+  const getMetalOptionLabel = (option) => {
+    const purity = option.fixedPurity || (option.platinum ? "Platinum" : option.purity || activePurity);
+    const metalName = option.platinum ? "Platinum"
+      : option.fixedPurity ? option.fixedPurity
+      : option.color === GOLD_COLORS.white ? "White Gold"
+      : option.color === GOLD_COLORS.rose ? "Rose Gold"
+      : "Yellow Gold";
+    const productId = getMetalProductId(metalName, purity);
+    return metalLabels[productId] || option.label;
+  };
+  const primaryMetalLabel = getMetalOptionLabel(selectedMetalColorOption);
+  const getMatchingBandDisplayLabel = (style) =>
+    matchingBandLabels[style] || getMatchingBandStyleLabel(style);
+  const getMatchingBandDisplayLabelWithSideStoneCarat = (style) =>
+    formatSideStoneCaratLabel(
+      getMatchingBandDisplayLabel(style),
+      getSideStoneCarat(parent, "matchingBand", style)
+    );
+  const getMatchingBandSummaryLabel = (style) =>
+    formatSummarySideStoneCaratLabel(
+      getMatchingBandDisplayLabel(style),
+      getSideStoneCarat(parent, "matchingBand", style)
+    );
+  const storefrontRingSizeSystem = ringSizeSystemForStorefront(ringSizeSystems, ringSizes);
   const selectedRingSizeSystem =
-    ringSizeSystems.find((option) => option.label === sizeOption) || ringSizeSystems[0];
+    storefrontRingSizeSystem ||
+    ringSizeSystems.find((option) => option.label === sizeOption) ||
+    ringSizeSystems[0];
   const ringSizeOptions = selectedRingSizeSystem.value;
   const currentRingSizeIndex = ringSizeOptions.indexOf(String(ringSize));
   const currentRingSizeMm =
@@ -2189,9 +2550,11 @@ const RingCustomizer = forwardRef(({
     () => getRingSizePrice(parent, currentRingSizeMm),
     [parent, currentRingSizeMm]
   );
+  const isTwoStoneRing = ringHead === "TWO-STONE" || headStyle === "two-stone";
+
   const total = useMemo(
-    () => Number(shankTotal || 0) + (noHeadSelected ? 0 : Number(headTotal || 0) + Number(stoneTotal || 0)) + ringSizePrice,
-    [noHeadSelected, shankTotal, headTotal, stoneTotal, ringSizePrice]
+    () => Number(shankTotal || 0) + (noHeadSelected ? 0 : Number(headTotal || 0) + Number(stoneTotal || 0) * (isTwoStoneRing ? 2 : 1)) + ringSizePrice,
+    [noHeadSelected, shankTotal, headTotal, stoneTotal, ringSizePrice, isTwoStoneRing]
   );
   const settingSubtotal = useMemo(
     () => Number(shankTotal || 0) + (noHeadSelected ? 0 : Number(headTotal || 0)) + ringSizePrice,
@@ -2202,8 +2565,8 @@ const RingCustomizer = forwardRef(({
     [noHeadSelected, isDiamondPreviewFlow, stoneTotal]
   );
   const theme3DisplayTotal = useMemo(
-    () => settingSubtotal + diamondPreviewPrice,
-    [settingSubtotal, diamondPreviewPrice]
+    () => settingSubtotal + diamondPreviewPrice * (isTwoStoneRing ? 2 : 1),
+    [settingSubtotal, diamondPreviewPrice, isTwoStoneRing]
   );
 
   const selectedHeadShankPrice = useMemo(
@@ -2351,7 +2714,15 @@ const RingCustomizer = forwardRef(({
         }
       })())
     );
-    if (hasUrlConfig) return;
+    if (hasUrlConfig && !ringSizeSystemForStorefront(ringSizeSystems, ringSizes)) return;
+
+    const storefrontSystem = ringSizeSystemForStorefront(ringSizeSystems, ringSizes);
+    if (storefrontSystem) {
+      if (sizeOption !== storefrontSystem.label) {
+        setSizeOption(storefrontSystem.label);
+      }
+      return;
+    }
 
     const defaultSizeOption = normalizeRingSizeSystem(getRingSizeType(parent));
     if (defaultSizeOption && defaultSizeOption !== sizeOption) {
@@ -2360,9 +2731,9 @@ const RingCustomizer = forwardRef(({
       setSizeOption(defaultSystem.label);
       setRingSize(defaultSystem.value[0]);
     }
-    // Match the old app: parent/store context controls the default size system.
+    // Storefront `ringSizes` wins over the parent default. Shared links keep their size.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [parent]);
+  }, [parent, ringSizes]);
 
   useEffect(() => {
     const mode = availableStoneTypeOptions.find((option) => option.activeTab === activeStoneTab) || availableStoneTypeOptions[0] || stoneTypeOptions[0];
@@ -2512,9 +2883,10 @@ const RingCustomizer = forwardRef(({
       nextMatchingBandQuantity: matchingBandQuantity,
       nextEngraving: engraving,
       nextMatchingBandStyle: ringMatchingBand,
+      nextThreestone: threestone,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [parent, priceConfigVersion, ringHead, ringShank]);
+  }, [parent, priceConfigVersion, ringHead, ringShank, threestone]);
 
   useEffect(() => {
     if (ringSizeOptions.length > 0 && !ringSizeOptions.includes(String(ringSize))) {
@@ -2589,11 +2961,13 @@ const RingCustomizer = forwardRef(({
   ]);
 
   const handleCut = (nextCut) => {
+    playClick();
     setCut(nextCut);
     setSummaryBlink(true);
   };
 
   const handleClarity = (nextClarity) => {
+    playClick();
     setClarity(nextClarity);
     setSummaryBlink(true);
   };
@@ -2921,6 +3295,8 @@ const RingCustomizer = forwardRef(({
       threestone,
       shapeList,
       ringShank,
+      weddingBandCoverage,
+      engagementBandCoverage,
       ringSideSetting,
       ringMatchingBand,
       ringBand,
@@ -2982,7 +3358,7 @@ const RingCustomizer = forwardRef(({
 
       if (!isEmbeddedShare && navigator.share) {
         await navigator.share({
-          title: "Jewelith Ring Configuration",
+          title: t("shell.shareTitle"),
           url: shareUrl,
         });
         setShareStatus("Shared");
@@ -3076,7 +3452,7 @@ const RingCustomizer = forwardRef(({
       theme: "theme-3",
       flow,
       style: ringShank,
-      styleLabel: displayStyleLabel,
+      styleLabel: displayStyleLabelWithSideStoneCarat,
       sideSetting: ringSideSetting,
       diamondWiseDesign: selectedDiamondWiseDesign
         ? {
@@ -3104,7 +3480,9 @@ const RingCustomizer = forwardRef(({
       shapeLabel: displayShapeLabel,
       carat: Number(diamondSize || 0),
       stoneType: activeStoneTab,
-      stoneTypeLabel: stoneTypeOptions.find((option) => option.activeTab === activeStoneTab && option.diamondOrigin === selectedDiamondOrigin)?.label || "Colorless Lab Grown",
+      stoneTypeLabel: stoneCategoryText(
+        stoneTypeOptions.find((option) => option.activeTab === activeStoneTab && option.diamondOrigin === selectedDiamondOrigin)
+      ),
       colorType,
       cut: isGemstoneMode ? null : cut,
       clarity: isGemstoneMode ? null : clarity,
@@ -3115,18 +3493,26 @@ const RingCustomizer = forwardRef(({
       fancyDiamondIntensity: isColoredMode ? fancyDiamondIntensity : null,
       gemstone: isGemstoneMode ? gemstone : null,
       setting: headStyle,
-      settingLabel: displaySettingLabel,
+      settingLabel: displaySettingLabelWithSideStoneCarat,
       head: ringHead,
+      sideStone: headStyle === "three-stone"
+        ? {
+            shape: threestone,
+            color: sideStoneColor,
+            colorLabel: SIDE_STONE_COLOR_OPTIONS.find((option) => option.value === sideStoneColor)?.label || sideStoneColor,
+            colorCode: SIDE_STONE_COLOR_OPTIONS.find((option) => option.value === sideStoneColor)?.color || sideStoneColor,
+          }
+        : null,
       metal,
       metalColor: selectedMetalColorOption.value,
-      metalColorLabel: selectedMetalColorOption.label,
+      metalColorLabel: getMetalOptionLabel(selectedMetalColorOption),
       metalPurity: activePurity,
       metalLabel: primaryMetalLabel,
       platinum: platinum || metal === "Platinum",
       biMetal: {
         enabled: biMetal === "Yes",
         headAccentMetal: biMetal === "Yes" ? selectedHeadMetalColorOption.value : selectedMetalColorOption.value,
-        headAccentMetalLabel: biMetal === "Yes" ? selectedHeadMetalColorOption.label : selectedMetalColorOption.label,
+        headAccentMetalLabel: biMetal === "Yes" ? getMetalOptionLabel(selectedHeadMetalColorOption) : getMetalOptionLabel(selectedMetalColorOption),
       },
       ringSize: {
         system: sizeOption,
@@ -3139,7 +3525,7 @@ const RingCustomizer = forwardRef(({
         enabled: ringBand === "Yes",
         quantity: matchingBandQuantity,
         style: ringMatchingBand || ringSideSetting,
-        styleLabel: getMatchingBandDisplayLabel(ringMatchingBand || ringSideSetting),
+        styleLabel: getMatchingBandDisplayLabelWithSideStoneCarat(ringMatchingBand || ringSideSetting),
       },
       engraving: {
         enabled: Boolean(engraving.trim()),
@@ -3220,8 +3606,8 @@ const RingCustomizer = forwardRef(({
           "ring",
         ].filter(Boolean).join(" ")
       : [
-          displayStyleLabel,
-          displaySettingLabel,
+          displayStyleLabelWithSideStoneCarat,
+          displaySettingLabelWithSideStoneCarat,
           `${Number(diamondSize || 0).toFixed(2)} ct`,
           displayShapeLabel,
           stoneColorLabel,
@@ -3248,6 +3634,9 @@ const RingCustomizer = forwardRef(({
         intensityPrice: isColoredMode ? getIntensityPrice(parent, fancyDiamondIntensity) : null,
         MetalType: selectedMetalColorOption.label,
         Purity: activePurity,
+        BandCoverage: (ringShank === "CHANNEL" || ringShank === "PLATE-PRONG")
+          ? (((noHeadSelected ? weddingBandCoverage : engagementBandCoverage) === "1_2") ? "1/2" : ((noHeadSelected ? weddingBandCoverage : engagementBandCoverage) === "3_4") ? "3/4" : "Full")
+          : null,
         Engraving: engraving,
         EngravingFont: getEngravingFontLabel(engravingFont),
         RingSize: ringSize,
@@ -3266,12 +3655,6 @@ const RingCustomizer = forwardRef(({
   };
 
   const handleTheme3Continue = () => {
-    if (nextTheme3Section) {
-      setContinueMessage("");
-      handleTheme3SectionClick(nextTheme3Section.id);
-      return;
-    }
-
     handleTheme3AddToCart();
   };
 
@@ -3285,8 +3668,9 @@ const RingCustomizer = forwardRef(({
     const matchingBandValue =
       matchingBandQuantity > 0 ? `${matchingBandQuantity} band${matchingBandQuantity > 1 ? "s" : ""}` : "No matching band";
     const ringSizeValue = `${selectedRingSizeSystem.label} ${ringSize}`;
-    const previewStoneTypeLabel =
-      stoneTypeOptions.find((option) => option.activeTab === activeStoneTab && option.diamondOrigin === selectedDiamondOrigin)?.label || "Colorless Lab Grown";
+    const previewStoneTypeLabel = stoneCategoryText(
+      stoneTypeOptions.find((option) => option.activeTab === activeStoneTab && option.diamondOrigin === selectedDiamondOrigin)
+    );
     const previewStoneCarat = `${Number(diamondSize || 0).toFixed(2)} ct`;
     const renderSummaryRow = (label, value) => {
       if (value === null || value === undefined || value === "") return null;
@@ -3298,7 +3682,8 @@ const RingCustomizer = forwardRef(({
       );
     };
 
-    const summaryTaxLabel = getSummaryTaxLabel(parent);
+    // Stay hidden until the appearance API tax label is turned on.
+    const summaryTaxLabel = null;
 
     const summaryActionsContent = null;
 
@@ -3308,7 +3693,7 @@ const RingCustomizer = forwardRef(({
               aria-labelledby="theme3-summary-title"
               data-theme3-guide="build-summary"
               data-theme3-guide-section="summary"
-              data-theme3-guide-label="Build Summary"
+              data-theme3-guide-label={t("guide.meta.buildSummary")}
             >
 
               {isDiamondPreviewFlow ? (
@@ -3316,56 +3701,103 @@ const RingCustomizer = forwardRef(({
                   {selectedDiamondWiseDesign ? (
                     <div className="order-summary-section">
                       <div className="order-summary-row">
-                        <span className="order-summary-title">Ring</span>
+                        <span className="order-summary-title theme3-section-heading">{t("summary.ring")}</span>
                         {(Number(shankSettingSubtotal || 0) + Number(headTotal || 0)) > 0 && (
-                          <span className="order-summary-price">
+                          <span className="order-summary-price theme3-section-heading">
                             {formatStoreCurrency(Number(shankSettingSubtotal || 0) + Number(headTotal || 0), parent)}
                           </span>
                         )}
                       </div>
                       <div className="order-summary-desc">
-                        {displayStyleLabel} · {selectedMetalColorOption.label === activePurity ? activePurity : `${selectedMetalColorOption.label} · ${activePurity}`}{biMetal === "Yes" ? ` · Bi-Metal ${selectedHeadMetalColorOption.label}` : ""}{matchingBandQuantity > 0 ? ` · ${getMatchingBandDisplayLabel(ringMatchingBand || ringSideSetting)}` : ""}
+                        {displayStyleLabel}{matchingBandQuantity > 0 ? ` · ${getMatchingBandDisplayLabel(ringMatchingBand || ringSideSetting)}` : ""}
                       </div>
-                      <div className="order-summary-desc">Size: {ringSizeValue}</div>
-                      {engravingText && <div className="order-summary-desc">Engraving: "{engravingText}"</div>}
+                      <div className="order-summary-desc">
+                        {selectedMetalColorOption.label === activePurity ? activePurity : `${selectedMetalColorOption.label} · ${activePurity}`}{biMetal === "Yes" ? ` · Bi-Metal ${selectedHeadMetalColorOption.label}` : ""}
+                      </div>
+                      <div className="order-summary-desc">{t("summary.sizePrefix")} {ringSizeValue}</div>
+                      {engravingText && <div className="order-summary-desc">{t("summary.engravingPrefix")} "{engravingText}"</div>}
                     </div>
                   ) : (
                     <>
                       {!noHeadSelected && (
                         <div className="order-summary-section">
                           <div className="order-summary-row">
-                            <span className="order-summary-title">Ring</span>
+                            <span className="order-summary-title theme3-section-heading">{t("summary.ring")}</span>
                             {Number(headTotal || 0) > 0 && (
-                              <span className="order-summary-price">{formatStoreCurrency(Number(headTotal || 0), parent)}</span>
+                              <span className="order-summary-price theme3-section-heading">{formatStoreCurrency(Number(headTotal || 0), parent)}</span>
                             )}
                           </div>
                           <div className="order-summary-desc">
-                            {displaySettingLabel}{biMetal === "Yes" ? ` · Bi-Metal ${selectedHeadMetalColorOption.label}` : ""}
+                            {displaySettingSummaryLabel}
+                          </div>
+                          <div className="order-summary-desc">
+                            {selectedMetalColorOption.label === activePurity ? activePurity : `${selectedMetalColorOption.label} · ${activePurity}`}{biMetal === "Yes" ? ` · Bi-Metal ${selectedHeadMetalColorOption.label}` : ""}
                           </div>
                         </div>
                       )}
 
                       <div className="order-summary-section">
                         <div className="order-summary-row">
-                          <span className="order-summary-title">Band</span>
+                          <span className="order-summary-title theme3-section-heading">{t("summary.band")}</span>
                           {Number(shankSettingSubtotal || 0) > 0 && (
-                            <span className="order-summary-price">{formatStoreCurrency(shankSettingSubtotal, parent)}</span>
+                            <span className="order-summary-price theme3-section-heading">{formatStoreCurrency(shankSettingSubtotal, parent)}</span>
                           )}
                         </div>
                         <div className="order-summary-desc">
-                          {displayStyleLabel} · {selectedMetalColorOption.label === activePurity ? activePurity : `${selectedMetalColorOption.label} · ${activePurity}`}{matchingBandQuantity > 0 ? ` · ${getMatchingBandDisplayLabel(ringMatchingBand || ringSideSetting)}` : ""}
+                          {[
+                            displayStyleSummaryLabel,
+                            (ringShank === "CHANNEL" || ringShank === "PLATE-PRONG") &&
+                              ((noHeadSelected ? weddingBandCoverage : engagementBandCoverage) === "1_2" ? "1/2 Band" : (noHeadSelected ? weddingBandCoverage : engagementBandCoverage) === "3_4" ? "3/4 Band" : "Full Band"),
+                            matchingBandQuantity > 0 && getMatchingBandSummaryLabel(ringMatchingBand || ringSideSetting),
+                          ].filter(Boolean).join(" · ")}
                         </div>
-                        <div className="order-summary-desc">Size: {ringSizeValue}</div>
-                        {engravingText && <div className="order-summary-desc">Engraving: "{engravingText}"</div>}
+                        <div className="order-summary-desc">{t("summary.sizePrefix")} {ringSizeValue}</div>
+                        {engravingText && <div className="order-summary-desc">{t("summary.engravingPrefix")} "{engravingText}"</div>}
                       </div>
                     </>
                   )}
 
                   {!noHeadSelected && (
+                  headStyle === "two-stone" ? (
+                    <>
+                      <div className="order-summary-section">
+                        <div className="order-summary-row">
+                          <span className="order-summary-title theme3-section-heading">{t("summary.stone1")}</span>
+                          {Number(diamondPreviewPrice || 0) > 0 && <span className="order-summary-price theme3-section-heading">{formatStoreCurrency(diamondPreviewPrice, parent)}</span>}
+                        </div>
+                        <div className="order-summary-desc">
+                          {[
+                            shapeOptions.find((o) => o.value === (shape || twoStoneLeft))?.label || displayShapeLabel,
+                            previewStoneCarat,
+                            previewStoneTypeLabel,
+                            isColoredMode ? formatFancyDiamondLabel(fancyDiamond) : isGemstoneMode ? formatGemstoneLabel(gemstone) : null,
+                            isColoredMode && fancyDiamondIntensity,
+                            !isGemstoneMode && qualityText(selectedQuality?.quality),
+                          ].filter(Boolean).join(" · ")}
+                        </div>
+                      </div>
+                      <div className="order-summary-section">
+                        <div className="order-summary-row">
+                          <span className="order-summary-title theme3-section-heading">{t("summary.stone2")}</span>
+                          {Number(diamondPreviewPrice || 0) > 0 && <span className="order-summary-price theme3-section-heading">{formatStoreCurrency(diamondPreviewPrice, parent)}</span>}
+                        </div>
+                        <div className="order-summary-desc">
+                          {[
+                            shapeOptions.find((o) => o.value === twoStoneRight)?.label || (twoStoneRight ? twoStoneRight.charAt(0).toUpperCase() + twoStoneRight.slice(1) : "Pear"),
+                            previewStoneCarat,
+                            previewStoneTypeLabel,
+                            isColoredMode ? formatFancyDiamondLabel(fancyDiamond) : isGemstoneMode ? formatGemstoneLabel(gemstone) : null,
+                            isColoredMode && fancyDiamondIntensity,
+                            !isGemstoneMode && qualityText(selectedQuality?.quality),
+                          ].filter(Boolean).join(" · ")}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
                   <div className="order-summary-section">
                     <div className="order-summary-row">
-                      <span className="order-summary-title">Stone</span>
-                      {Number(diamondPreviewPrice || 0) > 0 && <span className="order-summary-price">{formatStoreCurrency(diamondPreviewPrice, parent)}</span>}
+                      <span className="order-summary-title theme3-section-heading">{t("summary.stone")}</span>
+                      {Number(diamondPreviewPrice || 0) > 0 && <span className="order-summary-price theme3-section-heading">{formatStoreCurrency(diamondPreviewPrice, parent)}</span>}
                     </div>
                     <div className="order-summary-desc">
                       {[
@@ -3381,12 +3813,13 @@ const RingCustomizer = forwardRef(({
                         // already says "Colorless Lab Grown" / "Colorless
                         // Natural". A fancy colour or a gemstone name is NOT in
                         // that label, so those still appear.
-                        isColoredMode ? fancyDiamond : isGemstoneMode ? formatGemstoneLabel(gemstone) : null,
+                        isColoredMode ? formatFancyDiamondLabel(fancyDiamond) : isGemstoneMode ? formatGemstoneLabel(gemstone) : null,
                         isColoredMode && fancyDiamondIntensity,
-                        !isGemstoneMode && selectedQuality?.quality,
+                        !isGemstoneMode && qualityText(selectedQuality?.quality),
                       ].filter(Boolean).join(" · ")}
                     </div>
                   </div>
+                  )
                   )}
 
                   <div className="order-summary-divider" />
@@ -3397,54 +3830,102 @@ const RingCustomizer = forwardRef(({
                   {selectedDiamondWiseDesign ? (
                     <div className="order-summary-section">
                       <div className="order-summary-row">
-                        <span className="order-summary-title">Ring</span>
+                        <span className="order-summary-title theme3-section-heading">{t("summary.ring")}</span>
                         {(Number(engagementRingSubtotal || 0) + Number(headTotal || 0)) > 0 && (
-                          <span className="order-summary-price">
+                          <span className="order-summary-price theme3-section-heading">
                             {formatStoreCurrency(Number(engagementRingSubtotal || 0) + Number(headTotal || 0), parent)}
                           </span>
                         )}
                       </div>
                       <div className="order-summary-desc">
-                        {displayStyleLabel} · {selectedMetalColorOption.label === activePurity ? activePurity : `${selectedMetalColorOption.label} · ${activePurity}`}{biMetal === "Yes" ? ` · Bi-Metal ${selectedHeadMetalColorOption.label}` : ""}
+                        {displayStyleLabel}
                       </div>
-                      <div className="order-summary-desc">Size: {selectedRingSizeSystem.label} {ringSize}</div>
-                      {engraving && <div className="order-summary-desc">Engraving: "{engraving}"</div>}
+                      <div className="order-summary-desc">
+                        {selectedMetalColorOption.label === activePurity ? activePurity : `${selectedMetalColorOption.label} · ${activePurity}`}{biMetal === "Yes" ? ` · Bi-Metal ${selectedHeadMetalColorOption.label}` : ""}
+                      </div>
+                      <div className="order-summary-desc">{t("summary.sizePrefix")} {selectedRingSizeSystem.label} {ringSize}</div>
+                      {engraving && <div className="order-summary-desc">{t("summary.engravingPrefix")} "{engraving}"</div>}
                     </div>
                   ) : (
                     <>
                       {!noHeadSelected && (
                         <div className="order-summary-section">
                           <div className="order-summary-row">
-                            <span className="order-summary-title">Ring</span>
+                            <span className="order-summary-title theme3-section-heading">{t("summary.ring")}</span>
                             {Number(headTotal || 0) > 0 && (
-                              <span className="order-summary-price">{formatStoreCurrency(Number(headTotal || 0), parent)}</span>
+                              <span className="order-summary-price theme3-section-heading">{formatStoreCurrency(Number(headTotal || 0), parent)}</span>
                             )}
                           </div>
                           <div className="order-summary-desc">
-                            {displaySettingLabel}{biMetal === "Yes" ? ` · Bi-Metal ${selectedHeadMetalColorOption.label}` : ""}
+                            {displaySettingSummaryLabel}
+                          </div>
+                          <div className="order-summary-desc">
+                            {selectedMetalColorOption.label === activePurity ? activePurity : `${selectedMetalColorOption.label} · ${activePurity}`}{biMetal === "Yes" ? ` · Bi-Metal ${selectedHeadMetalColorOption.label}` : ""}
                           </div>
                         </div>
                       )}
 
                       <div className="order-summary-section">
                         <div className="order-summary-row">
-                          <span className="order-summary-title">Band</span>
+                          <span className="order-summary-title theme3-section-heading">{t("summary.band")}</span>
                           {Number(engagementRingSubtotal || 0) > 0 && (
-                            <span className="order-summary-price">{formatStoreCurrency(engagementRingSubtotal, parent)}</span>
+                            <span className="order-summary-price theme3-section-heading">{formatStoreCurrency(engagementRingSubtotal, parent)}</span>
                           )}
                         </div>
-                        <div className="order-summary-desc">{displayStyleLabel} · {selectedMetalColorOption.label === activePurity ? activePurity : `${selectedMetalColorOption.label} · ${activePurity}`}</div>
-                        <div className="order-summary-desc">Size: {selectedRingSizeSystem.label} {ringSize}</div>
-                        {engraving && <div className="order-summary-desc">Engraving: "{engraving}"</div>}
+                        <div className="order-summary-desc">
+                          {[
+                            displayStyleSummaryLabel,
+                            (ringShank === "CHANNEL" || ringShank === "PLATE-PRONG") &&
+                              ((noHeadSelected ? weddingBandCoverage : engagementBandCoverage) === "1_2" ? "1/2 Band" : (noHeadSelected ? weddingBandCoverage : engagementBandCoverage) === "3_4" ? "3/4 Band" : "Full Band"),
+                          ].filter(Boolean).join(" · ")}
+                        </div>
+                        <div className="order-summary-desc">{t("summary.sizePrefix")} {selectedRingSizeSystem.label} {ringSize}</div>
+                        {engraving && <div className="order-summary-desc">{t("summary.engravingPrefix")} "{engraving}"</div>}
                       </div>
                     </>
                   )}
 
                   {!noHeadSelected && (
+                  headStyle === "two-stone" ? (
+                    <>
+                      <div className="order-summary-section">
+                        <div className="order-summary-row">
+                          <span className="order-summary-title theme3-section-heading">{t("summary.stone1")}</span>
+                          {Number(stoneTotal || 0) > 0 && <span className="order-summary-price theme3-section-heading">{formatStoreCurrency(stoneTotal, parent)}</span>}
+                        </div>
+                        <div className="order-summary-desc">
+                          {[
+                            shapeOptions.find((o) => o.value === (shape || twoStoneLeft))?.label || displayShapeLabel,
+                            `${diamondSize}ct`,
+                            !isGemstoneMode && selectedDiamondOriginLabel,
+                            isColoredMode ? formatFancyDiamondLabel(fancyDiamond) : isGemstoneMode ? formatGemstoneLabel(gemstone) : "Colorless",
+                            isColoredMode && fancyDiamondIntensity,
+                            !isGemstoneMode && qualityText(selectedQuality?.quality),
+                          ].filter(Boolean).join(" · ")}
+                        </div>
+                      </div>
+                      <div className="order-summary-section">
+                        <div className="order-summary-row">
+                          <span className="order-summary-title theme3-section-heading">{t("summary.stone2")}</span>
+                          {Number(stoneTotal || 0) > 0 && <span className="order-summary-price theme3-section-heading">{formatStoreCurrency(stoneTotal, parent)}</span>}
+                        </div>
+                        <div className="order-summary-desc">
+                          {[
+                            shapeOptions.find((o) => o.value === twoStoneRight)?.label || (twoStoneRight ? twoStoneRight.charAt(0).toUpperCase() + twoStoneRight.slice(1) : "Pear"),
+                            `${diamondSize}ct`,
+                            !isGemstoneMode && selectedDiamondOriginLabel,
+                            isColoredMode ? formatFancyDiamondLabel(fancyDiamond) : isGemstoneMode ? formatGemstoneLabel(gemstone) : "Colorless",
+                            isColoredMode && fancyDiamondIntensity,
+                            !isGemstoneMode && qualityText(selectedQuality?.quality),
+                          ].filter(Boolean).join(" · ")}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
                   <div className="order-summary-section">
                     <div className="order-summary-row">
-                      <span className="order-summary-title">Stone</span>
-                      {Number(stoneTotal || 0) > 0 && <span className="order-summary-price">{formatStoreCurrency(stoneTotal, parent)}</span>}
+                      <span className="order-summary-title theme3-section-heading">{t("summary.stone")}</span>
+                      {Number(stoneTotal || 0) > 0 && <span className="order-summary-price theme3-section-heading">{formatStoreCurrency(stoneTotal, parent)}</span>}
                     </div>
                     <div className="order-summary-desc">
                       {[
@@ -3455,12 +3936,13 @@ const RingCustomizer = forwardRef(({
                         displayShapeLabel,
                         `${diamondSize}ct`,
                         !isGemstoneMode && selectedDiamondOriginLabel,
-                        isColoredMode ? fancyDiamond : isGemstoneMode ? formatGemstoneLabel(gemstone) : "Colorless",
+                        isColoredMode ? formatFancyDiamondLabel(fancyDiamond) : isGemstoneMode ? formatGemstoneLabel(gemstone) : "Colorless",
                         isColoredMode && fancyDiamondIntensity,
-                        !isGemstoneMode && selectedQuality?.quality,
+                        !isGemstoneMode && qualityText(selectedQuality?.quality),
                       ].filter(Boolean).join(" · ")}
                     </div>
                   </div>
+                  )
                   )}
 
                   <div className="order-summary-divider" />
@@ -3475,17 +3957,17 @@ return (
         <header className="theme3-panel-header" ref={theme3HeaderRef}>
           <div className="theme3-panel-suheader">
 
-            <h2>RING CONFIGURATOR</h2>
-            <h2>SUMMARY</h2>
+            <h2>{t("preview.ringConfigurator")}</h2>
+            <h2>{t("preview.summary")}</h2>
           </div>
           {summaryActionsContent}
           {buildSummaryContent}
         </header>
 
         <div className="theme3-panel-scroll" ref={theme3PanelScrollRef}>
-          {hasNoHeadCompatibility(parent) && (
+          {hasNoHeadCompatibility(parent) && storefrontControls.engagement && storefrontControls.wedding && (
             <div className="theme3-ring-type-header-row">
-              <div className="theme3-ring-type-toggle" role="tablist" aria-label="Ring Type">
+              <div className="theme3-ring-type-toggle" role="tablist" aria-label={t("ringType.ariaLabel")}>
                 <button
                   type="button"
                   role="tab"
@@ -3495,7 +3977,7 @@ return (
                     if (noHeadSelected) handleNoHeadToggle();
                   }}
                 >
-                  Engagement
+                  {t("ringType.engagement")}
                 </button>
                 <button
                   type="button"
@@ -3506,7 +3988,7 @@ return (
                     if (!noHeadSelected) handleNoHeadToggle();
                   }}
                 >
-                  Wedding
+                  {t("ringType.wedding")}
                 </button>
               </div>
             </div>
@@ -3519,7 +4001,7 @@ return (
               ref={(node) => { theme3SectionRefs.current.setting = node; }}
             >
               <OptionRow
-                title="Ring"
+                title={t("option.ring")}
                 guide="setting-head"
                 maxOneRow={10}
                 price={headTotal}
@@ -3527,7 +4009,7 @@ return (
                 hovered={hoveredHead}
                 showHoverDelta={false}
                 titleExtra={
-                  <span className="theme3-ring-type-price">
+                  <span className="theme3-ring-type-price theme3-section-heading">
                     {formatStoreCurrency(selectedHeadShankPrice, parent)}
                   </span>
                 }
@@ -3548,7 +4030,7 @@ return (
           >
             {(noHeadSelected || availableShankChoices.length > 1) && (
             <OptionRow
-              title="BAND"
+              title={t("option.band")}
               guide="band"
               className="theme3-band-style"
               maxOneRow={10}
@@ -3558,7 +4040,7 @@ return (
               showHoverDelta={false}
               titleExtra={
                 noHeadSelected ? (
-                  <span className="theme3-ring-type-price">
+                  <span className="theme3-ring-type-price theme3-section-heading">
                     {formatStoreCurrency(selectedHeadShankPrice, parent)}
                   </span>
                 ) : null
@@ -3567,29 +4049,54 @@ return (
               {availableShankChoices.map(({ kind, value }) => kind === "diamondwise" ? (
                 <CardOption key={value.shankId} active={ringShank === value.shankId} label={value.shankLabel} image={value.shankImage || value.image} badge={demoOnlyBadge} className="theme3-image-option" onClick={() => handleDiamondWisePreset(value, "shank")} onMouseEnter={() => handleDiamondWiseCardHover(value)} onMouseLeave={handleShankCardLeave} delta={shankDeltaMap[value.shankId] ?? null} parent={parent} />
               ) : (
-                <CardOption key={value.shank} active={!selectedDiamondWiseDesign && ringShank === value.shank} label={shankLabels[value.shank] || value.label} image={value.image} className="theme3-image-option" onClick={() => handleStyle(value)} disabled={isStyleDisabled(value)} onMouseEnter={() => handleShankCardHover(value.shank, shankLabels[value.shank] || value.label, value.sideSetting)} onMouseLeave={handleShankCardLeave} delta={shankDeltaMap[value.shank] ?? null} parent={parent} />
+                <CardOption key={value.shank} active={!selectedDiamondWiseDesign && ringShank === value.shank} label={shankLabels[value.shank] || value.label} image={value.image} className="theme3-image-option" onClick={() => handleStyle(value)} disabled={isStyleDisabled(value)} onMouseEnter={() => handleShankCardHover(value.shank, shankLabels[value.shank] || value.label, value.sideSetting)} onMouseLeave={handleShankCardLeave} delta={shankDeltaMap[value.shank] ?? null} parent={parent} bandWidthChoices={isBandWidthEligible && ringShank === value.shank ? availableBandWidths.map((width) => ({ width, selected: bandWidth === width, onSelect: () => handleBandWidth(width) })) : null} />
               ))}
             </OptionRow>
             )}
 
-            <OptionRow title="Metal" guide="metal-purity" className="theme3-band-metal" price={metalPrice} parent={parent} showHoverDelta={false}>
+            {(ringShank === "CHANNEL" || ringShank === "PLATE-PRONG") && (
+              <OptionRow title={t("option.bandCoverage")} guide="band" className="theme3-band-coverage" showHoverDelta={false}>
+                {[
+                  { label: t("bandCoverage.half"), value: "1_2" },
+                  { label: t("bandCoverage.threeQuarters"), value: "3_4" },
+                  { label: t("bandCoverage.full"), value: "full" },
+                ].map((option) => (
+                  <TextOption
+                    key={option.value}
+                    active={(noHeadSelected ? weddingBandCoverage : engagementBandCoverage) === option.value}
+                    label={option.label}
+                    parent={parent}
+                    onClick={() => {
+                      if (noHeadSelected) {
+                        handleWeddingBandCoverage(option.value);
+                      } else {
+                        handleEngagementBandCoverage(option.value);
+                      }
+                    }}
+                  />
+                ))}
+              </OptionRow>
+            )}
+
+            <OptionRow title={t("option.metal")} guide="metal-purity" className="theme3-band-metal" price={metalPrice} parent={parent} showHoverDelta={false}>
               {availableMetalColors.map((option) => {
                 const metalDelta = metalColorDeltaMap[option.value] ?? null;
                 const isActiveMetal = selectedMetalColorValue === option.value;
+                const label = getMetalColorOptionLabel(option);
                 return (
                   <button
                     key={option.value}
                     type="button"
                     className={`gb-metal-option ${isActiveMetal ? "active" : ""}`}
                     onClick={() => handleMetalColor(option)}
-                    title={option.label}
+                    title={label}
                     style={{
                       background: option.gradient || option.color,
                       backgroundColor: option.color,
                     }}
                   >
-                    <small style={{T3_BODY_STYLE, fontWeight: 600, color: "#303030"}}>{option.label}</small>
-                    <span className="gb-delta-label" style={{ display: "block", fontSize: "10px", fontWeight: 400, color: "#555", lineHeight: 1.2, marginTop: "2px"}}>
+                    <small className="theme3-option-box-label" style={{ fontWeight: 600 }}>{label}</small>
+                    <span className="gb-delta-label theme3-option-box-price" style={{ display: "block", fontSize: "10px", fontWeight: 400, lineHeight: 1.2, marginTop: "2px"}}>
                       {!isActiveMetal && metalDelta !== null && metalDelta !== 0 ? `${metalDelta > 0 ? "+" : ""}${formatStoreCurrency(metalDelta, parent)}` : ""}
                     </span>
                   </button>
@@ -3598,7 +4105,7 @@ return (
             </OptionRow>
 
             {!platinum && !["Titanium", "Silver", "Sterling Silver"].includes(metal) && (
-              <OptionRow title="Purity" guide="metal-purity" className="theme3-band-purity" price={metalPrice} parent={parent} showHoverDelta={false}>
+              <OptionRow title={t("option.purity")} guide="metal-purity" className="theme3-band-purity" price={metalPrice} parent={parent} showHoverDelta={false}>
                 {availablePurities.map((option) => (
                   <TextOption
                     key={option}
@@ -3616,11 +4123,11 @@ return (
               className="theme3-ring-size-card"
               data-theme3-guide="ring-size"
               data-theme3-guide-section="band"
-              data-theme3-guide-label="Ring Size"
+              data-theme3-guide-label={t("option.ringSize")}
               data-theme3-band-order="ring-size"
             >
               <div className="theme3-ring-size-header">
-                <span style={T3_SUBHEADER_STYLE}>Ring Size</span>
+                <span className="theme3-section-heading" style={T3_SUBHEADER_STYLE}>{t("option.ringSize")}</span>
               </div>
               <div className="custom-ring-size-wrapper" ref={ringSizeDropdownRef}>
                 <button
@@ -3628,17 +4135,17 @@ return (
                   className={`custom-ring-size-trigger ${ringSizeOpen ? "active" : ""}`}
                   onClick={() => setRingSizeOpen(!ringSizeOpen)}
                 >
-                  <span>{selectedRingSizeSystem.label} {ringSize}</span>
-                  <svg width="12" height="7" viewBox="0 0 12 7" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M1 1L6 6L11 1" stroke="#6B6B6B" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <span className="theme3-option-box-label">{selectedRingSizeSystem.label} {ringSize}</span>
+                  <svg width="12" height="7" viewBox="0 0 12 7" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <path d="M1 1L6 6L11 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
                 </button>
                 <button
                 type="button"
-                className="size-guide-link"
+                className="size-guide-link theme3-link-text"
                 onClick={() => window.open("/size-guide/size-guide-R9.pdf", "_blank")}
               >
-                Size Guide
+                {t("sizes.sizeGuideLink")}
               </button>
                 {ringSizeOpen && (
                   <div className="custom-ring-size-dropdown">
@@ -3650,8 +4157,10 @@ return (
                           className={`custom-ring-size-option ${String(ringSize) === option ? "selected" : ""}`}
                           onClick={() => handleRingSize(option)}
                         >
-                          <span>{selectedRingSizeSystem.label} {option}</span>
-                          <span className="custom-ring-size-mm">{selectedRingSizeSystem.mm[i]} mm</span>
+                          <span className="theme3-option-box-label">{selectedRingSizeSystem.label} {option}</span>
+                          {selectedRingSizeSystem.mm[i] ? (
+                            <span className="custom-ring-size-mm">{selectedRingSizeSystem.mm[i]} {t("sizes.diameterMm")}</span>
+                          ) : null}
                         </button>
                       ))}
                     </div>
@@ -3663,7 +4172,7 @@ return (
 
             {!noHeadSelected && availableMatchingBandStyles.length > 0 && (
             <OptionRow
-              title="Matching Band"
+              title={t("option.matchingBand")}
               guide="matching-band"
               className="theme3-matching-band"
               price={matchingBandPrice}
@@ -3672,7 +4181,7 @@ return (
             >
               <TextOption
                 active={matchingBandQuantity === 0}
-                label="None"
+                label={t("engraving.none")}
                 className="theme3-matching-band-none"
                 onClick={() => handleMatchingBand(matchingBandOptions[0])}
               />
@@ -3695,34 +4204,31 @@ return (
             )}
 
             <div
+              ref={engravingBlockRef}
               className="theme3-engraving-inline"
               data-theme3-guide="engraving"
               data-theme3-guide-section="band"
-              data-theme3-guide-label="Engraving"
+              data-theme3-guide-label={t("engraving.title")}
             >
               {isEngravingDisabledForShank && (
                 <div className="theme3-model-note" role="note">
-                  This band style doesn't have a plain inner surface, so engraving is unavailable for it.
+                  {t("engraving.unavailableNote")}
                 </div>
               )}
               <div className="theme3-engraving-controls">
                 <label htmlFor="theme3-engraving-input">
-                  <span style={T3_SUBHEADER_STYLE}>Engraving</span>
+                  <span className="theme3-section-heading" style={T3_SUBHEADER_STYLE}>{t("engraving.title")}</span>
                 </label>
                 <div className="theme3-engraving-input-wrap">
                   <input
                     id="theme3-engraving-input"
                     ref={engravingInputRef}
                     type="text"
+                    className="theme3-body-text"
                     value={engraving}
                     onChange={handleEngravingChange}
                     onFocus={activateEngravingPreview}
-                    onBlur={(event) => {
-                      const controls = event.currentTarget.closest(".theme3-engraving-controls");
-                      if (event.relatedTarget && controls?.contains(event.relatedTarget)) return;
-                      deactivateEngravingPreview();
-                    }}
-                    placeholder="Enter up to 15 characters"
+                    placeholder={t("engraving.placeholder")}
                     aria-describedby="theme3-engraving-help"
                     disabled={isEngravingDisabledForShank}
                     style={{
@@ -3736,7 +4242,7 @@ return (
                       type="button"
                       className="theme3-engraving-clear-btn"
                       onClick={handleEngravingClear}
-                      aria-label="Clear engraving"
+                      aria-label={t("engraving.clearAria")}
                       tabIndex={-1}
                     >
                       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -3749,7 +4255,7 @@ return (
                 {engravingFocus && (
                   <>
                     <fieldset>
-                      <legend>Font style</legend>
+                      <legend>{t("engraving.fontStyleLegend")}</legend>
                       <div className="theme3-engraving-fonts">
                         {ENGRAVING_FONTS.map((font) => (
                           <button
@@ -3761,14 +4267,14 @@ return (
                             disabled={isEngravingDisabledForShank}
                             style={{ fontFamily: font.fontFamily, fontStyle: font.fontStyle || "normal" }}
                           >
-                            {font.label}
+                            {engravingFontText(font.value, font.label)}
                           </button>
                         ))}
                       </div>
                     </fieldset>
 
                     <fieldset>
-                      <legend>Insert symbols</legend>
+                      <legend>{t("engraving.symbolsLegend")}</legend>
                       <div className="theme3-engraving-symbols">
                         {ENGRAVING_SYMBOLS.map(({ symbol, fontSize }) => (
                           <button
@@ -3791,7 +4297,7 @@ return (
 
 {!noHeadSelected && (
 <>
-<OptionRow title="Bi-metal" guide="bi-metal" className="theme3-band-bimetal">
+<OptionRow title={t("option.biMetal")} guide="bi-metal" className="theme3-band-bimetal">
               <button
                 type="button"
                 className={`gb-metal-option gb-metal-option-bi ${biMetal !== "Yes" ? "active" : ""}`}
@@ -3799,7 +4305,7 @@ return (
                 disabled={platinum || ["Titanium", "Sterling Silver"].includes(metal)}
                 style={{height: 42}}
               >
-                <small style={T3_BODY_STYLE}>None</small>
+                <small className="theme3-option-box-label" style={T3_BODY_STYLE}>{t("engraving.none")}</small>
               </button>
               {availableMetalColors
                 .filter((option) => !option.platinum && !option.fixedPurity)
@@ -3818,7 +4324,7 @@ return (
                       backgroundColor: option.color,
                     }}
                   >
-                    <small style={T3_BODY_STYLE}>{option.label}</small>
+                    <small className="theme3-option-box-label" style={T3_BODY_STYLE}>{option.label}</small>
                   </button>
                 ))}
             </OptionRow>
@@ -3845,19 +4351,21 @@ return (
                       justifyContent: "space-between",
                       alignItems: "center",
                       paddingBottom: 0,
+                      paddingTop: 16,
                     }}
                   >
-                    <span style={T3_SUBHEADER_STYLE}>Stone</span>
-                    <span className="theme3-ring-type-price">
+                    <span className="theme3-section-heading" style={T3_SUBHEADER_STYLE}>{t("nav.section.stone")}</span>
+                    <span className="theme3-ring-type-price theme3-section-heading">
                       {formatStoreCurrency(selectedStonePrice, parent)}
                     </span>
                   </div>
                 </section>
 
-                <OptionRow title="Shape" guide="center-stone-shape" className="theme3-shape-grid" maxOneRow={6}>
+                <OptionRow title={t("option.shape")} guide="center-stone-shape" className="theme3-shape-grid" maxOneRow={6}>
                   {shapeOptions.filter((option) => {
                     if (!getAvailableOptions(parent, "diamondShapes").includes(option.value)) return false;
-                    if (headStyle === "three-stone") return Boolean(THREE_STONE_SHAPE_TO_HEAD[option.value]);
+                    if (headStyle === "three-stone") return true;
+                    if (headStyle === "two-stone") return TWO_STONE_SHAPES.has(option.value);
                     return isShapeCompatible(parent, ringHead, option.value);
                   }).map((option) => (
                     <CardOption
@@ -3875,21 +4383,86 @@ return (
                   ))}
                 </OptionRow>
 
-<CaratOptionRow
-  title="Carat"
-  guide="target-carat"
-  value={Number(diamondSize) || defaultCarat}
-  onChange={handleCarat}
-  stops={availableCaratSizes}
-/>
+                {headStyle === "two-stone" && (
+                  <OptionRow title={t("option.secondShape")} className="theme3-shape-grid" maxOneRow={6}>
+                    {TWO_STONE_RIGHT_OPTIONS.map((opt) => (
+                      <CardOption
+                        key={opt.value}
+                        active={twoStoneRight === opt.value}
+                        label={opt.label}
+                        spritePosition={opt.spritePosition}
+                        onClick={() => handleTwoStoneRight(opt)}
+                        parent={parent}
+                      />
+                    ))}
+                  </OptionRow>
+                )}
+
+                <CaratOptionRow
+                  title={t("option.carat")}
+                  guide="target-carat"
+                  value={Number(diamondSize) || defaultCarat}
+                  onChange={handleCarat}
+                  stops={availableCaratSizes}
+                />
+
+                {headStyle === "three-stone" && availableSideOptions.length > 0 && (
+                  <OptionRow
+                    title={t("option.sideStone")}
+                    guide="side-stone-shape"
+                    className="theme3-shape-grid"
+                    maxOneRow={6}
+                    price={getSideStonePrice(parent, threestone)}
+                    parent={parent}
+                  >
+                    {availableSideOptions.map((sideOption) => {
+                      const optPrice = getSideStonePrice(parent, sideOption.threestone);
+                      const curPrice = getSideStonePrice(parent, threestone);
+                      const delta = optPrice - curPrice;
+                      return (
+                        <CardOption
+                          key={sideOption.threestone}
+                          active={threestone === sideOption.threestone}
+                          label={sideOption.label}
+                          spritePosition={sideOption.spritePosition}
+                          image={sideOption.image}
+                          delta={delta}
+                          onClick={() => handleSideStone(sideOption)}
+                          parent={parent}
+                        />
+                      );
+                    })}
+                  </OptionRow>
+                )}
+
+                {headStyle === "three-stone" && availableSideOptions.length > 0 && (
+                  <OptionRow title={t("option.sideStoneColor")} className="theme3-side-stone-colors">
+                    {SIDE_STONE_COLOR_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={`theme3-stone-swatch ${sideStoneColor === option.value ? "active" : ""}`}
+                        onClick={() => handleSideStoneColor(option.value)}
+                        aria-label={`Select ${option.label} side stones`}
+                      >
+                        {option.spritePosition ? (
+                          <span style={{ ...SPRITE_BG, backgroundPosition: option.spritePosition }} />
+                        ) : (
+                          <span className="theme3-side-stone-color-swatch" style={{ backgroundColor: option.color }} />
+                        )}
+                        <span>{option.label}</span>
+                      </button>
+                    ))}
+                  </OptionRow>
+                )}
 
                 {availableStoneTypeOptions.length > 1 && (
-                  <OptionRow title="Category" guide="stone-type" className="theme3-category-options" price={stoneTotal} parent={parent} showHoverDelta={false}>
+                  <OptionRow title={t("option.category")} guide="stone-type" className="theme3-category-options" price={stoneTotal} parent={parent} showHoverDelta={false}>
                     {availableStoneTypeOptions.map((option) => (
                       <TextOption
                         key={option.activeTab + option.diamondOrigin}
                         active={activeStoneTab === option.activeTab && selectedDiamondOrigin === option.diamondOrigin}
-                        label={option.label}
+                        label={stoneCategoryText(option)}
                         delta={getStoneCategoryDelta(option)}
                         parent={parent}
                         onClick={() => handleStoneType(option)}
@@ -3902,22 +4475,22 @@ return (
 
                 {isColoredMode && availableFancyDiamonds.length > 0 && (
                   <>
-                    <OptionRow title="Colored Diamond" guide="colored-diamond" maxOneRow={COLORED_DIAMOND_MAX_ONE_ROW}>
+                    <OptionRow title={t("option.coloredDiamond")} guide="colored-diamond" maxOneRow={COLORED_DIAMOND_MAX_ONE_ROW}>
                       {fancyDiamondSwatches.map((option) => (
                         <button
                           key={option}
                           type="button"
                           className={`theme3-stone-swatch ${fancyDiamond === option ? "active" : ""}`}
                           onClick={() => handleFancyDiamond(option)}
-                          title={option}
+                          title={formatFancyDiamondLabel(option)}
                         >
                           <span style={{ ...SPRITE_BG, backgroundPosition: SPRITE_POSITIONS[option] }} />
-                          <span>{option}</span>
+                          <span>{formatFancyDiamondLabel(option)}</span>
                         </button>
                       ))}
                     </OptionRow>
 
-                    <OptionRow title="Intensity" guide="colored-diamond">
+                    <OptionRow title={t("option.intensity")} guide="colored-diamond">
                       {intensityOptions.map((option) => (
                         <button
                           key={option}
@@ -3935,7 +4508,7 @@ return (
                 )}
 
                 {isGemstoneMode && availableGemstones.length > 0 && (
-                  <OptionRow title="Gemstone" guide="gemstone" maxOneRow={8}>
+                  <OptionRow title={t("option.gemstone")} guide="gemstone" maxOneRow={8}>
                     {availableGemstones.map((option) => (
                       <button
                         key={option}
@@ -3952,17 +4525,22 @@ return (
                 )}
 
                 {!isGemstoneMode && availableQualityLevels.length > 0 && (
-                  <OptionRow title="Quality" guide="cut-clarity" className="theme3-quality-options" price={stoneTotal} parent={parent} showHoverDelta={false}>
+                  <OptionRow title={t("option.quality")} guide="cut-clarity" className="theme3-quality-options" price={stoneTotal} parent={parent} showHoverDelta={false}>
                     {availableQualityLevels.map((option) => (
                       <TextOption
                         key={option}
                         active={selectedQuality?.quality === option}
-                        label={qualityClarities[option] ? (
-                          <span className="quality-option-label">
-                            <span>{option}</span>
-                            <span>({qualityClarities[option]})</span>
-                          </span>
-                        ) : option}
+                        label={(() => {
+                          const clarity =
+                            qualityClaritiesByOrigin[selectedDiamondOrigin]?.[option] ||
+                            qualityClarities[option];
+                          return clarity ? (
+                            <span className="quality-option-label theme3-option-box-label">
+                              <span>{qualityText(option)}</span>
+                              <span>({clarity})</span>
+                            </span>
+                          ) : qualityText(option);
+                        })()}
                         delta={getQualityDelta(option)}
                         parent={parent}
                         onClick={() => handleDiamondQuality(option)}
@@ -3993,13 +4571,13 @@ return (
               <button
                 type="button"
                 className="theme3-summary-details-toggle"
-                aria-label={isSummaryExpanded ? "Hide details" : "View details"}
+                aria-label={isSummaryExpanded ? t("summary.hideDetails") : t("summary.viewDetails")}
                 aria-expanded={isSummaryExpanded}
                 onClick={handleTheme3SummaryArrowClick}
               >
-                <span>View details</span>
+                <span className="theme3-link-text">{isSummaryExpanded ? t("summary.hideDetails") : t("summary.viewDetails")}</span>
                 <svg
-                  className={`theme3-summary-toggle-arrow${isSummaryExpanded ? " is-expanded" : ""}`}
+                  className={`theme3-summary-toggle-arrow theme3-link-text${isSummaryExpanded ? " is-expanded" : ""}`}
                   xmlns="http://www.w3.org/2000/svg"
                   width="8"
                   height="5"
@@ -4015,16 +4593,17 @@ return (
               </button>
 
               <div className="theme3-summary-price-row">
-                <strong className="theme3-summary-price">
+                <strong className="theme3-summary-price theme3-section-heading">
                   {formatStoreCurrency(subtotalValue, parent)}
                 </strong>
-                <span className="theme3-summary-tax-label">
+                <span className="theme3-summary-tax-label theme3-body-text">
                   {summaryTaxLabel ? (summaryTaxLabel.startsWith("+") ? `+ ${summaryTaxLabel.slice(1).trim()}` : summaryTaxLabel) : null}
                 </span>
               </div>
             </div>
 
             <div className="theme3-footer-actions">
+              {storefrontControls.addToCart ? (
               <button
                 type="button"
                 className="theme3-panel-footer-cta"
@@ -4038,17 +4617,36 @@ return (
               >
                 {theme3FooterLabel}
               </button>
+              ) : null}
 
-              <div className="theme3-panel-action-wrapper">
+              <div className="theme3-footer-secondary-actions">
+                <div className="theme3-panel-action-wrapper">
+                  <button
+                    type="button"
+                    className="theme3-panel-action-btn theme3-panel-share-btn"
+                    onClick={handleShareClick}
+                    aria-label={t("action.shareConfiguration")}
+                  >
+                    {t("action.share")}
+                  </button>
+                  {showCopiedTooltip && <span className="theme3-share-tooltip">{t("action.shareCopied")}</span>}
+                </div>
+                {storefrontControls.reset ? (
                 <button
                   type="button"
-                  className="theme3-panel-action-btn theme3-panel-share-btn"
-                  onClick={handleShareClick}
-                  aria-label="Share configuration"
+                  className="theme3-panel-action-btn theme3-panel-reset-btn"
+                  onClick={() => {
+                    if (onResetClick) {
+                      onResetClick();
+                    } else {
+                      handleReset();
+                    }
+                  }}
+                  aria-label={t("action.resetConfiguration")}
                 >
-                  Share
+                  {t("action.reset")}
                 </button>
-                {showCopiedTooltip && <span className="theme3-share-tooltip">URL Copied</span>}
+                ) : null}
               </div>
             </div>
           </div>
@@ -4098,7 +4696,7 @@ return (
   return (
     <aside className="gb-configurator-panel">
       {styleOptions.filter((option) => isHeadCompatible(parent, option.shank, compatibilityHead)).length > 1 && (
-      <OptionRow title="Ring Style & Design">
+      <OptionRow title={t("option.ringStyleAndDesign")}>
         {styleOptions.filter((option) => isHeadCompatible(parent, option.shank, compatibilityHead)).map((option) => (
           <CardOption
             key={option.shank}
@@ -4107,14 +4705,43 @@ return (
             image={option.image}
             onClick={() => handleStyle(option)}
             disabled={isStyleDisabled(option)}
+            bandWidthChoices={isBandWidthEligible && ringShank === option.shank ? availableBandWidths.map((width) => ({ width, selected: bandWidth === width, onSelect: () => handleBandWidth(width) })) : null}
           />
         ))}
       </OptionRow>
       )}
 
+      {(ringShank === "CHANNEL" || ringShank === "PLATE-PRONG") && (
+        <OptionRow title={t("option.bandCoverage")}>
+          {[
+            { label: t("bandCoverage.half"), value: "1_2" },
+            { label: t("bandCoverage.threeQuarters"), value: "3_4" },
+            { label: t("bandCoverage.full"), value: "full" },
+          ].map((option) => (
+            <TextOption
+              key={option.value}
+              active={(noHeadSelected ? weddingBandCoverage : engagementBandCoverage) === option.value}
+              label={option.label}
+              onClick={() => {
+                if (noHeadSelected) {
+                  handleWeddingBandCoverage(option.value);
+                } else {
+                  handleEngagementBandCoverage(option.value);
+                }
+              }}
+            />
+          ))}
+        </OptionRow>
+      )}
+
       {!noHeadSelected && (
-        <OptionRow title="Shape">
-          {shapeOptions.filter((option) => getAvailableOptions(parent, "diamondShapes").includes(option.value) && isShapeCompatible(parent, ringHead, option.value)).map((option) => (
+        <OptionRow title={t("option.shape")}>
+          {shapeOptions.filter((option) => {
+            if (!getAvailableOptions(parent, "diamondShapes").includes(option.value)) return false;
+            if (headStyle === "three-stone") return true;
+            if (headStyle === "two-stone") return TWO_STONE_SHAPES.has(option.value);
+            return isShapeCompatible(parent, ringHead, option.value);
+          }).map((option) => (
             <CardOption
               key={option.value}
               active={shape === option.value}
@@ -4131,19 +4758,77 @@ return (
         </OptionRow>
       )}
 
+      {!noHeadSelected && headStyle === "two-stone" && (
+        <OptionRow title={t("option.secondShape")}>
+          {TWO_STONE_RIGHT_OPTIONS.map((opt) => (
+            <CardOption
+              key={opt.value}
+              active={twoStoneRight === opt.value}
+              label={opt.label}
+              spritePosition={opt.spritePosition}
+              onClick={() => handleTwoStoneRight(opt)}
+              parent={parent}
+            />
+          ))}
+        </OptionRow>
+      )}
+
       {!noHeadSelected && (
         <CaratOptionRow
-          title="Carat"
+          title={t("option.carat")}
           value={Number(diamondSize) || defaultCarat}
           onChange={handleCarat}
           stops={availableCaratSizes}
         />
       )}
 
+      {!noHeadSelected && headStyle === "three-stone" && availableSideOptions.length > 0 && (
+        <OptionRow title={t("option.sideStone")} price={getSideStonePrice(parent, threestone)} parent={parent}>
+          {availableSideOptions.map((sideOption) => {
+            const optPrice = getSideStonePrice(parent, sideOption.threestone);
+            const curPrice = getSideStonePrice(parent, threestone);
+            const delta = optPrice - curPrice;
+            return (
+              <CardOption
+                key={sideOption.threestone}
+                active={threestone === sideOption.threestone}
+                label={sideOption.label}
+                spritePosition={sideOption.spritePosition}
+                image={sideOption.image}
+                delta={delta}
+                onClick={() => handleSideStone(sideOption)}
+                parent={parent}
+              />
+            );
+          })}
+        </OptionRow>
+      )}
+
+      {!noHeadSelected && headStyle === "three-stone" && availableSideOptions.length > 0 && (
+        <OptionRow title={t("option.sideStoneColor")} className="theme3-side-stone-colors">
+          {SIDE_STONE_COLOR_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className={`theme3-stone-swatch ${sideStoneColor === option.value ? "active" : ""}`}
+              onClick={() => handleSideStoneColor(option.value)}
+              aria-label={`Select ${option.label} side stones`}
+            >
+              {option.spritePosition ? (
+                <span style={{ ...SPRITE_BG, backgroundPosition: option.spritePosition }} />
+              ) : (
+                <span className="theme3-side-stone-color-swatch" style={{ backgroundColor: option.color }} />
+              )}
+              <span>{option.label}</span>
+            </button>
+          ))}
+        </OptionRow>
+      )}
+
       <OptionRow
-        title="Setting"
-        titleExtra={hasNoHeadCompatibility(parent) ? (
-          <div className="theme3-ring-type-toggle" role="tablist" aria-label="Ring Type">
+        title={t("option.setting")}
+        titleExtra={hasNoHeadCompatibility(parent) && storefrontControls.engagement && storefrontControls.wedding ? (
+          <div className="theme3-ring-type-toggle" role="tablist" aria-label={t("ringType.ariaLabel")}>
             <button
               type="button"
               role="tab"
@@ -4153,7 +4838,7 @@ return (
                 if (noHeadSelected) handleNoHeadToggle();
               }}
             >
-              Engagement
+              {t("ringType.engagement")}
             </button>
             <button
               type="button"
@@ -4164,7 +4849,7 @@ return (
                 if (!noHeadSelected) handleNoHeadToggle();
               }}
             >
-              Wedding
+              {t("ringType.wedding")}
             </button>
           </div>
         ) : null}
@@ -4181,28 +4866,32 @@ return (
         ))}
       </OptionRow>
 
-      <OptionRow title="Ring Metal">
-        {metalOptions.map((option) => (
-          <button
-            key={option.label}
-            type="button"
-            className={`gb-metal-option ${
-              option.platinum
-                ? (platinum || metal === "Platinum" ? "active" : "")
-                : (option.fixedPurity ? (metal === option.fixedPurity ? "active" : "") : (primaryMetalLabel === option.label ? "active" : ""))
-            }`}
-            onClick={() => handleMetal(option)}
-            title={option.label}
-          >
-            <span style={{ background: option.gradient || option.color, backgroundColor: option.color }} />
-            <b>{["PL", "TI", "SL"].includes(option.label) ? option.label : option.label.split(" ")[0]}</b>
-          </button>
-        ))}
+      <OptionRow title={t("option.ringMetal")}>
+        {metalOptions.map((option) => {
+          const label = getMetalOptionLabel(option);
+          const isActive = option.platinum
+            ? platinum || metal === "Platinum"
+            : option.fixedPurity
+              ? metal === option.fixedPurity
+              : metal === option.purity && String(ringColor).toLowerCase() === option.color.toLowerCase();
+          return (
+            <button
+              key={option.label}
+              type="button"
+              className={`gb-metal-option ${isActive ? "active" : ""}`}
+              onClick={() => handleMetal(option)}
+              title={label}
+            >
+              <span style={{ background: option.gradient || option.color, backgroundColor: option.color }} />
+              <b className="theme3-option-box-label">{["PL", "TI", "SS"].includes(option.label) ? option.label : label.split(" ")[0]}</b>
+            </button>
+          );
+        })}
       </OptionRow>
 
       <div className="gb-bottom-panel">
         {!noHeadSelected && availableMatchingBandStyles.length > 0 && (
-          <OptionRow title="Matching Band">
+          <OptionRow title={t("option.matchingBand")}>
             {matchingBandOptions
               .filter((option) => option.quantity === 0 || availableMatchingBandStyles.includes(option.style))
               .map((option) => (

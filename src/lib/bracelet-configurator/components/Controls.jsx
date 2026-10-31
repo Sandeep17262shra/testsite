@@ -11,6 +11,10 @@ import {
 import { Base64 } from "js-base64";
 import { ShareContext } from "../contexts/ShareContext";
 import { View360Context } from "../contexts/View360Context";
+import { renderOptionBoxLabel } from "@/lib/ring-configurator/theme3OptionLabels";
+import { useStorefrontControls } from "@/lib/ring-configurator/contexts/StoreContext";
+import { useJewelryText } from "@/lib/ring-configurator/useJewelryText";
+import { Theme3ConfirmDialog } from "@/lib/ring-configurator/components/Theme3ConfirmDialog";
 
 function CardOption({ active, label, image, onClick, disabled = false }) {
   return (
@@ -21,12 +25,13 @@ function CardOption({ active, label, image, onClick, disabled = false }) {
       disabled={disabled}
     >
       {image && <img src={image} alt={label || ""} />}
-      {label && <span>{label}</span>}
+      {label && <span className="theme3-option-box-label">{label}</span>}
     </button>
   );
 }
 
 function TextOption({ active, label, onClick, disabled = false, children }) {
+  const content = children != null ? children : label;
   return (
     <button
       type="button"
@@ -34,7 +39,9 @@ function TextOption({ active, label, onClick, disabled = false, children }) {
       onClick={onClick}
       disabled={disabled}
     >
-      {children || label}
+      {typeof content === "string" || typeof content === "number"
+        ? renderOptionBoxLabel(content)
+        : content}
     </button>
   );
 }
@@ -111,7 +118,7 @@ function OptionRow({ title, children, className }) {
     <section className={`gb-option-row${className ? ` ${className}` : ""}`}>
       {title && (
         <div className="gb-option-title">
-          <span>{title}</span>
+          <span className="theme3-section-heading">{title}</span>
         </div>
       )}
       <div className="gb-option-slider">
@@ -191,6 +198,8 @@ const BRACELET_CHARM_CATEGORIES = [
 ];
 
 const Controls = forwardRef(function Controls({ activeSection = "bracelet", onSectionChange }, ref) {
+    const t = useJewelryText("bracelet");
+    const storefrontControls = useStorefrontControls();
     const {
         selectedBracelet, setSelectedBracelet,
         braceletPath, setBraceletPath,
@@ -831,6 +840,7 @@ const Controls = forwardRef(function Controls({ activeSection = "bracelet", onSe
                         </span>
                     )}
                 </div>
+                {storefrontControls.reset ? (
                 <button
                     type="button"
                     className="theme3-header-btn"
@@ -839,6 +849,7 @@ const Controls = forwardRef(function Controls({ activeSection = "bracelet", onSe
                 >
                     Reset
                 </button>
+                ) : null}
             </div>
             <div className="theme3-subtotal-block">
                 <button
@@ -865,8 +876,8 @@ const Controls = forwardRef(function Controls({ activeSection = "bracelet", onSe
             {/* Bracelet */}
             <div className="order-summary-section">
                 <div className="order-summary-row">
-                    <span className="order-summary-title">Bracelet</span>
-                    <span className="order-summary-price">${braceletTotalPrice.toLocaleString()}</span>
+                    <span className="order-summary-title theme3-section-heading">Bracelet</span>
+                    <span className="order-summary-price theme3-section-heading">${braceletTotalPrice.toLocaleString()}</span>
                 </div>
                 <div className="order-summary-desc">{braceletSummaryDesc}</div>
             </div>
@@ -875,9 +886,9 @@ const Controls = forwardRef(function Controls({ activeSection = "bracelet", onSe
             {placedCharms.length > 0 && (
                 <div className="order-summary-section">
                     <div className="order-summary-row">
-                        <span className="order-summary-title">Charms ({placedCharms.length})</span>
+                        <span className="order-summary-title theme3-section-heading">Charms ({placedCharms.length})</span>
                         {charmsPrice > 0 && (
-                            <span className="order-summary-price">${charmsPrice.toLocaleString()}</span>
+                            <span className="order-summary-price theme3-section-heading">${charmsPrice.toLocaleString()}</span>
                         )}
                     </div>
                     <div className="order-summary-charms-list">
@@ -904,19 +915,12 @@ const Controls = forwardRef(function Controls({ activeSection = "bracelet", onSe
                 {buildSummaryContent}
             </header>
 
-            <div className="theme3-panel-scroll" ref={scrollContainerRef}>
+            <div className="theme3-panel-scroll theme3-panel-scroll--flush-top" ref={scrollContainerRef}>
                 <div
                     className="theme3-option-section"
                     data-theme3-section="bracelet"
                     ref={sectionRefs.bracelet}
                 >
-                    <header className="theme3-option-section-header">
-                        <h3>Bracelet Selection</h3>
-                        <span className="theme3-section-header-price">
-                            ${(braceletBasePrice + currentBraceletSizePrice + currentMetalPrice + (isPlatinum ? 0 : currentPurityPrice)).toLocaleString()}
-                        </span>
-                    </header>
-
                     <OptionRow title="Style">
                         {BRACELETS.map((bracelet, index) => {
                             return (
@@ -940,10 +944,9 @@ const Controls = forwardRef(function Controls({ activeSection = "bracelet", onSe
                             <TextOption
                                 key={opt.size}
                                 active={braceletSize === opt.size}
+                                label={`${opt.size}"`}
                                 onClick={() => handleBraceletSize(opt)}
-                            >
-                                <span>{opt.size}&quot;</span>
-                            </TextOption>
+                            />
                         ))}
                     </OptionRow>
 
@@ -957,7 +960,7 @@ const Controls = forwardRef(function Controls({ activeSection = "bracelet", onSe
                                 title={metal.alt}
                                 style={{ backgroundColor: metal.color || metal.hex }}
                             >
-                                <small>{metal.alt}</small>
+                                <small className="theme3-option-box-label">{metal.alt}</small>
                             </button>
                         ))}
                     </OptionRow>
@@ -982,9 +985,9 @@ const Controls = forwardRef(function Controls({ activeSection = "bracelet", onSe
                     ref={sectionRefs.charms}
                 >
                     <header className="theme3-option-section-header">
-                        <h3>{customizeType === "text" ? "Name Plate" : "Charms"}</h3>
+                        <h3 className="theme3-section-heading">{customizeType === "text" ? "Name Plate" : "Charms"}</h3>
                         {(customizeType === "text" ? 0 : charmsPrice) > 0 && (
-                            <span className="theme3-section-header-price">
+                            <span className="theme3-section-header-price theme3-section-heading">
                                 ${charmsPrice.toLocaleString()}
                             </span>
                         )}
@@ -1009,12 +1012,13 @@ const Controls = forwardRef(function Controls({ activeSection = "bracelet", onSe
                         <>
                             <div className="theme3-engraving-controls">
                                 <label>
-                                    Name
-                                    <small>{namePendant?.text?.length || 0}/{NAME_PENDANT_MAX_LENGTH}</small>
+                                    <span className="theme3-section-heading">Name</span>
+                                    <small className="theme3-body-text">{namePendant?.text?.length || 0}/{NAME_PENDANT_MAX_LENGTH}</small>
                                 </label>
                                 <div className="theme3-input-wrap" style={{ position: "relative" }}>
                                     <input
                                         type="text"
+                                        className="theme3-body-text"
                                         value={namePendant?.text || ""}
                                         maxLength={NAME_PENDANT_MAX_LENGTH}
                                         placeholder="Type a name"
@@ -1120,7 +1124,7 @@ const Controls = forwardRef(function Controls({ activeSection = "bracelet", onSe
                                         <img
                                             src={isImageCharmNumber(charmNumber)
                                                 ? getImageCharmIconPath(charmNumber)
-                                                : `/bc-assets/images/charms/charm${charmNumber ?? realCharmIndex + 1}.png`}
+                                                : `/bc-assets/images/charms/charm${charmNumber ?? realCharmIndex + 1}.webp`}
                                             alt={charmData?.name || "Charm"}
                                             draggable={false}
                                             style={{ WebkitUserDrag: "none", pointerEvents: "none" }}
@@ -1166,7 +1170,7 @@ const Controls = forwardRef(function Controls({ activeSection = "bracelet", onSe
 
                     <section className="gb-option-row" style={{ marginTop: "20px", marginBottom: "16px" }}>
                         <div className="gb-option-title" style={{ marginBottom: "10px" }}>
-                            <span>Charm Category</span>
+                            <span className="theme3-section-heading">Charm Category</span>
                         </div>
                         <div
                             className="necklace-charm-category-nav"
@@ -1186,10 +1190,7 @@ const Controls = forwardRef(function Controls({ activeSection = "bracelet", onSe
                                 </button>
                             );
                         })}
-                        <span
-                            className="necklace-charm-category-label"
-                            style={{ marginLeft: "6px", fontSize: "16px", fontWeight: "700" }}
-                        >
+                        <span className="necklace-charm-category-label theme3-section-heading">
                             {BRACELET_CHARM_CATEGORIES.find((c) => c.id === activeCharmCategory)?.label}
                         </span>
                         </div>
@@ -1206,7 +1207,7 @@ const Controls = forwardRef(function Controls({ activeSection = "bracelet", onSe
                                 disabled={activeCharmCategory === "3d"}
                                 style={{ backgroundColor: metal.hex }}
                             >
-                                <small>{metal.label}</small>
+                                <small className="theme3-option-box-label">{metal.label}</small>
                             </button>
                         ))}
                     </OptionRow>
@@ -1221,7 +1222,7 @@ const Controls = forwardRef(function Controls({ activeSection = "bracelet", onSe
                                     onClick={() => selectBirthstone(stone)}
                                 >
                                     <img src={stone.image} alt={stone.label} />
-                                    <span>{stone.label}</span>
+                                    <span className="theme3-option-box-label">{stone.label}</span>
                                 </button>
                             ))}
                         </OptionRow>
@@ -1260,7 +1261,7 @@ const Controls = forwardRef(function Controls({ activeSection = "bracelet", onSe
                     )}
 
                     {activeCharmCategory === "2d" && (
-                        <OptionRow title="2D Charms" className="gb-option-row--two-line theme3-initial-grid gb-option-row--charm-2d">
+                        <OptionRow title="2D Charms" className="gb-option-row--two-line theme3-initial-grid gb-option-row--charm-picker gb-option-row--charm-2d">
                             {charms2D.map((charm) => {
                                 const charmNumber = getCharmNumberFromPath(charm.path);
                                 const charmCount = charms.filter((c) => c && c.path === charm.path).length;
@@ -1278,14 +1279,14 @@ const Controls = forwardRef(function Controls({ activeSection = "bracelet", onSe
                     )}
 
                     {activeCharmCategory === "3d" && (
-                        <OptionRow title="3D Charms" className="gb-option-row--two-line theme3-initial-grid">
+                        <OptionRow title="3D Charms" className="gb-option-row--two-line theme3-initial-grid gb-option-row--charm-picker">
                             {charms3D.map((charm, i) => {
                                 const charmCount = charms.filter((c) => c && c.path === charm.path).length;
                                 return (
                                     <CardOption
                                         key={charm.path}
                                         active={charmCount > 0}
-                                        image={`/bc-assets/images/charms/charm${i + 1}.png`}
+                                        image={`/bc-assets/images/charms/charm${i + 1}.webp`}
                                         label={charm.name}
                                         onClick={() => addCharm(charm.path)}
                                     />
@@ -1316,9 +1317,11 @@ const Controls = forwardRef(function Controls({ activeSection = "bracelet", onSe
                 <div className="theme3-panel-footer-label">
                     <span>Next step</span>
                 </div>
+                {(activeSection === "bracelet" || storefrontControls.addToCart) ? (
                 <button type="button" className="theme3-panel-footer-cta" disabled={addedToCart} onClick={handleNextStep}>
                     {nextStepButtonText}
                 </button>
+                ) : null}
                 <div className="theme3-footer-actions">
                     {summaryActionsContent}
                 </div>
@@ -1329,16 +1332,18 @@ const Controls = forwardRef(function Controls({ activeSection = "bracelet", onSe
                 )}
             </footer>
 
-            {showResetPopup && (
-                <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/40">
-                    <div className="confirm-popup">
-                        <button className="close-cross" onClick={() => setShowResetPopup(false)}>✕</button>
-                        <p style={{ fontSize: "16px", fontWeight: "700", margin: "10px 0 6px" }}>Reset Bracelet?</p>
-                        <p style={{ color: "#666666", fontSize: "13px", marginBottom: "20px" }}>This will clear all your custom selections.</p>
-                        <button className="cnfm-btn" onClick={() => { handleReset(); setShowResetPopup(false); }}>Confirm Reset</button>
-                    </div>
-                </div>
-            )}
+            <Theme3ConfirmDialog
+                open={showResetPopup}
+                onClose={() => setShowResetPopup(false)}
+                title={t("bracelet.reset.title")}
+                body={t("reset.body")}
+                confirmLabel={t("reset.confirm")}
+                onConfirm={() => {
+                    handleReset();
+                    setShowResetPopup(false);
+                }}
+                closeAriaLabel={t("action.close")}
+            />
 
             <ToastContainer />
         </aside>

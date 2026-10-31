@@ -1,6 +1,7 @@
 import React, {
   forwardRef,
   useCallback,
+  useContext,
   useEffect,
   useImperativeHandle,
   useLayoutEffect,
@@ -16,8 +17,17 @@ import {
   BEAD_JEWELRY_CATEGORIES,
   BEAD_LENGTHS,
   BEAD_LENGTH_OPTIONS,
+  CLASSIC_SEPARATORS,
+  DEFAULT_METALIC_BEAD_SIZE_ID,
+  DEFAULT_METALIC_SIZE_FILTER,
+  getMetalicBeadPickerGridItems,
+  HIDDEN_NEW_SPACER_KEYS,
+  METALIC_BEADS,
+  METALIC_BEAD_SIZE_FILTERS,
+  METALIC_BEAD_SIZES,
   getBeadPickerGridItems,
   getBeadStyleLabel,
+  isBeadSizeSupported,
   SEPARATORS,
   UI_HIDDEN_BEAD_STYLE_IDS,
   UI_HIDDEN_CUSTOMIZE_TAB_IDS,
@@ -27,17 +37,36 @@ import {
   isSpacerCustomizationEnabled,
   resolveBeadStyle,
   resolvePatternAsset,
+  THREAD_COLORS,
 } from "../assets";
 import { isJewelryShellActive, requestJewelryCategory } from "@/lib/jewelry-shell/jewelryCategoryBus";
+import { getFooterSummaryTaxLabel } from "@/lib/jewelry-shell/summaryTaxLabel";
 import { useBeedsContext } from "../contexts/BeedsContext";
 import { usePreviewFocus } from "../contexts/PreviewFocusContext";
+import { View360Context } from "../contexts/View360Context";
 import { unlockBeadsAudio } from "../beadsSounds";
-import { buildPatternCustomizeSummaryLines } from "../pricing";
+import { buildBeadPreviewLabel, buildPatternCustomizeSummaryLines } from "../pricing";
+import { ShareContext } from "../contexts/ShareContext";
+import { Base64 } from "js-base64";
+import { renderOptionBoxLabel } from "@/lib/ring-configurator/theme3OptionLabels";
+import { useJewelryText } from "@/lib/ring-configurator/useJewelryText";
+import { useStorefrontControls } from "@/lib/ring-configurator/contexts/StoreContext";
+import {
+  BEAD_TAB_KEYS,
+  formatCountedLabel,
+} from "@/lib/ring-configurator/jewelryUiTranslations";
+
+function serializeBeadsCartItems(items = []) {
+  return items.map((item) => ({
+    type: item.type,
+    assetKey: item.assetKey,
+    ...(item.sizeId ? { sizeId: item.sizeId } : {}),
+    ...(Number.isFinite(item.ringGap) ? { ringGap: item.ringGap } : {}),
+    ...(item.id ? { id: item.id } : {}),
+  }));
+}
 
 const customizeTabsShownInUi = VISIBLE_BEAD_CUSTOMIZE_TABS;
-
-/** Matches necklace / bracelet charm slot row. */
-const SLOT_SWAP_TRANSITION = "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)";
 
 function CardOption({ active, label, image, onClick, disabled = false }) {
   return (
@@ -48,12 +77,13 @@ function CardOption({ active, label, image, onClick, disabled = false }) {
       disabled={disabled}
     >
       {image && <img src={image} alt={label || ""} />}
-      {label && <span>{label}</span>}
+      {label && <span className="theme3-option-box-label">{label}</span>}
     </button>
   );
 }
 
 function TextOption({ active, label, onClick, disabled = false, children }) {
+  const content = children != null ? children : label;
   return (
     <button
       type="button"
@@ -61,7 +91,7 @@ function TextOption({ active, label, onClick, disabled = false, children }) {
       onClick={onClick}
       disabled={disabled}
     >
-      {children || label}
+      {content != null ? renderOptionBoxLabel(content) : null}
     </button>
   );
 }
@@ -74,11 +104,9 @@ function BeadPickerCard({
   onClick,
   showPrice = true,
   showSizeInLabel = false,
-  displayLabel,
 }) {
   const cardLabel =
-    displayLabel ??
-    (showSizeInLabel && sizeLabel ? `${asset.name} · ${sizeLabel}` : asset.name);
+    showSizeInLabel && sizeLabel ? `${asset.name} · ${sizeLabel}` : asset.name;
 
   return (
     <button
@@ -88,18 +116,32 @@ function BeadPickerCard({
       disabled={disabled}
     >
       <span className="beads-grid-card__image-wrap">
-        <img
-          src={asset.image}
-          alt={cardLabel}
-          draggable={false}
-          decoding="async"
-          loading="eager"
-        />
+        {asset.topViewLabel ? (
+          <span className="beads-grid-card__model-token" aria-hidden="true">
+            {asset.topViewLabel}
+          </span>
+        ) : asset.texture ? (
+          <span
+            className="beads-grid-card__bead-icon"
+            style={{ "--bead-texture": `url("${asset.texture}")` }}
+            aria-hidden="true"
+          >
+            <span className="beads-grid-card__bead-hole" />
+          </span>
+        ) : (
+          <img
+            src={asset.image}
+            alt={cardLabel}
+            draggable={false}
+            decoding="async"
+            loading="eager"
+          />
+        )}
       </span>
-      <span className="beads-grid-card__label">{cardLabel}</span>
+      <span className="beads-grid-card__label theme3-option-box-label">{cardLabel}</span>
       {showPrice && (
-        <span className="beads-grid-card__meta">
-          {sizeLabel && !showSizeInLabel ? `${sizeLabel} - ` : ""}${asset.price || 8}
+        <span className="beads-grid-card__meta theme3-option-box-price">
+          {sizeLabel && !showSizeInLabel ? `${sizeLabel} · ` : ""}${asset.price || 8}
         </span>
       )}
     </button>
@@ -176,8 +218,8 @@ function OptionRow({ title, children, className }) {
   return (
     <section className={`gb-option-row${className ? ` ${className}` : ""}`}>
       {title && (
-        <div className="gb-option-title">
-          <span>{title}</span>
+        <div className="gb-option-title beads-gb-option-title">
+          <span className="theme3-section-heading">{title}</span>
         </div>
       )}
       <div className="gb-option-slider">
@@ -215,6 +257,11 @@ function StylePreviewThumb({ styleId }) {
 }
 
 const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewelry", onSectionChange }, ref) {
+  const t = useJewelryText("beaded");
+  const storefrontControls = useStorefrontControls();
+  const beadStyleLabel = (id) =>
+    id === "empty" ? t("beaded.style.custom") : getBeadStyleLabel(id);
+  const beadLengthLabel = (length) => length.label;
   const {
     jewelryCategory,
     setJewelryCategory,
@@ -241,6 +288,8 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
     canAddBead,
     canReplaceCustomizeSlotAt,
     canApplyBeadSizeToAllPresetSlots,
+    canChangePresetBeadSize,
+    applyPresetBeadSizeChange,
     canAddSpacer,
     canAddCharm,
     addManualItem,
@@ -255,18 +304,27 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
     updateManualItemSizeAt,
     replaceCustomizeSlotAt,
     applyBeadToAllPresetBeadSlots,
-    applySpacerToAllPresetSpacerSlots,
     clearManualItems,
     manualItems,
+    presetSlotItems,
     customizeSlotItems,
+    activeSlotIndex,
+    setActiveSlotIndex,
+    selectSlotIndex,
     pattern,
     jewelryPrice,
     customizePrice,
     totalPrice,
     displayLengthLabel,
     setShowResetPopup,
+    threadColorId,
+    setThreadColorId,
+    selectedThreadColor,
+    threadColors,
   } = useBeedsContext();
-  const { requestPreviewFocus } = usePreviewFocus();
+  const { requestPreviewFocus, clearPreviewFocus } = usePreviewFocus();
+  const { view360 } = useContext(View360Context);
+  const { shareUrl, setShareUrl, parent } = useContext(ShareContext);
 
   const sectionRefs = {
     jewelry: useRef(null),
@@ -277,20 +335,19 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
   const footerRef = useRef(null);
   const beadSlotRefs = useRef([]);
   const slotRowRef = useRef(null);
-  const beadDragRef = useRef(null);
   const suppressBeadClickRef = useRef(false);
-  const slotFlipOriginsRef = useRef(null);
-  const slotFlipRafRef = useRef(null);
-  /** Layout midpoints (client X) — unaffected by FLIP transforms on siblings. */
-  const slotLayoutMidXRef = useRef([]);
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
-  const [activeSlotIndex, setActiveSlotIndex] = useState(null);
-  /** Only which slot is held, not how far — the offset never goes through React. */
-  const [draggingSlotIndex, setDraggingSlotIndex] = useState(null);
-  const slotDragRafRef = useRef(null);
+  /** Same shape as bracelet charm drag: pointer offset, reset to 0 on each swap. */
+  const [slotDrag, setSlotDrag] = useState(null);
   const [gridSizeFilter, setGridSizeFilter] = useState("all");
   /** Size for new beads from the picker — only set when user picks a Size (mm) filter, not on bead card click. */
   const [pickerBeadSizeId, setPickerBeadSizeId] = useState(null);
+  /** Size filter for the Metalic Beads tab — "all", "8mm", or "10mm". */
+  const [metalicSizeFilter, setMetalicSizeFilter] = useState(DEFAULT_METALIC_SIZE_FILTER);
+  /** Size selected in the Metalic Beads picker (8mm or 10mm). */
+  const [metalicBeadSizeId, setMetalicBeadSizeId] = useState(DEFAULT_METALIC_BEAD_SIZE_ID);
+  const [addedToCart, setAddedToCart] = useState(false);
+  const [pendingCartPayload, setPendingCartPayload] = useState(null);
 
   useImperativeHandle(ref, () => ({
     scrollToSection(sectionId) {
@@ -359,14 +416,167 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
     [onSectionChange]
   );
 
-  const footerCtaLabel = activeSection === "jewelry" ? "Choose Beads" : "Add to cart";
-  const footerCtaDisabled = activeSection !== "jewelry";
+  const resolveStorefrontUrl = useCallback(() => {
+    const resolvedParentUrl =
+      parent ||
+      (typeof window !== "undefined" && window.__parentConfig?.parentUrl) ||
+      (typeof window !== "undefined" && window.self !== window.top ? document.referrer : "");
+
+    if (!resolvedParentUrl) {
+      return null;
+    }
+    try {
+      return new URL(resolvedParentUrl);
+    } catch {
+      return null;
+    }
+  }, [parent]);
+
+  const addToCart = useCallback(() => {
+    if (addedToCart) {
+      return;
+    }
+    setAddedToCart(true);
+
+    let media = null;
+    try {
+      const canvas =
+        document.querySelector(".theme3-preview-pane canvas") || document.querySelector("canvas");
+      if (canvas) {
+        media = canvas.toDataURL("image/png");
+      }
+    } catch (error) {
+      console.warn("Canvas snapshot failed", error);
+    }
+
+    const styleLabel = beadStyleLabel(styleId);
+    const title = buildBeadPreviewLabel(pattern, {
+      styleLabel,
+      displayLengthLabel,
+      pieceLabels: {
+        bead: t("beaded.preview.bead"),
+        beads: t("beaded.tab.beads"),
+        spacer: t("beaded.preview.spacer"),
+        spacers: t("beaded.tab.spacers"),
+        charm: t("beaded.preview.charm"),
+        charms: t("beaded.tab.charms"),
+      },
+    });
+    const slotItems = isManualMode ? manualItems : presetSlotItems;
+
+    const config = {
+      type: "beads",
+      flow: "BEADS",
+      styleId,
+      lengthId,
+      threadColorId,
+      sizeId,
+      slotItems: serializeBeadsCartItems(slotItems),
+      jewelryPrice,
+      customizePrice,
+      totalPrice,
+    };
+
+    let encoded;
+    try {
+      encoded = Base64.encode(JSON.stringify(config));
+    } catch (error) {
+      console.error("Failed to encode bead bracelet config:", error);
+      setAddedToCart(false);
+      return;
+    }
+
+    const storefrontUrl = resolveStorefrontUrl();
+    const url = storefrontUrl || new URL(window.location.href);
+    url.search = "";
+    url.searchParams.set("config", encoded);
+    const finalUrl = url.toString();
+
+    setPendingCartPayload({
+      type: "ADD_TO_CART",
+      quantity: 1,
+      Title: title || t("category.beadBracelet"),
+      Price: totalPrice,
+      Category: t("category.beadBracelet"),
+      Style: styleLabel,
+      Length: displayLengthLabel,
+      ThreadColor: selectedThreadColor?.label || "Black",
+      BeadSize: sizeId,
+      Media: media,
+    });
+    setShareUrl(finalUrl);
+  }, [
+    addedToCart,
+    customizePrice,
+    displayLengthLabel,
+    isManualMode,
+    jewelryPrice,
+    lengthId,
+    threadColorId,
+    selectedThreadColor,
+    manualItems,
+    pattern,
+    presetSlotItems,
+    resolveStorefrontUrl,
+    setShareUrl,
+    sizeId,
+    styleId,
+    t,
+    totalPrice,
+  ]);
+
+  useEffect(() => {
+    if (!pendingCartPayload || !shareUrl) {
+      return;
+    }
+
+    let previewUrl = shareUrl;
+    try {
+      const shareConfigUrl = new URL(shareUrl);
+      const storefrontUrl = resolveStorefrontUrl();
+      const url = storefrontUrl || shareConfigUrl;
+      url.search = "";
+      const encodedConfig = shareConfigUrl.searchParams.get("config");
+      if (encodedConfig) {
+        url.searchParams.set("config", encodedConfig);
+      }
+      url.searchParams.set("preview", "model-only");
+      previewUrl = url.toString();
+    } catch (error) {
+      console.warn("Failed to append preview parameter to share URL", error);
+    }
+
+    window.parent.postMessage({ ...pendingCartPayload, ModelPreviewUrl: previewUrl }, "*");
+    try {
+      navigator.clipboard.writeText(shareUrl);
+    } catch {
+      // Clipboard is optional for the parent cart handler.
+    }
+    setPendingCartPayload(null);
+  }, [pendingCartPayload, resolveStorefrontUrl, shareUrl]);
+
+  const footerCtaLabel = addedToCart
+    ? t("beaded.cart.addingToCart")
+    : view360 || activeSection !== "jewelry"
+      ? t("beaded.cart.addToCart")
+      : t("beaded.cart.chooseBeads");
+  const footerCtaDisabled = addedToCart;
 
   const handleFooterContinue = () => {
-    if (activeSection === "jewelry") {
-      scrollToSectionId("customize");
+    if (view360 || activeSection !== "jewelry") {
+      addToCart();
+      return;
     }
+    scrollToSectionId("customize");
   };
+
+  useEffect(() => {
+    if (!view360) {
+      return;
+    }
+    setActiveSlotIndex(null);
+    setSlotDrag(null);
+  }, [view360]);
 
   const filteredBeads = useMemo(() => {
     if (collectionId === "all") {
@@ -382,9 +592,16 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
     return getBeadPickerGridItems(filteredBeads, gridSizeFilter);
   }, [customizeTab, filteredBeads, gridSizeFilter]);
 
+  const metalicGridItems = useMemo(() => {
+    if (customizeTab !== "metalic-beads") {
+      return [];
+    }
+    return getMetalicBeadPickerGridItems(metalicSizeFilter);
+  }, [customizeTab, metalicSizeFilter]);
+
   const visibleAssets =
     customizeTab === "spacers"
-      ? SEPARATORS
+      ? CLASSIC_SEPARATORS
       : customizeTab === "charms"
         ? BEAD_CHARMS
         : [];
@@ -450,7 +667,7 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
       return;
     }
     const focusType =
-      customizeTab === "spacers" ? "spacer" : customizeTab === "charms" ? "charm" : "bead";
+      customizeTab === "spacers" || customizeTab === "metalic-beads" ? "spacer" : customizeTab === "charms" ? "charm" : "bead";
     const patternIndex = pattern.findIndex((entry) => entry.type === focusType);
     if (patternIndex < 0) {
       return;
@@ -469,7 +686,12 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
   ]);
 
   const handleSlotSelect = (index) => {
-    setActiveSlotIndex(index);
+    if (activeSlotIndex === index) {
+      setActiveSlotIndex(null);
+      clearPreviewFocus();
+      return;
+    }
+    selectSlotIndex(index);
     requestFocusForCustomizeSlot(index);
   };
 
@@ -478,6 +700,12 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
 
   const isBeadPickerEntryEnabled = useCallback(
     (assetKey, beadSizeId) => {
+      // Enforce per-bead size restrictions first — a new bead only available in
+      // 8mm/10mm must always appear disabled for 6mm and 12mm grid cards.
+      if (!isBeadSizeSupported(assetKey, beadSizeId)) {
+        return false;
+      }
+
       if (activeSlotIndex !== null && activeSlotItem) {
         if (
           activeSlotItem.type === "bead" ||
@@ -493,16 +721,16 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
       }
 
       if (!isManualMode && customizeSlotItems.some((item) => item.type === "bead")) {
-        return canAddBead(beadSizeId) || canApplyBeadSizeToAllPresetSlots(beadSizeId);
+        return canAddBead(beadSizeId, assetKey) || canChangePresetBeadSize(beadSizeId, assetKey);
       }
 
-      return canAddBead(beadSizeId);
+      return canAddBead(beadSizeId, assetKey);
     },
     [
       activeSlotIndex,
       activeSlotItem,
       canAddBead,
-      canApplyBeadSizeToAllPresetSlots,
+      canChangePresetBeadSize,
       canReplaceCustomizeSlotAt,
       customizeSlotItems,
       isManualMode,
@@ -521,6 +749,7 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
         }
       }
       if (
+        !isManualMode &&
         activeSlotIndex === null &&
         customizeSlotItems.some((item) => item.type === "spacer")
       ) {
@@ -542,7 +771,6 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
     const sourceRect = getFlyInSourceRect(event);
 
     if (customizeTab === "spacers") {
-      setSelectedSeparatorKey(key);
       const hasSpacers = customizeSlotItems.some((item) => item.type === "spacer");
 
       if (
@@ -555,15 +783,41 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
           assetKey: key,
           sourceRect,
         });
+        // Do not update selectedSeparatorKey here. It is the default used to
+        // build a pristine preset, and changing it can regenerate that preset
+        // when the two spacer types occupy different amounts of string.
         return;
       }
 
-      if (hasSpacers && isSpacerPickerEntryEnabled(key)) {
-        applySpacerToAllPresetSpacerSlots(key, { applyToAll: true });
-        return;
+      // Presets used to apply this choice to every spacer. That made it
+      // impossible to combine Classic and catalog spacers. With no explicit
+      // slot selected, materialize the preset template and start from its
+      // first spacer; the shopper can then select another slot to mix types.
+      if (!isManualMode && activeSlotIndex === null) {
+        const firstSpacerIndex =
+          hasSpacers
+            ? customizeSlotItems.findIndex((item) => item.type === "spacer")
+            : pattern.findIndex((item) => item.type === "spacer");
+        if (
+          firstSpacerIndex >= 0 &&
+          canReplaceCustomizeSlotAt(firstSpacerIndex, { type: "spacer", assetKey: key })
+        ) {
+          const replaced = replaceCustomizeSlotAt(firstSpacerIndex, {
+            type: "spacer",
+            assetKey: key,
+            sourceRect,
+          });
+          if (replaced) {
+            setActiveSlotIndex(firstSpacerIndex);
+            requestFocusForCustomizeSlot(firstSpacerIndex);
+            return;
+          }
+        }
       }
 
       requestFocusForPickerContext();
+      // Only update the default spacer when this selection creates a new slot.
+      setSelectedSeparatorKey(key);
       if (isManualMode) {
         addManualItem("spacer", key, sizeId, { sourceRect });
       } else if (canAddSpacer()) {
@@ -585,9 +839,71 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
       return;
     }
 
+    if (customizeTab === "metalic-beads") {
+      // Metalic beads are treated as spacers in the bracelet pattern so they
+      // fit naturally between stone beads. The selected size is carried via
+      // beadSizeIdOverride (per-card) or falls back to metalicBeadSizeId.
+      const resolvedMetalicSizeId = beadSizeIdOverride ?? metalicBeadSizeId;
+      const metalicSpacerKey = METALIC_BEADS.find((mb) => mb.key === key)?.spacerKey ?? key;
+      const hasSpacers = customizeSlotItems.some((item) => item.type === "spacer");
+
+      if (
+        activeSlotIndex !== null &&
+        activeSlotIndex < customizeSlotItems.length &&
+        isSpacerPickerEntryEnabled(metalicSpacerKey)
+      ) {
+        replaceCustomizeSlotAt(activeSlotIndex, {
+          type: "spacer",
+          assetKey: metalicSpacerKey,
+          beadSizeId: resolvedMetalicSizeId,
+          sourceRect,
+        });
+        return;
+      }
+
+      if (!isManualMode && activeSlotIndex === null) {
+        const firstSpacerIndex =
+          hasSpacers
+            ? customizeSlotItems.findIndex((item) => item.type === "spacer")
+            : pattern.findIndex((item) => item.type === "spacer");
+        if (
+          firstSpacerIndex >= 0 &&
+          canReplaceCustomizeSlotAt(firstSpacerIndex, { type: "spacer", assetKey: metalicSpacerKey })
+        ) {
+          const replaced = replaceCustomizeSlotAt(firstSpacerIndex, {
+            type: "spacer",
+            assetKey: metalicSpacerKey,
+            beadSizeId: resolvedMetalicSizeId,
+            sourceRect,
+          });
+          if (replaced) {
+            setActiveSlotIndex(firstSpacerIndex);
+            requestFocusForCustomizeSlot(firstSpacerIndex);
+            return;
+          }
+        }
+      }
+
+      requestFocusForPickerContext();
+      setSelectedSeparatorKey(metalicSpacerKey);
+      setMetalicBeadSizeId(resolvedMetalicSizeId);
+      if (isManualMode) {
+        addManualItem("spacer", metalicSpacerKey, resolvedMetalicSizeId, { sourceRect });
+      } else if (canAddSpacer()) {
+        addPresetSlotItem("spacer", metalicSpacerKey, resolvedMetalicSizeId, { sourceRect });
+      }
+      return;
+    }
+
     const beadSizeId =
       beadSizeIdOverride ??
       (gridSizeFilter !== "all" ? `${gridSizeFilter}mm` : activeBeadSizeId);
+
+    // Clamp to a supported size if the current size is unavailable for this bead
+    // (e.g. new beads only available in 8mm/10mm, but the filter is 6mm/12mm).
+    const resolvedBeadSizeId = isBeadSizeSupported(key, beadSizeId)
+      ? beadSizeId
+      : (BEADS.find((b) => b.key === key || b.aliases?.includes(key))?.sizes?.[0]?.id ?? beadSizeId);
 
     if (activeSlotIndex !== null && activeSlotItem) {
       if (
@@ -595,11 +911,11 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
         activeSlotItem.type === "spacer" ||
         activeSlotItem.type === "charm"
       ) {
-        if (isBeadPickerEntryEnabled(key, beadSizeId)) {
+        if (isBeadPickerEntryEnabled(key, resolvedBeadSizeId)) {
           replaceCustomizeSlotAt(activeSlotIndex, {
             type: "bead",
             assetKey: key,
-            beadSizeId,
+            beadSizeId: resolvedBeadSizeId,
             sourceRect,
           });
         }
@@ -611,29 +927,29 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
     setSelectedBeadKey(key);
     if (isManualMode) {
       if (gridSizeFilter === "all" && beadSizeIdOverride) {
-        setSizeId(beadSizeIdOverride);
+        setSizeId(resolvedBeadSizeId);
       }
-      if (canAddBead(beadSizeId)) {
-        addManualItem("bead", key, beadSizeId, { sourceRect });
+      if (canAddBead(resolvedBeadSizeId, key)) {
+        addManualItem("bead", key, resolvedBeadSizeId, { sourceRect });
       }
-      return;
-    }
-
-    if (beadSizeId !== sizeId && activeSlotIndex === null) {
-      setSizeId(beadSizeId);
       return;
     }
 
     const hasPresetBeads = customizeSlotItems.some((item) => item.type === "bead");
     if (hasPresetBeads) {
-      if (canApplyBeadSizeToAllPresetSlots(beadSizeId)) {
-        applyBeadToAllPresetBeadSlots(key, beadSizeId);
+      if (canChangePresetBeadSize(resolvedBeadSizeId, key)) {
+        applyPresetBeadSizeChange(resolvedBeadSizeId, key);
       }
       return;
     }
 
-    if (canAddBead(beadSizeId)) {
-      addPresetSlotItem("bead", key, beadSizeId, { sourceRect });
+    if (resolvedBeadSizeId !== sizeId && activeSlotIndex === null) {
+      setSizeId(resolvedBeadSizeId);
+      return;
+    }
+
+    if (canAddBead(resolvedBeadSizeId, key)) {
+      addPresetSlotItem("bead", key, resolvedBeadSizeId, { sourceRect });
     }
   };
 
@@ -645,6 +961,15 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
         addManualItem("spacer", selectedSeparatorKey, sizeId, { sourceRect });
       } else {
         addPresetSlotItem("spacer", selectedSeparatorKey, sizeId, { sourceRect });
+      }
+      return;
+    }
+
+    if (customizeTab === "metalic-beads" && canAddSpacer()) {
+      if (isManualMode) {
+        addManualItem("spacer", selectedSeparatorKey, metalicBeadSizeId, { sourceRect });
+      } else {
+        addPresetSlotItem("spacer", selectedSeparatorKey, metalicBeadSizeId, { sourceRect });
       }
       return;
     }
@@ -673,7 +998,9 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
       ? canAddSpacer()
       : customizeTab === "charms"
         ? canAddCharm()
-        : canAddBead(activeBeadSizeId);
+        : customizeTab === "metalic-beads"
+          ? canAddSpacer()
+          : canAddBead(activeBeadSizeId);
 
   const reorderBeads = useCallback(
     (fromIndex, toIndex) => {
@@ -713,11 +1040,17 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
     }
     if (!customizeSlotItems[activeSlotIndex]) {
       setActiveSlotIndex(null);
+    } else if (beadSlotRefs.current[activeSlotIndex]) {
+      beadSlotRefs.current[activeSlotIndex].scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "center",
+      });
     }
-  }, [activeSlotIndex, customizeSlotItems]);
+  }, [activeSlotIndex, customizeSlotItems, setActiveSlotIndex]);
 
   useEffect(() => {
-    if (!spacersTabEnabled && customizeTab === "spacers") {
+    if (!spacersTabEnabled && (customizeTab === "spacers" || customizeTab === "metalic-beads")) {
       setCustomizeTab("beads");
     }
   }, [spacersTabEnabled, customizeTab, setCustomizeTab]);
@@ -750,79 +1083,8 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
     return undefined;
   }, [flyInAnimation?.sessionKey, flyInAnimation?.sourceRect, customizeSlotItems, flyInSourceRectRef]);
 
-  /**
-   * Pointer events outrun the display, so the held slot is moved by writing its transform
-   * straight to the node once per frame. Routing the offset through state instead re-rendered
-   * the whole panel on every move, which is what made dragging along the row stutter.
-   */
-  const applySlotDragTransform = useCallback(() => {
-    slotDragRafRef.current = null;
-    const drag = beadDragRef.current;
-    if (!drag?.element) {
-      return;
-    }
-    drag.element.style.transform = `translateX(${drag.offsetX}px) scale(1.06)`;
-  }, []);
-
-  const measureSlotLayoutMidXs = useCallback(() => {
-    const row = slotRowRef.current;
-    if (!row) {
-      return [];
-    }
-    const rowRect = row.getBoundingClientRect();
-    const rowContentLeft = rowRect.left + row.clientLeft - row.scrollLeft;
-    return beadSlotRefs.current.map((element) => {
-      if (!element) {
-        return null;
-      }
-      return rowContentLeft + element.offsetLeft + element.offsetWidth / 2;
-    });
-  }, []);
-
-  const getSlotLayoutPitch = useCallback(() => {
-    const mids = slotLayoutMidXRef.current;
-    for (let index = 1; index < mids.length; index += 1) {
-      const prev = mids[index - 1];
-      const next = mids[index];
-      if (prev != null && next != null && Math.abs(next - prev) > 1) {
-        return next - prev;
-      }
-    }
-    const first = beadSlotRefs.current.find(Boolean);
-    if (first) {
-      const row = slotRowRef.current;
-      const gap = row ? parseFloat(getComputedStyle(row).columnGap || getComputedStyle(row).gap || "8") : 8;
-      return first.offsetWidth + (Number.isFinite(gap) ? gap : 8);
-    }
-    return 72;
-  }, []);
-
-  const landSlotFlipAnimations = useCallback(() => {
-    if (slotFlipRafRef.current != null) {
-      cancelAnimationFrame(slotFlipRafRef.current);
-      slotFlipRafRef.current = null;
-    }
-    beadSlotRefs.current.forEach((element) => {
-      if (!element) {
-        return;
-      }
-      element.style.transition = "none";
-      element.style.transform = "";
-    });
-  }, []);
-
-  const captureSlotFlipOrigins = useCallback(() => {
-    const origins = new Map();
-    beadSlotRefs.current.forEach((element) => {
-      const slotId = element?.dataset?.slotId;
-      if (!slotId) {
-        return;
-      }
-      origins.set(slotId, element.getBoundingClientRect().left);
-    });
-    slotFlipOriginsRef.current = origins;
-  }, []);
-
+  // Drag-to-reorder matches bracelet charm slots: follow the pointer, and on a
+  // midline cross move the item and zero the offset so it sits in the new slot.
   const handleBeadPointerDown = (event, index) => {
     if (customizeSlotItems.length < 2) return;
     if (event.pointerType === "mouse" && event.button !== 0) return;
@@ -830,156 +1092,49 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
     event.preventDefault();
     suppressBeadClickRef.current = false;
     unlockBeadsAudio();
-
-    landSlotFlipAnimations();
-    slotLayoutMidXRef.current = measureSlotLayoutMidXs();
-
-    beadDragRef.current = {
+    setSlotDrag({
       pointerId: event.pointerId,
       currentIndex: index,
       startX: event.clientX,
       offsetX: 0,
-      // Slots are keyed by item id, so this node follows the item through reorders.
-      element: event.currentTarget,
-    };
-
-    setDraggingSlotIndex(index);
-    event.currentTarget.setPointerCapture?.(event.pointerId);
+    });
   };
 
-  const isSlotDragActive = draggingSlotIndex !== null;
-
-  useEffect(
-    () => () => {
-      if (slotDragRafRef.current != null) {
-        cancelAnimationFrame(slotDragRafRef.current);
-      }
-      if (slotFlipRafRef.current != null) {
-        cancelAnimationFrame(slotFlipRafRef.current);
-      }
-    },
-    []
-  );
-
-  useLayoutEffect(() => {
-    const origins = slotFlipOriginsRef.current;
-    if (origins) {
-      slotFlipOriginsRef.current = null;
-
-      const heldId = beadDragRef.current?.element?.dataset?.slotId ?? null;
-      const moved = [];
-
-      beadSlotRefs.current.forEach((element) => {
-        if (!element) {
-          return;
-        }
-        const slotId = element.dataset?.slotId;
-        if (!slotId || slotId === heldId) {
-          return;
-        }
-        const originLeft = origins.get(slotId);
-        if (originLeft == null) {
-          return;
-        }
-        const delta = originLeft - element.getBoundingClientRect().left;
-        if (!delta) {
-          return;
-        }
-        element.style.transition = "none";
-        element.style.transform = `translateX(${delta}px)`;
-        moved.push(element);
-      });
-
-      if (moved.length) {
-        if (slotFlipRafRef.current != null) {
-          cancelAnimationFrame(slotFlipRafRef.current);
-        }
-        slotFlipRafRef.current = requestAnimationFrame(() => {
-          slotFlipRafRef.current = null;
-          moved.forEach((element) => {
-            element.style.transition = SLOT_SWAP_TRANSITION;
-            element.style.transform = "";
-          });
-        });
-      }
-    }
-
-    if (beadDragRef.current) {
-      slotLayoutMidXRef.current = measureSlotLayoutMidXs();
-    }
-  }, [customizeSlotItems, measureSlotLayoutMidXs]);
-
   useEffect(() => {
-    if (!isSlotDragActive) return undefined;
+    if (!slotDrag) return undefined;
 
     const handlePointerMove = (event) => {
-      const drag = beadDragRef.current;
-      if (!drag || event.pointerId !== drag.pointerId) return;
+      if (event.pointerId !== slotDrag.pointerId) return;
+      const deltaX = event.clientX - slotDrag.startX;
 
-      const deltaX = event.clientX - drag.startX;
       if (!suppressBeadClickRef.current && Math.abs(deltaX) > 4) {
         suppressBeadClickRef.current = true;
       }
 
+      setSlotDrag((prev) => (prev ? { ...prev, offsetX: deltaX } : prev));
+
       const slots = beadSlotRefs.current;
-      const layoutMids = slotLayoutMidXRef.current;
-      let didReorder = false;
-
-      // Midline rule + layout centers (offsetLeft), not getBoundingClientRect, so FLIP
-      // transforms on neighbours do not pull the swap threshold back and forth.
-      for (let index = 0; index < slots.length; index += 1) {
-        if (!slots[index] || index === drag.currentIndex) continue;
-
-        const midX = layoutMids[index];
-        if (midX == null) continue;
-
+      for (let i = 0; i < slots.length; i += 1) {
+        const el = slots[i];
+        if (!el || i === slotDrag.currentIndex) continue;
+        const rect = el.getBoundingClientRect();
+        const midX = rect.left + rect.width / 2;
         const crossed =
-          (index < drag.currentIndex && event.clientX < midX) ||
-          (index > drag.currentIndex && event.clientX > midX);
-
+          (i < slotDrag.currentIndex && event.clientX < midX) ||
+          (i > slotDrag.currentIndex && event.clientX > midX);
         if (crossed) {
-          const fromIndex = drag.currentIndex;
-          captureSlotFlipOrigins();
-          if (!reorderBeads(fromIndex, index)) {
-            break;
-          }
-          const pitch = getSlotLayoutPitch();
-          drag.offsetX += (fromIndex - index) * pitch;
-          drag.currentIndex = index;
-          drag.startX = event.clientX - drag.offsetX;
-          setDraggingSlotIndex(index);
-          didReorder = true;
+          reorderBeads(slotDrag.currentIndex, i);
+          setSlotDrag((prev) =>
+            prev ? { ...prev, currentIndex: i, startX: event.clientX, offsetX: 0 } : prev
+          );
           break;
         }
-      }
-
-      if (!didReorder) {
-        drag.offsetX = deltaX;
-      }
-
-      if (didReorder) {
-        applySlotDragTransform();
-      } else if (slotDragRafRef.current == null) {
-        slotDragRafRef.current = requestAnimationFrame(applySlotDragTransform);
       }
     };
 
     const endDrag = (event) => {
-      const drag = beadDragRef.current;
-      if (!drag) return;
-      if (event.pointerId !== undefined && event.pointerId !== drag.pointerId) return;
-
-      if (slotDragRafRef.current != null) {
-        cancelAnimationFrame(slotDragRafRef.current);
-        slotDragRafRef.current = null;
-      }
-      if (drag.element) {
-        drag.element.style.transform = "";
-      }
-
-      unlockBeadsAudio();
-      beadDragRef.current = null;
-      setDraggingSlotIndex(null);
+      if (event.pointerId !== undefined && event.pointerId !== slotDrag.pointerId) return;
+      setSlotDrag(null);
     };
 
     window.addEventListener("pointermove", handlePointerMove);
@@ -990,13 +1145,7 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
       window.removeEventListener("pointerup", endDrag);
       window.removeEventListener("pointercancel", endDrag);
     };
-  }, [
-    isSlotDragActive,
-    reorderBeads,
-    applySlotDragTransform,
-    captureSlotFlipOrigins,
-    getSlotLayoutPitch,
-  ]);
+  }, [slotDrag, reorderBeads]);
 
   const gridSizeLabel = useMemo(() => {
     if (gridSizeFilter === "all") {
@@ -1014,25 +1163,35 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
     }
 
     const nextSizeId = `${normalizedFilterId}mm`;
-    if (activeSlotIndex !== null && customizeSlotItems[activeSlotIndex]?.type === "bead") {
-      const slot = customizeSlotItems[activeSlotIndex];
-      if (isManualMode) {
-        updateManualItemSizeAt(activeSlotIndex, nextSizeId);
-      } else {
-        replaceCustomizeSlotAt(activeSlotIndex, {
-          type: "bead",
-          assetKey: slot.assetKey,
-          beadSizeId: nextSizeId,
-        });
+    setPickerBeadSizeId(nextSizeId);
+
+    // Only apply the size change when the currently selected bead supports it.
+    if (!isManualMode && customizeSlotItems.some((item) => item.type === "bead")) {
+      if (isBeadSizeSupported(selectedBeadKey, nextSizeId)) {
+        applyPresetBeadSizeChange(nextSizeId, selectedBeadKey);
       }
       return;
     }
 
-    setPickerBeadSizeId(nextSizeId);
+    if (activeSlotIndex !== null && customizeSlotItems[activeSlotIndex]?.type === "bead") {
+      const slotKey = customizeSlotItems[activeSlotIndex]?.assetKey;
+      if (isBeadSizeSupported(slotKey, nextSizeId)) {
+        updateManualItemSizeAt(activeSlotIndex, nextSizeId);
+      }
+      return;
+    }
+
     setSizeId(nextSizeId);
   };
 
-  const styleLabel = getBeadStyleLabel(styleId);
+  const styleLabel = beadStyleLabel(styleId);
+  const summaryLengthLabel = displayLengthLabel;
+  const summaryQtyKeys = {
+    beads: "beaded.summary.beadsQty",
+    charms: "beaded.summary.charmsQty",
+    spacers: "beaded.summary.spacersQty",
+  };
+  const footerSummaryTaxLabel = getFooterSummaryTaxLabel();
   const lengthOptions = isManualMode ? BEAD_LENGTH_OPTIONS : BEAD_LENGTHS;
 
   const customizeSummaryLines = useMemo(
@@ -1044,76 +1203,91 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
     customizeTab === "charms" ? canAddCharm() : canAddCurrentSelection;
 
   const buildSummaryContent = isSummaryExpanded ? (
-    <section className="theme3-build-summary order-summary-card" aria-label="Build Summary">
+    <section className="theme3-build-summary order-summary-card" aria-label={t("summary.buildSummary")}>
       <div className="order-summary-section">
         <div className="order-summary-row">
-          <span className="order-summary-title">String</span>
-          <span className="order-summary-price">${jewelryPrice.toLocaleString()}</span>
+          <span className="order-summary-title theme3-section-heading">{t("beaded.summary.string")}</span>
         </div>
-        <div className="order-summary-desc">Thread included · {styleLabel}</div>
-        <div className="order-summary-desc">Length: {displayLengthLabel}</div>
+        <div className="order-summary-desc">{t("beaded.summary.threadIncluded")} · {styleLabel} · {selectedThreadColor?.label || "Black"} Thread</div>
+        <div className="order-summary-desc">{t("beaded.summary.lengthPrefix")} {summaryLengthLabel}</div>
       </div>
       {customizeSummaryLines.length > 0 && (
-        <>
-          <div className="order-summary-section">
+        customizeSummaryLines.map((line) => (
+          <div key={line.key} className="order-summary-section order-summary-section--nested">
             <div className="order-summary-row">
-              <span className="order-summary-title">Customize</span>
-              <span className="order-summary-price">${customizePrice.toLocaleString()}</span>
+              <span className="order-summary-title theme3-section-heading">
+                {summaryQtyKeys[line.key]
+                  ? formatCountedLabel(t(summaryQtyKeys[line.key]), line.count)
+                  : line.title}
+              </span>
+              <span className="order-summary-price theme3-section-heading">${line.price.toLocaleString()}</span>
             </div>
+            {line.detail && <div className="order-summary-desc">{line.detail}</div>}
           </div>
-          {customizeSummaryLines.map((line) => (
-            <div key={line.key} className="order-summary-section order-summary-section--nested">
-              <div className="order-summary-row">
-                <span className="order-summary-title">{line.title}</span>
-                <span className="order-summary-price">${line.price.toLocaleString()}</span>
-              </div>
-              {line.detail && <div className="order-summary-desc">{line.detail}</div>}
-            </div>
-          ))}
-        </>
+        ))
       )}
     </section>
   ) : null;
 
   return (
-    <aside className="theme3-configurator-panel">
-      <header className="theme3-panel-header" ref={headerRef} aria-hidden="true" />
-
-      <div className="theme3-panel-scroll" ref={scrollContainerRef}>
+    <aside
+      className={`theme3-configurator-panel${view360 ? " beads-controls--view-only" : ""}`}
+      aria-busy={view360 ? "true" : undefined}
+    >
+      <div
+        className={`beads-panel-edit-body${view360 ? " is-360-disabled" : ""}`}
+        aria-hidden={view360 ? "true" : undefined}
+      >
+        <div className="theme3-panel-scroll theme3-panel-scroll--flush-top" ref={scrollContainerRef}>
         <div className="theme3-option-section" data-theme3-section="jewelry" ref={sectionRefs.jewelry}>
-          <header className="theme3-option-section-header">
-            <h3>Jewelry</h3>
-            <span className="theme3-section-header-price">${jewelryPrice.toLocaleString()}</span>
+          <header className="theme3-jewelry-section-header">
+            <span className="theme3-section-heading">{t("nav.jewelry")}</span>
           </header>
+          <div
+            className="jewelry-category-row jewelry-category-row--compact"
+            role="tablist"
+            aria-label={t("nav.jewelryAria")}
+          >
+            <div className="jewelry-category-row-options">
+              {isJewelryShellActive() && (
+                <>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected="false"
+                    className="jewelry-category-btn theme3-option-box-label"
+                    onClick={() => requestJewelryCategory("necklace")}
+                  >
+                    {t("category.necklace")}
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected="false"
+                    className="jewelry-category-btn theme3-option-box-label"
+                    onClick={() => requestJewelryCategory("bracelet")}
+                  >
+                    {t("category.bracelet")}
+                  </button>
+                </>
+              )}
+              {BEAD_JEWELRY_CATEGORIES.map((category) => (
+                <button
+                  key={category.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={jewelryCategory === category.id}
+                  className={`jewelry-category-btn theme3-option-box-label${jewelryCategory === category.id ? " active" : ""}`}
+                  disabled={category.disabled}
+                  onClick={() => setJewelryCategory(category.id)}
+                >
+                  {category.id === "bead-bracelet" ? t("category.beadBracelet") : category.label}
+                </button>
+              ))}
+            </div>
+          </div>
 
-          <OptionRow title="Category">
-            {/* Merged /Jewelery-customizer shell only: jump to the other apps. */}
-            {isJewelryShellActive() && (
-              <>
-                <TextOption
-                  active={false}
-                  label="Necklace"
-                  onClick={() => requestJewelryCategory("necklace")}
-                />
-                <TextOption
-                  active={false}
-                  label="Bracelet"
-                  onClick={() => requestJewelryCategory("bracelet")}
-                />
-              </>
-            )}
-            {BEAD_JEWELRY_CATEGORIES.map((category) => (
-              <TextOption
-                key={category.id}
-                active={jewelryCategory === category.id}
-                label={category.label}
-                disabled={category.disabled}
-                onClick={() => setJewelryCategory(category.id)}
-              />
-            ))}
-          </OptionRow>
-
-          <OptionRow title="Style" className="beads-style-row">
+          <OptionRow title={t("option.style")} className="beads-style-row">
             {VISIBLE_BEAD_STYLES.map((style) => (
               <button
                 key={style.id}
@@ -1124,20 +1298,42 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
                 <span className="beads-style-card__thumb">
                   <StylePreviewThumb styleId={style.id} />
                 </span>
-                <span>{style.label}</span>
+                <span className="theme3-option-box-label">{beadStyleLabel(style.id)}</span>
               </button>
             ))}
           </OptionRow>
 
-          <OptionRow title="Length">
+          <OptionRow title={t("option.length")}>
             {lengthOptions.map((length) => (
               <TextOption
                 key={length.id}
                 active={lengthId === length.id}
                 onClick={() => selectLengthId(length.id)}
               >
-                <span>{length.label}</span>
+                <span>{beadLengthLabel(length)}</span>
               </TextOption>
+            ))}
+          </OptionRow>
+
+          <OptionRow title={t("option.threadColor") || "String Color"}>
+            {(threadColors || THREAD_COLORS).map((tc) => (
+              <button
+                key={tc.id}
+                type="button"
+                className={`gb-text-option gb-thread-color-option ${threadColorId === tc.id ? "active" : ""}`}
+                onClick={() => setThreadColorId(tc.id)}
+                title={tc.label}
+              >
+                <span
+                  className="gb-thread-color-dot"
+                  style={{
+                    backgroundColor: tc.color,
+                    ...(tc.id === "white" ? { border: "1px solid rgba(0,0,0,0.25)" } : {}),
+                  }}
+                  aria-hidden="true"
+                />
+                <span>{tc.label}</span>
+              </button>
             ))}
           </OptionRow>
         </div>
@@ -1147,27 +1343,24 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
           data-theme3-section="customize"
           ref={sectionRefs.customize}
         >
+          {/*
           <header className="theme3-option-section-header">
-            <h3>Customize</h3>
-            <span className="theme3-section-header-price">${customizePrice.toLocaleString()}</span>
+            <h3 className="theme3-section-heading">{t("section.customize")}</h3>
           </header>
 
           {activeSlotItem && (
             <p className="beads-slot-replace-hint">
-              Slot selected — use the{" "}
               {activeSlotItem.type === "bead"
-                ? "Beads"
+                ? t("beaded.slot.replaceBead")
                 : activeSlotItem.type === "spacer"
-                  ? "Spacers"
-                  : "Charms"}{" "}
-              tab to pick a replacement
-              {showCustomizeAddSlot ? ", or use + to add." : "."}
+                  ? t("beaded.slot.replaceSpacer")
+                  : t("beaded.slot.replaceCharm")}
             </p>
           )}
 
           <div
             ref={slotRowRef}
-            className={`selected-charms-row${isSlotDragActive ? " is-dragging-slots" : ""}`}
+            className="selected-charms-row"
             style={{ position: "relative" }}
           >
             {customizeSlotItems.length > 0 || (isManualMode && showCustomizeAddSlot) ? (
@@ -1175,7 +1368,7 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
                 {showCustomizeAddSlot && (
                   <div
                     className="selected-charm-slot add-slot"
-                    title="Add to string"
+                    title={t("beaded.slot.add")}
                     role="button"
                     tabIndex={0}
                     onClick={handleAddSlotClick}
@@ -1193,7 +1386,7 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
                 {customizeSlotItems.map((item, index) => {
                   const asset = resolvePatternAsset(item.type, item.assetKey);
                   const isActive = index === activeSlotIndex;
-                  const isDragging = draggingSlotIndex === index;
+                  const isDragging = slotDrag?.currentIndex === index;
 
                   return (
                     <div
@@ -1222,27 +1415,37 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
                           : customizeSlotItems.length >= 2
                             ? "grab"
                             : "pointer",
-                        // No transform while held: the drag loop writes it to this node each
-                        // frame, and a value here would overwrite it on every re-render.
-                        ...(isDragging ? { zIndex: 10, position: "relative" } : {}),
+                        ...(isDragging
+                          ? { transform: `translateX(${slotDrag.offsetX}px) scale(1.06)`, zIndex: 10, position: "relative" }
+                          : { transition: "transform 150ms ease" }),
                       }}
                     >
-                      <img
-                        src={asset.image}
-                        alt={asset.name}
-                        draggable={false}
-                        style={{ WebkitUserDrag: "none", pointerEvents: "none" }}
-                      />
+                      {asset.topViewLabel ? (
+                        <span className="beads-slot-model-token" aria-label={`Spacer ${asset.topViewLabel}`}>
+                          {asset.topViewLabel}
+                        </span>
+                      ) : (
+                        <img
+                          src={asset.image}
+                          alt={asset.name}
+                          draggable={false}
+                          style={{ WebkitUserDrag: "none", pointerEvents: "none" }}
+                        />
+                      )}
                       {item.type === "bead" && (
                         <span className="beads-slot-size-label">{item.sizeId || sizeId}</span>
                       )}
                       {item.type === "charm" && (
-                        <span className="beads-slot-size-label">Charm</span>
+                        <span className="beads-slot-size-label">{t("beaded.preview.charm")}</span>
                       )}
                       <button
                         type="button"
                         className="remove-slot-btn"
-                        aria-label={`Remove ${item.type}`}
+                        aria-label={t({
+                          bead: "beaded.slot.removeBead",
+                          spacer: "beaded.slot.removeSpacer",
+                          charm: "beaded.slot.removeCharm",
+                        }[item.type] || "") || `Remove ${item.type}`}
                         onClick={(event) => {
                           event.stopPropagation();
                           if (isManualMode) {
@@ -1264,12 +1467,13 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
                   );
                 })}
 
+
                 {isManualMode && manualItems.length > 0 && (
                   <button
                     type="button"
                     className="clear-all-charms-btn"
-                    title="Remove all beads"
-                    aria-label="Remove all beads"
+                    title={t("beaded.slot.removeAll")}
+                    aria-label={t("beaded.slot.removeAll")}
                     onClick={() => {
                       clearManualItems();
                       setActiveSlotIndex(null);
@@ -1288,43 +1492,44 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
             ) : (
               <p className="beads-slot-replace-hint">
                 {isManualMode
-                  ? "Use the tabs below and + to add beads, charms, or spacers."
-                  : "Add beads on the bracelet to customize slots here."}
+                  ? t("beaded.slot.emptyManual")
+                  : t("beaded.slot.emptyPreset")}
               </p>
             )}
           </div>
-
-          <OptionRow title="" className="beads-customize-tabs">
+*/}
+          <OptionRow title={t("option.category")} className="beads-customize-tabs">
             {customizeTabsShownInUi.map((tab) => (
               <TextOption
                 key={tab.id}
                 active={customizeTab === tab.id}
-                label={tab.label}
+                label={t(BEAD_TAB_KEYS[tab.id] || "") || tab.label}
                 disabled={
                   (tab.id === "spacers" && !spacersTabEnabled) ||
-                  (tab.id === "charms" && !charmsTabEnabled)
+                  (tab.id === "charms" && !charmsTabEnabled) ||
+                  (tab.id === "metalic-beads" && !spacersTabEnabled)
                 }
                 onClick={() => setCustomizeTab(tab.id)}
               />
             ))}
           </OptionRow>
 
-          {(customizeTab === "beads" || customizeTab === "spacers" || customizeTab === "charms") && (
+          {(customizeTab === "beads" || customizeTab === "spacers" || customizeTab === "charms" || customizeTab === "metalic-beads") && (
             <div className="beads-customize-picker">
               {customizeTab === "beads" && (
                 <div className="beads-picker-filters">
                   <div className="beads-picker-filter beads-picker-filter--type">
-                    <span className="beads-picker-filter__label">Type</span>
+                    <span className="beads-picker-filter__label theme3-section-heading">{t("beaded.filter.type")}</span>
                     <div className="beads-picker-type-select-wrap">
                       <select
-                        className="beads-picker-type-select"
+                        className="beads-picker-type-select theme3-option-box-label"
                         value={collectionId}
                         onChange={(event) => setCollectionId(event.target.value)}
-                        aria-label="Bead type"
+                        aria-label={t("beaded.filter.typeAria")}
                       >
                         {BEAD_COLLECTIONS.map((collection) => (
                           <option key={collection.id} value={collection.id}>
-                            {collection.label}
+                            {collection.id === "all" ? t("beaded.filter.all") : collection.label}
                           </option>
                         ))}
                       </select>
@@ -1337,7 +1542,7 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
                   </div>
 
                   <div className="beads-picker-filter beads-picker-filter--size">
-                    <span className="beads-picker-filter__label">Size (mm)</span>
+                    <span className="beads-picker-filter__label theme3-section-heading">{t("beaded.filter.size")}</span>
                     <div className="beads-picker-size-options">
                       {BEAD_GRID_SIZE_FILTERS.map((filter) => {
                         const isActive = gridSizeFilter === filter.id;
@@ -1346,10 +1551,42 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
                           <button
                             key={filter.id}
                             type="button"
-                            className={`beads-picker-size-btn ${isActive ? "active" : ""}`}
+                            className={`beads-picker-size-btn theme3-option-box-label ${isActive ? "active" : ""}`}
                             onClick={() => handleGridSizeFilter(filter.id)}
                           >
-                            {filter.label}
+                            {filter.id === "all" ? t("beaded.filter.all") : filter.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {customizeTab === "metalic-beads" && (
+                <div className="beads-picker-filters beads-picker-filters--metalic">
+                  <div className="beads-picker-filter beads-picker-filter--spacer" aria-hidden="true" />
+                  <div className="beads-picker-filter beads-picker-filter--size">
+                    <span className="beads-picker-filter__label theme3-section-heading">{t("beaded.filter.size")}</span>
+                    <div className="beads-picker-size-options">
+                      {METALIC_BEAD_SIZE_FILTERS.map((filter) => {
+                        const isActive = metalicSizeFilter === filter.id;
+
+                        return (
+                          <button
+                            key={filter.id}
+                            type="button"
+                            className={`beads-picker-size-btn theme3-option-box-label ${isActive ? "active" : ""}`}
+                            onClick={() => {
+                              const normalizedId = String(filter.id).toLowerCase();
+                              setMetalicSizeFilter(normalizedId);
+                              if (normalizedId !== "all") {
+                                const nextSizeId = normalizedId.endsWith("mm") ? normalizedId : `${normalizedId}mm`;
+                                setMetalicBeadSizeId(nextSizeId);
+                              }
+                            }}
+                          >
+                            {filter.id === "all" ? t("beaded.filter.all") : filter.label}
                           </button>
                         );
                       })}
@@ -1361,7 +1598,7 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
               <div className="beads-asset-grid-section">
                 <div
                   className={`beads-asset-grid ${
-                    customizeTab === "spacers"
+                    customizeTab === "spacers" || customizeTab === "metalic-beads"
                       ? "beads-asset-grid--spacers"
                       : customizeTab === "charms"
                         ? "beads-asset-grid--charms"
@@ -1378,12 +1615,9 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
                               activeSlotIndex !== null &&
                               customizeSlotItems[activeSlotIndex]?.assetKey === entry.asset.key &&
                               (customizeSlotItems[activeSlotIndex]?.sizeId || sizeId) === entry.sizeId) ||
-                            (activeSlotItem?.type !== "bead" &&
-                              activeSlotIndex === null &&
+                            ((activeSlotIndex === null || activeSlotItem?.type !== "bead") &&
                               selectedBeadKey === entry.asset.key &&
-                              (gridSizeFilter === "all"
-                                ? pickerBeadSizeId === null || entry.sizeId === pickerBeadSizeId
-                                : entry.sizeId === `${gridSizeFilter}mm`))
+                              entry.sizeId === activeBeadSizeId)
                           }
                           disabled={!isBeadPickerEntryEnabled(entry.asset.key, entry.sizeId)}
                           sizeLabel={entry.sizeLabel}
@@ -1392,42 +1626,71 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
                           onClick={(event) => handleAssetSelect(entry.asset.key, event, entry.sizeId)}
                         />
                       ))
-                    : visibleAssets.map((asset) => (
-                        <BeadPickerCard
-                          key={asset.key}
-                          asset={asset}
-                          active={
-                            customizeTab === "charms"
-                              ? (activeSlotItem?.type === "charm" &&
-                                  activeSlotIndex !== null &&
-                                  customizeSlotItems[activeSlotIndex]?.assetKey === asset.key) ||
-                                (activeSlotIndex === null && selectedAssetKey === asset.key)
-                              : customizeTab === "spacers"
-                                ? (activeSlotIndex !== null &&
-                                    activeSlotItem?.type === "spacer" &&
+                    : customizeTab === "metalic-beads"
+                      ? metalicGridItems.map((entry) => (
+                          <BeadPickerCard
+                            key={entry.key}
+                            asset={entry.asset}
+                            active={
+                              (activeSlotIndex !== null &&
+                                activeSlotItem?.type === "spacer" &&
+                                customizeSlotItems[activeSlotIndex]?.assetKey === entry.asset.spacerKey &&
+                                (customizeSlotItems[activeSlotIndex]?.sizeId || metalicBeadSizeId) === entry.sizeId) ||
+                              ((activeSlotIndex === null || activeSlotItem?.type !== "spacer") &&
+                                selectedSeparatorKey === entry.asset.spacerKey &&
+                                entry.sizeId === metalicBeadSizeId)
+                            }
+                            disabled={!isSpacerPickerEntryEnabled(entry.asset.spacerKey)}
+                            sizeLabel={entry.sizeLabel}
+                            showSizeInLabel={false}
+                            showPrice
+                            onClick={(event) => handleAssetSelect(entry.asset.key, event, entry.sizeId)}
+                          />
+                        ))
+                      : visibleAssets.map((asset) => (
+                          <BeadPickerCard
+                            key={asset.key}
+                            asset={asset}
+                            active={
+                              customizeTab === "charms"
+                                ? (activeSlotItem?.type === "charm" &&
+                                    activeSlotIndex !== null &&
                                     customizeSlotItems[activeSlotIndex]?.assetKey === asset.key) ||
-                                  (activeSlotIndex === null && selectedSeparatorKey === asset.key)
-                                : selectedAssetKey === asset.key
-                          }
-                          disabled={
-                            customizeTab === "charms"
-                              ? !canAddCharm() &&
-                                !(activeSlotItem?.type === "charm" && activeSlotIndex !== null)
-                              : customizeTab === "spacers"
-                                ? !isSpacerPickerEntryEnabled(asset.key)
-                                : !canAddCurrentSelection
-                          }
-                          sizeLabel={customizeTab === "charms" ? "Charm" : gridSizeLabel}
-                          showPrice={customizeTab === "beads" || customizeTab === "charms"}
-                          displayLabel={customizeTab === "charms" ? "Charm" : undefined}
-                          onClick={(event) => handleAssetSelect(asset.key, event)}
-                        />
-                      ))}
+                                  (activeSlotIndex === null && selectedAssetKey === asset.key)
+                                : customizeTab === "spacers"
+                                  ? (activeSlotIndex !== null &&
+                                      activeSlotItem?.type === "spacer" &&
+                                      customizeSlotItems[activeSlotIndex]?.assetKey === asset.key) ||
+                                    (activeSlotIndex === null && selectedSeparatorKey === asset.key)
+                                  : selectedAssetKey === asset.key
+                            }
+                            disabled={
+                              customizeTab === "charms"
+                                ? !canAddCharm() &&
+                                  !(activeSlotItem?.type === "charm" && activeSlotIndex !== null)
+                                : customizeTab === "spacers"
+                                  ? !isSpacerPickerEntryEnabled(asset.key)
+                                  : !canAddCurrentSelection
+                            }
+                            sizeLabel={
+                              customizeTab === "spacers" || customizeTab === "charms"
+                                ? null
+                                : gridSizeLabel
+                            }
+                            showPrice={
+                              customizeTab === "beads" ||
+                              customizeTab === "charms" ||
+                              customizeTab === "spacers"
+                            }
+                            onClick={(event) => handleAssetSelect(asset.key, event)}
+                          />
+                        ))}
                 </div>
               </div>
             </div>
           )}
         </div>
+      </div>
       </div>
 
       <footer className="theme3-panel-footer" ref={footerRef}>
@@ -1438,13 +1701,13 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
             <button
               type="button"
               className="theme3-summary-details-toggle"
-              aria-label={isSummaryExpanded ? "Hide details" : "View details"}
+              aria-label={isSummaryExpanded ? t("summary.hideDetails") : t("summary.viewDetails")}
               aria-expanded={isSummaryExpanded}
               onClick={handleSummaryArrowClick}
             >
-              <span>View details</span>
+              <span className="theme3-link-text">{isSummaryExpanded ? t("summary.hideDetails") : t("summary.viewDetails")}</span>
               <svg
-                className={`theme3-summary-toggle-arrow${isSummaryExpanded ? " is-expanded" : ""}`}
+                className={`theme3-summary-toggle-arrow theme3-link-text${isSummaryExpanded ? " is-expanded" : ""}`}
                 xmlns="http://www.w3.org/2000/svg"
                 width="8"
                 height="5"
@@ -1460,33 +1723,40 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
             </button>
 
             <div className="theme3-summary-price-row">
-              <strong className="theme3-summary-price">${totalPrice.toLocaleString()}</strong>
-              <span className="theme3-summary-tax-label">+ tax</span>
+              <strong className="theme3-summary-price theme3-section-heading">${totalPrice.toLocaleString()}</strong>
+              {footerSummaryTaxLabel ? (
+                <span className="theme3-summary-tax-label theme3-body-text">{footerSummaryTaxLabel}</span>
+              ) : null}
             </div>
           </div>
 
           <div className="theme3-footer-actions">
+            {(!view360 && activeSection === "jewelry") || storefrontControls.addToCart ? (
             <button
               type="button"
               className="theme3-panel-footer-cta"
               disabled={footerCtaDisabled}
               onClick={handleFooterContinue}
+              aria-busy={addedToCart}
             >
               {footerCtaLabel}
             </button>
+            ) : null}
 
             <div className="theme3-footer-secondary-actions">
               <button type="button" className="theme3-panel-action-btn theme3-panel-share-btn">
-                Share
+                {t("action.share")}
               </button>
+              {storefrontControls.reset ? (
               <button
                 type="button"
                 className="theme3-panel-action-btn theme3-panel-reset-btn"
                 onClick={() => setShowResetPopup(true)}
-                aria-label="Reset bracelet configuration"
+                aria-label={t("action.resetBraceletConfiguration")}
               >
-                Reset
+                {t("action.reset")}
               </button>
+              ) : null}
             </div>
           </div>
         </div>
