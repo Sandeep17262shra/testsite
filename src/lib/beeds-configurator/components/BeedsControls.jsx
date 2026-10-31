@@ -1251,7 +1251,8 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
             <div className="jewelry-category-row-options">
               {isJewelryShellActive() && (
                 <>
-                  <button
+                  {/* CLIENT CUSTOMIZATION: necklace button hidden */}
+                  {false && <button
                     type="button"
                     role="tab"
                     aria-selected="false"
@@ -1259,7 +1260,7 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
                     onClick={() => requestJewelryCategory("necklace")}
                   >
                     {t("category.necklace")}
-                  </button>
+                  </button>}
                   <button
                     type="button"
                     role="tab"

@@ -204,8 +204,11 @@ export const BASE_BEADS = BEAD_IMAGE_FILES.map((filename) => {
   else if (key === "pyrite") collection = "pyrite";
   else if (key.includes("quartz") || key === "moonstone" || key === "white-marble") collection = "quartz";
 
+  const isLimitedSizeBead = key === "green-quartz" || key === "green_quartz" || key === "tiger-eye";
+
   return {
     key,
+    aliases: key === "green-quartz" ? ["green_quartz", "green-quartz"] : undefined,
     name: formatBeedsAssetLabel(filename),
     // `image` remains as a compatibility alias for UI paths that render an
     // asset image, but deliberately points at the material texture rather
@@ -216,7 +219,7 @@ export const BASE_BEADS = BEAD_IMAGE_FILES.map((filename) => {
     // preview; all other photographed stones remain solid/opaque.
     materialType:  key.includes("quartz") ? "quartz" : "solid",
     collection,
-    sizes: BEAD_SIZES,
+    sizes: isLimitedSizeBead ? LIMITED_BEAD_SIZES_8_10 : BEAD_SIZES,
     price: 8,
   };
 });
@@ -408,10 +411,21 @@ export const GLB_BEADS = [
   },
 ];
 
+// Client-specific bead whitelist: only the beads shown in the client's picker.
+const CLIENT_BEAD_KEYS = new Set([
+  // From BASE_BEADS (original set)
+  "tiger-eye", "green-quartz", "green_quartz",
+  // From NEW_BEADS (extended set)
+  "green-aventurine", "ruby", "tsp-moti", "agate", "apatite",
+  "black-onyx", "citrine", "lapis", "malachite", "pink-tiger-eye", "sun-stone",
+  // From GLB_BEADS
+  "rudraksh", "pearl-star", "firosha", "amethyst-star",
+]);
+
 export const BEADS = [
-  ...BASE_BEADS,
-  ...NEW_BEADS,
-  ...GLB_BEADS,
+  ...BASE_BEADS.filter((b) => CLIENT_BEAD_KEYS.has(b.key)),
+  ...NEW_BEADS.filter((b) => CLIENT_BEAD_KEYS.has(b.key)),
+  ...GLB_BEADS.filter((b) => CLIENT_BEAD_KEYS.has(b.key)),
 ];
 
 export function isBeadSizeSupported(assetKey, sizeId) {
@@ -1016,8 +1030,9 @@ export function getBeadPickerGridItems(beads, gridSizeFilter) {
 
 export const BEAD_CUSTOMIZE_TABS = [
   { id: "beads", label: "Beads" },
-  { id: "charms", label: "Charms" },
-  { id: "spacers", label: "Spacers" },
+  // "charms" and "spacers" tabs are hidden for this client
+  // { id: "charms", label: "Charms" },
+  // { id: "spacers", label: "Spacers" },
   { id: "metalic-beads", label: "Metalic Beads" },
 ];
 

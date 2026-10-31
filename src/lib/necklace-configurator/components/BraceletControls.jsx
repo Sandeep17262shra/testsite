@@ -207,29 +207,17 @@ const BRACELET_CHARM_CATEGORIES = [
       </svg>
     ),
   },
-  {
-    id: "initial",
-    label: "Initial",
-    icon: (active) => (
-      <svg width="22" height="22" viewBox="0 0 30 30" fill="none">
-        <circle cx="15" cy="15" r="11" stroke={active ? "white" : "#171717"} strokeWidth="1.4" />
-        <text x="15" y="19" textAnchor="middle" fill={active ? "white" : "#171717"} fontSize="12" fontWeight="bold" fontFamily="Arial">A</text>
-      </svg>
-    ),
-  },
-  {
-    id: "2d",
-    label: "2D Charms",
-    icon: (active) => (
-      <img
-        src="/images/2d-charm.svg"
-        alt="2D Charms"
-        width={22}
-        height={22}
-        style={{ filter: active ? "invert(1) brightness(2)" : "none" }}
-      />
-    ),
-  },
+  // "initial" and "2d" charm categories are hidden for this client
+  // {
+  //   id: "initial",
+  //   label: "Initial",
+  //   ...
+  // },
+  // {
+  //   id: "2d",
+  //   label: "2D Charms",
+  //   ...
+  // },
   {
     id: "3d",
     label: "3D Charms",
@@ -310,12 +298,13 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
     });
 
     const metalOptions = [
-        // `color` = swatch colour, same as the ring's GOLD_COLORS (Silver has no ring equivalent).
+        // Client: only Silver and Yellow Gold are shown
         { code: "SL", alt: "Silver 925",  hex: "#B8B8B8", color: "#CFCFCF", price: 100 },
         { code: "YG", alt: "Yellow Gold", hex: "#FFD280", color: "#FFD280", price: 100 },
-        { code: "RG", alt: "Rose Gold",   hex: "#FFBAA3", color: "#E6B08F", price: 100 },
-        { code: "PL", alt: "Platinum",    hex: "#e5e4e2", color: "#E5E4E2", price: 200 },
-        { code: "WG", alt: "White Gold",  hex: "#DBDBDB", color: "#F1F1EF", price: 100 },
+        // Hidden for this client:
+        // { code: "RG", alt: "Rose Gold",   hex: "#FFBAA3", color: "#E6B08F", price: 100 },
+        // { code: "PL", alt: "Platinum",    hex: "#e5e4e2", color: "#E5E4E2", price: 200 },
+        // { code: "WG", alt: "White Gold",  hex: "#DBDBDB", color: "#F1F1EF", price: 100 },
     ];
 
     const purityOptions = [
@@ -960,7 +949,14 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
     const nextStepCopy = "Add your bracelet to cart";
 
     const charms2D = BRACELET_CHARMS.slice(12, 27);
-    const charms3D = BRACELET_CHARMS.slice(0, 12);
+    // Client: only Camel, Elephant, Princess, and Peacock Feather (patel) 3D charms
+    const CLIENT_3D_CHARM_PATHS = new Set([
+        "/bc-assets/bracelet_models/camel.glb",
+        "/bc-assets/bracelet_models/elephant.glb",
+        "/bc-assets/bracelet_models/princess.glb",
+        "/bc-assets/bracelet_models/patel.glb",
+    ]);
+    const charms3D = BRACELET_CHARMS.slice(0, 12).filter((c) => CLIENT_3D_CHARM_PATHS.has(c.path));
     const braceletChainId = (path) => {
         const key = getBraceletChainKeyByPath(path);
         return key ? BRACELET_CHAIN_IDS[key]?.id : undefined;
@@ -1204,7 +1200,8 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
                         aria-label={t("nav.jewelryAria")}
                     >
                         <div className="jewelry-category-row-options">
-                        {isCategoryAllowed(parent || resolveParentUrl(), "necklace") && (
+                        {/* Necklace button hidden for this client */}
+                        {false && isCategoryAllowed(parent || resolveParentUrl(), "necklace") && (
                             <button
                                 type="button"
                                 role="tab"

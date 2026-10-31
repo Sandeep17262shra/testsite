@@ -7,11 +7,9 @@
 export const BRACELETS = [
      { path: "/pc-assets/pendant_models//BRACELET15.glb", name: "Plain", price: 3600 },
      { path: "/pc-assets/pendant_models//BRACELET16.glb", name: "Clip", price: 3200 },
-     { path: "/pc-assets/pendant_models//BRACELET17.glb", name: "Milgrain", price: 3600 },
-     { path: "/pc-assets/pendant_models//BRACELET18.glb", name: "Link", price: 3600 },
-     // Removed: GLB chain models (BRACELET13/14) are no longer used.
-     // { path: "/pc-assets/pendant_models//BRACELET13.glb", name: "Knot Link", price: 3200 },
-     // { path: "/pc-assets/pendant_models//BRACELET14.glb", name: "Box Link", price: 3600 },
+     // Hidden for this client:
+     // { path: "/pc-assets/pendant_models//BRACELET17.glb", name: "Milgrain", price: 3600 },
+     // { path: "/pc-assets/pendant_models//BRACELET18.glb", name: "Link", price: 3600 },
 ];
 
 // Every necklace can carry a name pendant. Keep this capability alongside the
@@ -499,11 +497,12 @@ export const BRACELET_STYLES = [
     // { path: "/bc-assets/bracelet_models/BRACELET9.glb", name: "Textured Loop", price: 2600 },
     // { path: "/bc-assets/bracelet_models/BRACELET10.glb", name: "Cut-Out Band", price: 2800 },
     // { path: "/bc-assets/bracelet_models/BRACELET11.glb", name: "Wave Band", price: 3000 },
-     // Same order as the necklace chains: round first, then the elongated (cable) links.
+     // Client: only Plain (Round) and Clip chains shown
      { path: GENERATED_NAME_CHAIN_ROUND_PATH, name: "Round", price: 3400 },
      { path: GENERATED_NAME_CHAIN_PATH, name: "Clip", price: 3400 },
-     { path: GENERATED_NAME_CHAIN_OVAL_PATH, name: "Oval", price: 3450 },
-     { path: GENERATED_NAME_CHAIN_SQUARE_PATH, name: "Square", price: 3450 },
+     // Hidden for this client:
+     // { path: GENERATED_NAME_CHAIN_OVAL_PATH, name: "Oval", price: 3450 },
+     // { path: GENERATED_NAME_CHAIN_SQUARE_PATH, name: "Square", price: 3450 },
      // Removed: GLB chain models (BRACELET13/14) are no longer used.
      // { path: "/bc-assets/bracelet_models/BRACELET13.glb", name: "Knot Link", price: 3200 },
      // { path: "/bc-assets/bracelet_models/BRACELET14.glb", name: "clip chain", price: 3200 },
