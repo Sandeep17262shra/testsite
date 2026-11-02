@@ -60,6 +60,10 @@ const nextConfig = {
         source: "/ring-customizer",
         destination: "/",
       },
+      {
+        source: "/beeds-assets/spacer-icons/S15.webp",
+        destination: "/beeds-assets/spacer-icons/s15.webp",
+      },
     ];
   },
 };
