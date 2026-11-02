@@ -970,17 +970,13 @@ export const BEAD_COLLECTIONS = [
 
 export const BEAD_GRID_SIZE_FILTERS = [
   { id: "all", label: "All" },
-  { id: "6", label: "6" },
   { id: "8", label: "8" },
   { id: "10", label: "10" },
-  { id: "12", label: "12" },
 ];
 
 const BEAD_PICKER_SIZE_OPTIONS = [
-  { id: "6mm", label: "6mm" },
   { id: "8mm", label: "8mm" },
   { id: "10mm", label: "10mm" },
-  { id: "12mm", label: "12mm" },
 ];
 
 /** Bead picker rows: every size per stone when filter is "all", else one row per bead. */
