@@ -48,6 +48,7 @@ const LEGACY_SEPARATOR_IMAGE_FILES = [
   "s12.webp",
   "s13.webp",
   "s14.webp",
+  "s15.webp"
 ];
 
 /**
