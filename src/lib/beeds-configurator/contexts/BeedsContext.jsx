@@ -20,6 +20,7 @@ import {
   DEFAULT_STYLE_ID,
   DEFAULT_LENGTH_ID,
   DEFAULT_THREAD_COLOR_ID,
+  EMPTY_BEAD_STYLE,
   RESET_THREAD_COLOR_ID,
   THREAD_COLORS,
   RESET_STYLE_ID,
@@ -71,9 +72,13 @@ import {
   trimPatternToFit,
 } from "../beadRingLayout";
 import {
-  getJewelryPriceForLength,
+  getJewelrySetupPrice,
   getPatternCustomizePrice,
 } from "../pricing";
+import {
+  isBeadedAssetActive,
+  useBeadedPriceConfigVersion,
+} from "../beadedPriceConfig";
 import { getSuitableWristCm } from "../wristSizing";
 import { playBeadAddSound, playBeadMoveSound, playBeadRemoveSound } from "../beadsSounds";
 import {
@@ -107,6 +112,52 @@ function presetCapacityPatternFitsAt(capacityPattern, layoutRadius, beadSizeId) 
     patternFitsOnRing(capacityPattern, layoutRadius, beadSizeId, PRESET_CAPACITY_OPTIONS) &&
     patternFitsFixedStringLength(capacityPattern, layoutRadius, beadSizeId)
   );
+}
+
+/** Custom (manual) string — the style a preset turns into once a bead or spacer is edited. */
+const CUSTOM_STYLE_ID = EMPTY_BEAD_STYLE.id;
+
+/**
+ * Presets pack their run a little tighter than a custom string of the same length allows, so
+ * moving a preset's beads onto a custom string at the plain length radius would have the
+ * custom capacity rules trim beads off the end. Returns the ring radius the custom string needs
+ * to hold the run exactly as it is (never smaller than the preset's own layout radius, so the
+ * bracelet does not visibly change size), or null when the plain length radius already fits.
+ */
+function getCustomFitRingRadius(items, baseRadius, presetLayoutRadius, beadSizeId) {
+  const capacityPattern = toCapacityPattern(items, beadSizeId);
+  if (!capacityPattern.length) {
+    return null;
+  }
+
+  const fits = (radius) =>
+    patternFitsFixedStringLength(capacityPattern, radius, beadSizeId) &&
+    patternFitsOnRing(capacityPattern, radius, beadSizeId, MANUAL_CAPACITY_OPTIONS);
+
+  const start = Math.max(
+    baseRadius,
+    Number.isFinite(presetLayoutRadius) ? presetLayoutRadius : baseRadius
+  );
+  let radius = start;
+  if (!fits(radius)) {
+    let low = start;
+    let high = start * 1.25;
+    while (!fits(high) && high < start * 2) {
+      low = high;
+      high *= 1.25;
+    }
+    for (let step = 0; step < 32; step += 1) {
+      const mid = (low + high) / 2;
+      if (fits(mid)) {
+        high = mid;
+      } else {
+        low = mid;
+      }
+    }
+    radius = high;
+  }
+
+  return radius > baseRadius + 0.01 ? radius : null;
 }
 
 function presetSlotItemsFitAtSize(items, layoutRadius, beadSizeId) {
@@ -156,6 +207,24 @@ function buildCustomizeSlotReplacement(items, index, { type, assetKey, beadSizeI
   const touchesCharm = current.type === "charm" || type === "charm";
 
   return { candidate, touchesCharm };
+}
+
+/** True when two slot lists hold the same beads and spacers in the same order (charms ignored). */
+function ringRunsMatch(a, b, defaultSizeId) {
+  const run = (items) =>
+    items
+      .filter((item) => item.type !== "charm")
+      .map((item) =>
+        [
+          item.type,
+          item.assetKey,
+          item.type === "bead" || (item.type === "spacer" && isRoundSpacerSku(item.assetKey))
+            ? item.sizeId || defaultSizeId
+            : "",
+        ].join("|")
+      )
+      .join(",");
+  return run(a) === run(b);
 }
 
 function slotItemsFromPattern(pattern, defaultSizeId, createId) {
@@ -288,6 +357,7 @@ function buildStyleDesignSnapshot({
   manualItems,
   presetSlotItems,
   presetPatternSeed,
+  customFitRingRadius = null,
 }) {
   const manual = isManualStringStyle(styleId);
   return {
@@ -297,6 +367,7 @@ function buildStyleDesignSnapshot({
     selectedBeadKey,
     selectedSeparatorKey,
     selectedCharmKey,
+    customFitRingRadius: manual ? customFitRingRadius : null,
     manualItems: manual ? cloneSlotItems(manualItems) : undefined,
     presetSlotItems: manual ? undefined : cloneSlotItems(presetSlotItems),
     presetPatternSeed: manual ? undefined : presetPatternSeed,
@@ -322,8 +393,10 @@ function applyStyleDesignSnapshot(snapshot, {
   setManualItems,
   setPresetSlotItems,
   presetSlotSeedRef,
+  setCustomFitRingRadius,
 }, { charms = null } = {}) {
   setLengthId(snapshot.lengthId);
+  setCustomFitRingRadius?.(snapshot.manualItems ? (snapshot.customFitRingRadius ?? null) : null);
   setSizeId(snapshot.sizeId);
   setSelectedBeadKey(snapshot.selectedBeadKey);
   setSelectedSeparatorKey(snapshot.selectedSeparatorKey);
@@ -363,6 +436,12 @@ export const BeedsProvider = ({ children }) => {
   const [activeSlotIndex, setActiveSlotIndex] = useState(null);
   const [manualItems, setManualItems] = useState([]);
   const [presetSlotItems, setPresetSlotItems] = useState([]);
+  /**
+   * Set when a preset is turned into a custom string by editing a bead or spacer: the ring
+   * radius that custom string needs to keep every bead of the preset run. Cleared when the
+   * shopper picks a length, a style or resets.
+   */
+  const [customFitRingRadius, setCustomFitRingRadius] = useState(null);
   const presetSlotSeedRef = useRef("");
   const lengthStyleSnapshotRef = useRef({ lengthId: DEFAULT_LENGTH_ID, styleId: DEFAULT_STYLE_ID });
   /** Per bracelet style — restore customize state when switching styles (necklace chain-ref pattern). */
@@ -371,6 +450,7 @@ export const BeedsProvider = ({ children }) => {
   const [flyInGeneration, setFlyInGeneration] = useState(0);
   const flyInGenerationRef = useRef(0);
   const flyInSourceRectRef = useRef(null);
+  const flyInTimerRef = useRef(null);
   const manualRandomizeSessionRef = useRef(null);
   const [isManualRandomizing, setIsManualRandomizing] = useState(false);
   /**
@@ -420,10 +500,13 @@ export const BeedsProvider = ({ children }) => {
   );
   const charmCount = braceletCharms.length;
 
-  const capacityPattern = useMemo(
-    () => toCapacityPattern(manualItems, sizeId),
-    [manualItems, sizeId]
-  );
+  const capacityPattern = useMemo(() => {
+    const items =
+      isManualRandomizing && manualRandomizeSessionRef.current?.initialItems
+        ? manualRandomizeSessionRef.current.initialItems
+        : manualItems;
+    return toCapacityPattern(items, sizeId);
+  }, [manualItems, sizeId, isManualRandomizing]);
 
   const suitableWristCm = useMemo(() => {
     if (!isManualMode || !capacityPattern.length) {
@@ -461,8 +544,20 @@ export const BeedsProvider = ({ children }) => {
       return getFreeSizeRingRadius([], sizeId);
     }
 
-    return getRingRadiusForLength(activeLength);
-  }, [isFreeSizeLayout, lengthId, capacityPattern, sizeId, activeLength]);
+    const lengthRadius = getRingRadiusForLength(activeLength);
+    if (isManualMode && Number.isFinite(customFitRingRadius)) {
+      return Math.max(lengthRadius, customFitRingRadius);
+    }
+    return lengthRadius;
+  }, [
+    isFreeSizeLayout,
+    lengthId,
+    capacityPattern,
+    sizeId,
+    activeLength,
+    isManualMode,
+    customFitRingRadius,
+  ]);
 
   const capacityRingRadius = useMemo(
     () => getManualCapacityRingRadius(lengthId, ringRadius),
@@ -592,6 +687,7 @@ export const BeedsProvider = ({ children }) => {
     manualItems,
     presetSlotItems,
     presetPatternSeed,
+    customFitRingRadius,
   };
 
   const bumpUndoRevision = useCallback(() => {
@@ -629,6 +725,7 @@ export const BeedsProvider = ({ children }) => {
       setManualItems,
       setPresetSlotItems,
       presetSlotSeedRef,
+      setCustomFitRingRadius,
     }),
     []
   );
@@ -642,6 +739,11 @@ export const BeedsProvider = ({ children }) => {
     const snapshot = stack.pop();
     styleUndoStacksRef.current.set(styleId, stack);
     suppressUndoRecordRef.current = true;
+    if (snapshot.styleId && snapshot.styleId !== styleId) {
+      // Undoing the edit that turned a preset into a custom string puts the preset back.
+      setActiveSlotIndex(null);
+      setStyleId(snapshot.styleId);
+    }
     applyStyleDesignSnapshot(snapshot, undoApplySetters);
     setFlyInAnimation(null);
     suppressUndoRecordRef.current = false;
@@ -655,9 +757,51 @@ export const BeedsProvider = ({ children }) => {
         return;
       }
       recordDesignUndoPoint();
+      setCustomFitRingRadius(null);
       setLengthId(nextLengthId);
     },
     [lengthId, recordDesignUndoPoint]
+  );
+
+  /**
+   * Full Bead, Style 1 and Style 2 are templates. Once the shopper changes one of their beads or
+   * spacers, the bracelet is no longer that template — it becomes a custom string holding the
+   * edited run, and from then on every rule (capacity, adding, removing, reordering, shuffle,
+   * pricing, length label) is the custom string's. Charms and whole-bracelet stone / size
+   * changes keep the preset, since the style's pattern is unchanged.
+   *
+   * Undo from the custom string returns to the preset as it was before the edit, and picking
+   * the preset again in the style picker starts it fresh.
+   */
+  const commitPresetEditAsCustom = useCallback(
+    (nextItems, { recordUndo = true } = {}) => {
+      if (recordUndo && !suppressUndoRecordRef.current) {
+        // Earlier custom history belongs to a different design, so the custom stack starts
+        // over with the preset as its only step back.
+        styleUndoStacksRef.current.set(CUSTOM_STYLE_ID, [
+          buildStyleDesignSnapshot(undoDesignStateRef.current),
+        ]);
+        bumpUndoRevision();
+      }
+
+      styleDesignCacheRef.current.delete(styleId);
+      styleDesignCacheRef.current.delete(CUSTOM_STYLE_ID);
+
+      const items = cloneSlotItems(nextItems);
+      setCustomFitRingRadius(
+        getCustomFitRingRadius(
+          items,
+          getRingRadiusForLength(activeLength),
+          presetFill.layoutRingRadius,
+          sizeId
+        )
+      );
+      presetSlotSeedRef.current = "";
+      setPresetSlotItems([]);
+      setManualItems(items);
+      setStyleId(CUSTOM_STYLE_ID);
+    },
+    [styleId, activeLength, presetFill.layoutRingRadius, sizeId, bumpUndoRevision]
   );
 
   const layoutRingRadius = isManualMode ? ringRadius : presetFill.layoutRingRadius;
@@ -966,14 +1110,48 @@ export const BeedsProvider = ({ children }) => {
   const canAddMore = canAddBead() || canAddSpacer() || canAddCharm();
   const isStringFull = isManualMode && !canAddMore;
 
+  // Prices, names and active/inactive state come from the store catalogue (API,
+  // or the fallback file). Recompute when it (re)loads.
+  const beadedCatalogVersion = useBeadedPriceConfigVersion();
   const jewelryPrice = useMemo(
-    () => getJewelryPriceForLength(lengthId, dynamicLengthInches),
-    [lengthId, dynamicLengthInches]
+    () => getJewelrySetupPrice({ lengthId, styleId, threadColorId }),
+    [lengthId, styleId, threadColorId, beadedCatalogVersion]
   );
-  const customizePrice = useMemo(() => getPatternCustomizePrice(pattern), [pattern]);
-  const totalPrice = customizePrice;
+  const customizePrice = useMemo(
+    () => getPatternCustomizePrice(pattern),
+    [pattern, beadedCatalogVersion]
+  );
+  const totalPrice = customizePrice + jewelryPrice;
+
+  // If the store deactivates the bead / spacer / charm that is currently selected
+  // for "add", move the selection to the first option the store still offers.
+  useEffect(() => {
+    const selectedBeadAsset = BEADS.find(
+      (bead) => bead.key === selectedBeadKey || bead.aliases?.includes(selectedBeadKey)
+    );
+    if (selectedBeadAsset && !isBeadedAssetActive("bead", selectedBeadAsset)) {
+      const next = BEADS.find((bead) => isBeadedAssetActive("bead", bead));
+      if (next) setSelectedBeadKey(next.key);
+    }
+
+    const selectedSpacerAsset = SEPARATORS.find((item) => item.key === selectedSeparatorKey);
+    if (selectedSpacerAsset && !isBeadedAssetActive("spacer", selectedSpacerAsset)) {
+      const isClassic = selectedSpacerAsset.key.startsWith("legacy-");
+      const next = SEPARATORS.find(
+        (item) => item.key.startsWith("legacy-") === isClassic && isBeadedAssetActive("spacer", item)
+      );
+      if (next) setSelectedSeparatorKey(next.key);
+    }
+
+    const selectedCharmAsset = BEAD_CHARMS.find((item) => item.key === selectedCharmKey);
+    if (selectedCharmAsset && !isBeadedAssetActive("charm", selectedCharmAsset)) {
+      const next = BEAD_CHARMS.find((item) => isBeadedAssetActive("charm", item));
+      if (next) setSelectedCharmKey(next.key);
+    }
+  }, [beadedCatalogVersion, selectedBeadKey, selectedSeparatorKey, selectedCharmKey]);
 
   const clearFlyInAnimation = useCallback(() => {
+    clearTimeout(flyInTimerRef.current);
     setFlyInAnimation(null);
   }, []);
 
@@ -1020,6 +1198,11 @@ export const BeedsProvider = ({ children }) => {
         ...(slotIndex != null ? { slotIndex } : {}),
         ...(type === "charm" && Number.isFinite(ringGap) ? { ringGap } : {}),
       });
+
+      clearTimeout(flyInTimerRef.current);
+      flyInTimerRef.current = setTimeout(() => {
+        setFlyInAnimation(null);
+      }, 350);
     },
     [sizeId]
   );
@@ -1194,14 +1377,20 @@ export const BeedsProvider = ({ children }) => {
         ? Math.max(0, options.insertIndex)
         : presetSlotItems.length;
 
-      recordDesignUndoPoint();
-      setPresetSlotItems((items) => {
-        const next = insertSlotItem(items, nextItem, options.insertIndex);
-        if (type === "bead" || type === "spacer") {
-          return remapCharmRingGapsAfterSlotItemsChange(items, next);
-        }
-        return applyCharmGapsToSlotItems(next);
-      });
+      if (type === "bead" || type === "spacer") {
+        // Adding a bead or spacer changes the style's run — continue as a custom string.
+        const baseItems =
+          presetSlotItems.length === 0 && presetFill.pattern.length > 0
+            ? slotItemsFromPattern(presetFill.pattern, sizeId, createManualItemId)
+            : presetSlotItems;
+        const inserted = insertSlotItem(baseItems, nextItem, options.insertIndex);
+        commitPresetEditAsCustom(remapCharmRingGapsAfterSlotItemsChange(baseItems, inserted));
+      } else {
+        recordDesignUndoPoint();
+        setPresetSlotItems((items) =>
+          applyCharmGapsToSlotItems(insertSlotItem(items, nextItem, options.insertIndex))
+        );
+      }
 
       queueFlyInAnimation({
         itemId: nextId,
@@ -1224,7 +1413,9 @@ export const BeedsProvider = ({ children }) => {
       sizeId,
       queueFlyInAnimation,
       presetSlotItems,
+      presetFill.pattern,
       recordDesignUndoPoint,
+      commitPresetEditAsCustom,
     ]
   );
 
@@ -1387,51 +1578,50 @@ export const BeedsProvider = ({ children }) => {
     if (fromIndex === toIndex) {
       return false;
     }
-    recordDesignUndoPoint();
+    const items = presetSlotItems;
+    if (fromIndex < 0 || fromIndex >= items.length || toIndex < 0 || toIndex > items.length) {
+      return false;
+    }
 
-    let didReorder = false;
+    const updated = [...items];
+    const [moved] = updated.splice(fromIndex, 1);
+    updated.splice(toIndex, 0, moved);
+    const next = remapCharmRingGapsAfterSlotItemsChange(items, updated);
 
-    setPresetSlotItems((items) => {
-      if (fromIndex < 0 || fromIndex >= items.length || toIndex < 0 || toIndex > items.length) {
-        return items;
-      }
-      const updated = [...items];
-      const [moved] = updated.splice(fromIndex, 1);
-      updated.splice(toIndex, 0, moved);
-      didReorder = true;
-      return remapCharmRingGapsAfterSlotItemsChange(items, updated);
-    });
+    if (ringRunsMatch(items, next, sizeId)) {
+      recordDesignUndoPoint();
+      setPresetSlotItems(next);
+    } else {
+      // Moving a bead or spacer breaks the style's pattern — continue as a custom string.
+      commitPresetEditAsCustom(next);
+    }
 
-    if (didReorder && playSound) {
+    if (playSound) {
       playBeadMoveSound();
     }
-    return didReorder;
-  }, [recordDesignUndoPoint]);
+    return true;
+  }, [presetSlotItems, sizeId, recordDesignUndoPoint, commitPresetEditAsCustom]);
 
   const removePresetSlotAt = useCallback((index, { playSound = true } = {}) => {
     if (index < 0 || index >= presetSlotItems.length) {
       return;
     }
-    recordDesignUndoPoint();
-    let didRemove = false;
+    const items = presetSlotItems;
+    const removed = items[index];
+    const next = items.filter((_, itemIndex) => itemIndex !== index);
 
-    setPresetSlotItems((items) => {
-      if (index < 0 || index >= items.length) {
-        return items;
-      }
-      didRemove = true;
-      const removed = items[index];
-      const next = items.filter((_, itemIndex) => itemIndex !== index);
-      if (removed?.type === "bead" || removed?.type === "spacer") {
-        return remapCharmRingGapsAfterSlotItemsChange(items, next);
-      }
-      return next;
-    });
+    if (removed?.type === "bead" || removed?.type === "spacer") {
+      // Taking a bead or spacer off changes the style's run — continue as a custom string.
+      commitPresetEditAsCustom(remapCharmRingGapsAfterSlotItemsChange(items, next));
+    } else {
+      recordDesignUndoPoint();
+      setPresetSlotItems(next);
+    }
 
-    if (didRemove && playSound) {
+    if (playSound) {
       playBeadRemoveSound();
     }
-  }, [presetSlotItems.length, recordDesignUndoPoint]);
+  }, [presetSlotItems, recordDesignUndoPoint, commitPresetEditAsCustom]);
 
   const applyBeadToAllPresetBeadSlots = useCallback(
     (assetKey, beadSizeId = sizeId) => {
@@ -1550,8 +1740,13 @@ export const BeedsProvider = ({ children }) => {
         if (!presetPatternFits(candidate)) {
           return false;
         }
-        recordDesignUndoPoint();
-        setPresetSlotItems(candidate);
+        if (!applyToAllSpacers && !ringRunsMatch(items, candidate, sizeId)) {
+          // One spacer swapped out of the style's pattern — continue as a custom string.
+          commitPresetEditAsCustom(candidate);
+        } else {
+          recordDesignUndoPoint();
+          setPresetSlotItems(candidate);
+        }
       } else {
         if (!slotItemsFitCapacity(candidate, { skipCharmCapacity: false })) {
           return false;
@@ -1572,6 +1767,8 @@ export const BeedsProvider = ({ children }) => {
       presetPatternFits,
       slotItemsFitCapacity,
       recordDesignUndoPoint,
+      commitPresetEditAsCustom,
+      sizeId,
     ]
   );
 
@@ -1703,12 +1900,22 @@ export const BeedsProvider = ({ children }) => {
           ? applyCharmGapsToSlotItems(replacement.candidate)
           : remapCharmRingGapsAfterSlotItemsChange(items, replacement.candidate);
 
-      if (recordUndo) {
-        recordDesignUndoPoint();
-      }
+      // A bead or spacer swapped on Full Bead / Style 1 / Style 2 turns the bracelet into a
+      // custom string. Charm swaps, and picking the stone already in that slot, keep the preset.
+      const convertsToCustom =
+        !isManualMode && type !== "charm" && !ringRunsMatch(items, nextItems, sizeId);
+
       if (isManualMode) {
+        if (recordUndo) {
+          recordDesignUndoPoint();
+        }
         setManualItems(nextItems);
+      } else if (convertsToCustom) {
+        commitPresetEditAsCustom(nextItems, { recordUndo });
       } else {
+        if (recordUndo) {
+          recordDesignUndoPoint();
+        }
         setPresetSlotItems(nextItems);
       }
 
@@ -1737,6 +1944,7 @@ export const BeedsProvider = ({ children }) => {
       slotItemsFitCapacity,
       queueFlyInAnimation,
       recordDesignUndoPoint,
+      commitPresetEditAsCustom,
     ]
   );
 
@@ -1856,10 +2064,12 @@ export const BeedsProvider = ({ children }) => {
   }, [cancelManualRandomize]);
 
   const randomizeManualBracelet = useCallback(() => {
-    if (!isManualMode || flyInAnimation || isManualRandomizing) {
+    if (!isManualMode || isManualRandomizing) {
       return false;
     }
 
+    clearFlyInAnimation();
+    setActiveSlotIndex(null);
     const beadCount = countManualBeads(manualItems);
     if (beadCount < MANUAL_RANDOMIZE_MIN_BEADS) {
       return false;
@@ -1872,25 +2082,31 @@ export const BeedsProvider = ({ children }) => {
 
     recordDesignUndoPoint();
     suppressUndoRecordRef.current = true;
-    manualRandomizeSessionRef.current = { plan, cursor: 0, playedSound: false };
+    manualRandomizeSessionRef.current = {
+      plan,
+      cursor: 0,
+      playedSound: false,
+      initialItems: [...manualItems],
+    };
     setRandomizeSwappedIds(new Set());
     setIsManualRandomizing(true);
     setRandomizeTick((tick) => tick + 1);
     return true;
   }, [
     isManualMode,
-    flyInAnimation,
     isManualRandomizing,
     manualItems,
     recordDesignUndoPoint,
+    clearFlyInAnimation,
+    setActiveSlotIndex,
   ]);
 
   const canRandomizeManualBracelet = useMemo(() => {
-    if (!isManualMode || isManualRandomizing || Boolean(flyInAnimation)) {
+    if (!isManualMode || isManualRandomizing) {
       return false;
     }
     return canManualRandomizeBracelet(manualItems);
-  }, [isManualMode, isManualRandomizing, flyInAnimation, manualItems]);
+  }, [isManualMode, isManualRandomizing, manualItems]);
 
   const showManualRandomizeButton = useMemo(() => {
     if (!isManualMode) {
@@ -1991,6 +2207,7 @@ export const BeedsProvider = ({ children }) => {
           manualItems,
           presetSlotItems,
           presetPatternSeed,
+          customFitRingRadius,
         })
       );
 
@@ -2017,6 +2234,7 @@ export const BeedsProvider = ({ children }) => {
         setManualItems,
         setPresetSlotItems,
         presetSlotSeedRef,
+        setCustomFitRingRadius,
       };
 
       if (cached) {
@@ -2026,6 +2244,7 @@ export const BeedsProvider = ({ children }) => {
         return;
       }
 
+      setCustomFitRingRadius(null);
       if (isManualStringStyle(nextStyleId)) {
         setLengthId(RESET_LENGTH_ID);
         setManualItems(applyCharmGapsToSlotItems(cloneSlotItems(outgoingCharms)));
@@ -2051,6 +2270,7 @@ export const BeedsProvider = ({ children }) => {
       manualItems,
       presetSlotItems,
       presetPatternSeed,
+      customFitRingRadius,
       cancelManualRandomize,
     ]
   );
@@ -2075,6 +2295,7 @@ export const BeedsProvider = ({ children }) => {
     setActiveSlotIndex(null);
     setManualItems([]);
     setPresetSlotItems([]);
+    setCustomFitRingRadius(null);
     setFlyInAnimation(null);
   };
 

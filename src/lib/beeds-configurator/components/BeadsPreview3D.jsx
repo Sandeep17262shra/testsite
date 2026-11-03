@@ -65,9 +65,14 @@ const { x: CENTER_X, y: CENTER_Y } = getPreviewCenter();
 const WORLD_PER_PX = 0.0105;
 const BEAD_DIAMETER_SCALE = 0.93;
 const SPACER_DIAMETER_SCALE = 0.44;
-const GLASS_BEAD_GLB = "/bc-assets/bead_models/glass-bead.glb?v4";
-/** Bead bracelet-only HDR for all spacer-metal reflections. */
-const BEADS_SPACER_METAL_ENV_URL = "/bc-assets/env_metal_studio.hdr";
+import {
+  GLASS_BEAD_GLB,
+  getCriticalHdrUrl,
+  getCriticalStudioHdrUrl,
+  getWarmUrl,
+  useCriticalReady,
+  whenCriticalReady,
+} from "../beadsCriticalAssets";
 const SPACER_RING_LIFT_Y = 0.0012;
 const STRING_Y_OFFSET = -0.0005;
 /** S1–S3 / generic white pavé base (avoid pure #fff — reads flat). */
@@ -346,13 +351,29 @@ function PreviewRenderSettings() {
 if (typeof window !== "undefined" && typeof useGLTF.setDecoderPath === "function") {
   useGLTF.setDecoderPath("/draco/gltf/");
 }
-useGLTF.preload(GLASS_BEAD_GLB);
-// Preload GLB-based beads so they are ready before the user picks them.
-GLB_BEADS.forEach((bead) => {
-  if (bead.modelUrl) {
-    useGLTF.preload(bead.modelUrl);
-  }
-});
+// The bead GLB is already in the HTTP cache once the critical sequence ends.
+whenCriticalReady().then(() => useGLTF.preload(getWarmUrl(GLASS_BEAD_GLB)));
+// Optional GLB beads (rudraksh, stars…) are not needed for first paint: warm
+// them once the browser is idle so they never compete with the critical files.
+if (typeof window !== "undefined") {
+  const warmOptionalGlbBeads = () => {
+    GLB_BEADS.forEach((bead) => {
+      if (bead.modelUrl) {
+        useGLTF.preload(bead.modelUrl);
+      }
+    });
+  };
+  // Only after the frame's own files are done, and the scene has painted.
+  whenCriticalReady().then(() => {
+    window.setTimeout(() => {
+      if (typeof window.requestIdleCallback === "function") {
+        window.requestIdleCallback(warmOptionalGlbBeads, { timeout: 5000 });
+      } else {
+        warmOptionalGlbBeads();
+      }
+    }, 2500);
+  });
+}
 
 function layoutItemsByPattern(pattern, positionedItems) {
   const byId = new Map();
@@ -943,7 +964,7 @@ function createGlassBeadMaterial(envMap) {
  * left/right seam identical instead of stretching a flat catalogue image.
  */
 function useWrappedBeadTexture(textureUrl) {
-  const source = useTexture(textureUrl);
+  const source = useTexture(getWarmUrl(textureUrl));
 
   return useMemo(() => {
     const image = source.image;
@@ -1007,7 +1028,7 @@ function useBeadArtTexture(imageUrl) {
 }
 
 function useGlassBeadPrototype() {
-  const { scene } = useGLTF(GLASS_BEAD_GLB);
+  const { scene } = useGLTF(getWarmUrl(GLASS_BEAD_GLB));
   return useMemo(() => {
     let geometry = null;
     scene.traverse((child) => {
@@ -1581,23 +1602,57 @@ function loadSpacerMetalEnvTexture() {
     return Promise.resolve(_spacerMetalEnvTexture);
   }
   if (!_spacerMetalEnvPromise) {
-    _spacerMetalEnvPromise = new Promise((resolve, reject) => {
-      new RGBELoader().load(
-        BEADS_SPACER_METAL_ENV_URL,
-        (texture) => {
-          texture.mapping = THREE.EquirectangularReflectionMapping;
-          _spacerMetalEnvTexture = texture;
-          resolve(texture);
-        },
-        undefined,
-        (err) => {
-          _spacerMetalEnvPromise = null;
-          reject(err);
-        }
-      );
-    });
+    _spacerMetalEnvPromise = getCriticalHdrUrl().then(
+      (url) =>
+        new Promise((resolve, reject) => {
+          new RGBELoader().load(
+            url,
+            (texture) => {
+              texture.mapping = THREE.EquirectangularReflectionMapping;
+              _spacerMetalEnvTexture = texture;
+              resolve(texture);
+            },
+            undefined,
+            (err) => {
+              _spacerMetalEnvPromise = null;
+              reject(err);
+            }
+          );
+        })
+    );
   }
   return _spacerMetalEnvPromise;
+}
+
+let _studioEnvTexture = null;
+let _studioEnvPromise = null;
+
+/** Scene lighting map — the exact HDR drei's preset="studio" used (self-hosted). */
+function loadStudioEnvTexture() {
+  if (_studioEnvTexture) {
+    return Promise.resolve(_studioEnvTexture);
+  }
+  if (!_studioEnvPromise) {
+    _studioEnvPromise = getCriticalStudioHdrUrl().then(
+      (url) =>
+        new Promise((resolve, reject) => {
+          new RGBELoader().load(
+            url,
+            (texture) => {
+              texture.mapping = THREE.EquirectangularReflectionMapping;
+              _studioEnvTexture = texture;
+              resolve(texture);
+            },
+            undefined,
+            (err) => {
+              _studioEnvPromise = null;
+              reject(err);
+            }
+          );
+        })
+    );
+  }
+  return _studioEnvPromise;
 }
 
 function useSpacerMetalEnvTexture() {
@@ -3725,7 +3780,33 @@ function BeadsRingScene({
   );
 }
 
-export default function BeadsPreview3D({ active = true }) {
+/** Same studio lighting as before (shine unchanged), loaded from our own server. */
+function BeadsStudioEnvironment() {
+  const [texture, setTexture] = useState(_studioEnvTexture);
+  useEffect(() => {
+    if (texture) {
+      return;
+    }
+    loadStudioEnvTexture()
+      .then(setTexture)
+      .catch((err) => console.warn("[beads-3d] studio env failed", err));
+  }, [texture]);
+  if (!texture) {
+    return null;
+  }
+  return <Environment map={texture} environmentIntensity={0.3} />;
+}
+
+/** Mount the 3D frame only once icons → bead GLB → HDRs → first texture are downloaded. */
+export default function BeadsPreview3D(props) {
+  const ready = useCriticalReady();
+  if (!ready) {
+    return <div className="beads-3d-preview beads-3d-preview--loading" aria-hidden="true" />;
+  }
+  return <BeadsPreview3DScene {...props} />;
+}
+
+function BeadsPreview3DScene({ active = true }) {
   const { view360 } = useContext(View360Context);
   const isEditMode = !view360;
   const [isRemoveZone, setIsRemoveZone] = useState(false);
@@ -3778,9 +3859,7 @@ export default function BeadsPreview3D({ active = true }) {
         <directionalLight position={[-6, 4, -4]} intensity={0.2} color="#e8ecf4" />
         <directionalLight position={[0, 2, 8]} intensity={0.18} color="#ffffff" />
         <directionalLight position={[-2, 7, -8]} intensity={0.13} color="#fff8ec" />
-        <Suspense fallback={null}>
-          <Environment preset="studio" environmentIntensity={0.3} />
-        </Suspense>
+        <BeadsStudioEnvironment />
         <BeadsRingScene
           active={active}
           isEditMode={isEditMode}

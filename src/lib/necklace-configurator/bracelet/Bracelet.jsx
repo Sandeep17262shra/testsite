@@ -1,4 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useContext, useRef, useMemo, useCallback } from 'react';
+import HangingStoneCharm from '../shared/HangingStoneCharm';
+import { getHangingCharm, getHangingCharmScale, getCharmNudge } from '../shared/attachedCharms';
+import { getGemGlbCharm } from '../shared/glbGemCharms';
 import { Canvas, useThree, useFrame, useLoader } from '@react-three/fiber';
 import { OrbitControls, SoftShadows, Reflector, Environment, Text3D, MeshRefractionMaterial } from '@react-three/drei';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
@@ -14,7 +17,7 @@ import { BraceletContext } from '../contexts/BraceletContext';
 import { CameraController } from '../shared/CameraControll';
 import { Capture } from '../shared/Capture';
 import { BRACELET_STYLES, BRACELET_CHARMS, BRACELET_CHAIN_POSITIONS, BRACELET_CHARM_POSITIONS, PLACEHOLDERS_FOR_BRACELET, BIRTHSTONE_POINT_ADJUSTMENTS, BRACELET_NAME_CHAIN_PATHS, isGeneratedNameChain, withModelVersion } from '../shared/assets';
-import NameChainBracelet, { getNameChainCharmPlacement, getNameChainConfig, getNameChainCharmCategory } from './NameChain';
+import NameChainBracelet, { getNameChainCharmPlacement, getNameChainConfig, getNameChainCharmCategory, getNameChainCharmAngles } from './NameChain';
 import { View360Context } from '../contexts/View360Context';
 import { ShareContext } from '../contexts/ShareContext';
 import { Base64 } from 'js-base64';
@@ -278,6 +281,10 @@ function getPointPlacement(index, total, braceletPath, points, charmKind, scaleF
 // Classifies a placed charm object into one of the 4 kinds used above.
 function getCharmKind(charm) {
   if (charm.type === 'initial') return 'initial';
+  // Hangs like an initial: model loop + bail ring.
+  if (charm.type === 'hanging') return 'hanging';
+  // Sits IN the chain (drawn by NameChain.jsx), not hung from it.
+  if (charm.type === 'attached') return 'attached';
   if (charm.type === 'birthstone' || charm.type === 'diamond' || charm.type === 'cushion') return 'gemstone';
   const path = charm.path || '';
   if (/\.(png|jpe?g|webp|gif|svg)$/i.test(path)) return 'image';
@@ -436,10 +443,10 @@ const GLB_CHARM_SCALE_OVERRIDES = {
   "/bc-assets/bracelet_models/CHARMS6.glb": [0.1, 0.1, 0.1],  // Silken Tassel
   "/bc-assets/bracelet_models/CHARMS7.glb": [0.07, 0.07, 0.07],  // Classic Heart
   "/bc-assets/bracelet_models/CHARMS8.glb": [0.02, 0.02, 0.02],  // Gladiator Helmet
-  "/bc-assets/bracelet_models/princess.glb": [0.013, 0.013, 0.013],  // Princess Charm
-  "/bc-assets/bracelet_models/patel.glb":    [0.035, 0.035, 0.035],     // Pear Petal Charm
-  "/bc-assets/bracelet_models/elephant.glb": [0.015, 0.015, 0.015],  // Elephant Charm
-  "/bc-assets/bracelet_models/camel.glb":    [0.017, 0.017, 0.017],  // Camel Charm
+  "/bc-assets/bracelet_models/princess.glb": getGemGlbCharm("/bc-assets/bracelet_models/princess.glb").scale,  // Princess Charm
+  "/bc-assets/bracelet_models/patel.glb":    getGemGlbCharm("/bc-assets/bracelet_models/patel.glb").scale,     // Pear Petal Charm
+  "/bc-assets/bracelet_models/elephant.glb": getGemGlbCharm("/bc-assets/bracelet_models/elephant.glb").scale,  // Elephant Charm
+  "/bc-assets/bracelet_models/camel.glb":    getGemGlbCharm("/bc-assets/bracelet_models/camel.glb").scale,  // Camel Charm
 };
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -448,10 +455,10 @@ const GLB_CHARM_SCALE_OVERRIDES = {
 // plane so the bail points back toward the chain (green reference direction),
 // rather than away from it (red reference direction).
 const GLB_CHARM_ROTATION_OVERRIDES = {
-  "/bc-assets/bracelet_models/princess.glb": [Math.PI / 2, Math.PI / 1 , 0],
-  "/bc-assets/bracelet_models/patel.glb":    [Math.PI / 2, 0 , 0],
-  "/bc-assets/bracelet_models/elephant.glb": [-Math.PI / 2, 0 , 0],
-  "/bc-assets/bracelet_models/camel.glb":    [-Math.PI / 2, 0 , 0],
+  "/bc-assets/bracelet_models/princess.glb": getGemGlbCharm("/bc-assets/bracelet_models/princess.glb").rotation,
+  "/bc-assets/bracelet_models/patel.glb":    getGemGlbCharm("/bc-assets/bracelet_models/patel.glb").rotation,
+  "/bc-assets/bracelet_models/elephant.glb": getGemGlbCharm("/bc-assets/bracelet_models/elephant.glb").rotation,
+  "/bc-assets/bracelet_models/camel.glb":    getGemGlbCharm("/bc-assets/bracelet_models/camel.glb").rotation,
 };
 
 // ─── NEW 3D CHARM POSITION SETTERS ─────────────────────────────────────────
@@ -460,20 +467,20 @@ const GLB_CHARM_ROTATION_OVERRIDES = {
 // charm's three values below to fine-tune only that model without changing
 // the existing 3D charms or the selected bracelet slot.
 const GLB_CHARM_POSITION_OFFSETS = {
-  "/bc-assets/bracelet_models/princess.glb": [0, -0.13, 0.11],
-  "/bc-assets/bracelet_models/patel.glb":    [0, -0.2, 0.05],
-  "/bc-assets/bracelet_models/elephant.glb": [-0.03, -0.14, 0],
-  "/bc-assets/bracelet_models/camel.glb":    [0.03, -0.14, 0],
+  "/bc-assets/bracelet_models/princess.glb": getGemGlbCharm("/bc-assets/bracelet_models/princess.glb").offset,
+  "/bc-assets/bracelet_models/patel.glb":    getGemGlbCharm("/bc-assets/bracelet_models/patel.glb").offset,
+  "/bc-assets/bracelet_models/elephant.glb": getGemGlbCharm("/bc-assets/bracelet_models/elephant.glb").offset,
+  "/bc-assets/bracelet_models/camel.glb":    getGemGlbCharm("/bc-assets/bracelet_models/camel.glb").offset,
 };
 
 // A physical bail ring is mounted at each new charm's shared chain anchor.
 // Adjust `offset`, `ringR`, or `ringTube` here if a particular GLB needs
 // additional clearance; existing 3D charms are deliberately unaffected.
 const GLB_CHARM_BAIL_CONFIG = {
-  "/bc-assets/bracelet_models/princess.glb": { ringR: 0.025, ringTube: 0.003, offset: [0, 0.1, -0.08] },
-  "/bc-assets/bracelet_models/patel.glb":    { ringR: 0.03, ringTube: 0.003, offset: [0, 0.17, -0.02] },
-  "/bc-assets/bracelet_models/elephant.glb": { ringR: 0.040, ringTube: 0.005, offset: [0.03, 0.1, 0.04] },
-  "/bc-assets/bracelet_models/camel.glb":    { ringR: 0.03, ringTube: 0.005, offset: [-0.03, 0.11, 0.04] },
+  "/bc-assets/bracelet_models/princess.glb": getGemGlbCharm("/bc-assets/bracelet_models/princess.glb").bail,
+  "/bc-assets/bracelet_models/patel.glb":    getGemGlbCharm("/bc-assets/bracelet_models/patel.glb").bail,
+  "/bc-assets/bracelet_models/elephant.glb": getGemGlbCharm("/bc-assets/bracelet_models/elephant.glb").bail,
+  "/bc-assets/bracelet_models/camel.glb":    getGemGlbCharm("/bc-assets/bracelet_models/camel.glb").bail,
 };
 
 function getGLBCharmScale(braceletPath, charmPath) {
@@ -1255,6 +1262,73 @@ const InitialCharm = ({ charm, position, rotation, onClick }) => {
   );
 };
 
+// ─── Hanging stone charm ─────────────────────────────────────────────────────
+// Built like InitialCharm: the model's own loop stands where the initial's washer
+// does (same height, same depth) and the same bail ring goes through it.
+const HangingCharm = ({ charm, onClick }) => {
+  const def = getHangingCharm(charm.hangingId);
+  if (!def) return null;
+  const metalColor = charm.bodyColor || charm.metalColor || '#DBDBDB';
+  const washerY = INITIAL_HARDWARE_TO_LETTER_Y_GAP + 0.11;
+  // The initial's washer is extruded backwards from this z, so its centre sits
+  // half its depth behind it; the bail is nudged from that same z.
+  const washerMeshZ = -INITIAL_WASHER_DEPTH / 2 + INITIAL_WASHER_Z_OFFSET;
+  const washerCentreZ = washerMeshZ - INITIAL_WASHER_DEPTH / 2;
+  return (
+    <group onClick={onClick} position={getCharmNudge(def.id, 'bracelet')}>
+      <group position={[0, washerY, washerCentreZ]}>
+        <HangingStoneCharm
+          charm={def}
+          scale={getHangingCharmScale(def.id, 'bracelet')}
+          metalColor={metalColor}
+          stoneColor={charm.gemstoneColor}
+          bailRadius={INITIAL_BAIL_R}
+          bailTube={INITIAL_BAIL_TUBE}
+          bailY={INITIAL_BAIL_R}
+          bailZ={washerMeshZ + INITIAL_BAIL_Z_NUDGE - washerCentreZ}
+        />
+      </group>
+    </group>
+  );
+};
+
+// ─── 3D gem charm (Princess / Pear Petal / Elephant / Camel), hung like an initial ──
+// The charm's own bail ring is put where the initial's bail ring goes, so it hooks
+// onto the chain link the same way (shared/glbGemCharms.js holds the numbers).
+const GemGlbHangingCharm = ({ charm, onClick }) => {
+  const def = getGemGlbCharm(charm.path);
+  if (!def) return null;
+  const washerY = INITIAL_HARDWARE_TO_LETTER_Y_GAP + 0.11;
+  const washerMeshZ = -INITIAL_WASHER_DEPTH / 2 + INITIAL_WASHER_Z_OFFSET;
+  const { ringR } = def.bail;
+  // Ring centre: top aligned with the initial's bail top; depth the same as its bail.
+  const ringX = 0;
+  const ringY = washerY + 2 * INITIAL_BAIL_R - ringR;
+  const ringZ = washerMeshZ + INITIAL_BAIL_Z_NUDGE;
+  // Where the ring sits relative to the model's top-centre anchor (see CharmBail).
+  const relX = def.bail.offset[0];
+  const relY = def.bail.offset[1] + ringR * 0.3;
+  const relZ = def.bail.offset[2];
+  return (
+    <group position={getCharmNudge(def.id, 'bracelet')}>
+      <group position={[ringX - relX, ringY - relY, ringZ - relZ]}>
+        <GLBCharmModel
+          path={charm.path}
+          position={[0, 0, 0]}
+          rotation={[0, 0, 0]}
+          modelRotation={def.rotation}
+          scale={def.scale}
+          anchorMode="top"
+          bailConfig={def.bail}
+          bodyColor={charm.bodyColor}
+          gemstoneColor={charm.gemstoneColor}
+          onClick={onClick}
+        />
+      </group>
+    </group>
+  );
+};
+
 function CameraResetter({ resetObj }) {
   const { camera } = useThree();
   useEffect(() => {
@@ -1624,17 +1698,27 @@ const deleteCharm = index => {
   const placedCharms = charms.filter(Boolean);
 
   const charmRenderData = useMemo(() => {
+    // With a stone charm on the chain the layout has to give it room, so the
+    // angles come from one layout for every charm; otherwise the old spread.
+    const nameChainCfg = isNameChain ? getNameChainConfig(braceletPath) : null;
+    const laidOutAngles = isNameChain && placedCharms.some((c) => c.type === 'attached')
+      ? getNameChainCharmAngles(placedCharms, nameChainGeom.gapHalfAngle, nameChainCfg).angles
+      : null;
     return placedCharms.map((charm, i) => {
       const kind = getCharmKind(charm);
+      // Hanging stone charms are placed exactly where an initial would be.
+      const placeKind = (kind === 'hanging' || (kind === 'glb' && getGemGlbCharm(charm.path))) ? 'initial' : kind;
       // The generated chain owns its own layout: charms ride the arc that the
       // links actually occupy, which shrinks as the name plate grows.
       if (isNameChain) {
         const placement = getNameChainCharmPlacement(
           i, placedCharms.length, nameChainGeom.gapHalfAngle, getNameChainConfig(braceletPath),
           getNameChainCharmCategory(charm),
+          laidOutAngles ? laidOutAngles[i] : null,
         );
         return {
           charm, kind,
+          angle: placement.angle,
           position: placement.position,
           rotation: placement.rotation,
           anchorMode: placement.anchor,
@@ -1642,9 +1726,9 @@ const deleteCharm = index => {
           hingeOffset: placement.radiusOffset ?? 0,
         };
       }
-      const pointPlacement = getPointPlacement(i, placedCharms.length, braceletPath, braceletPoints, kind, scale);
+      const pointPlacement = getPointPlacement(i, placedCharms.length, braceletPath, braceletPoints, placeKind, scale);
       const placement = pointPlacement
-        ?? getOrbitCharmTransform(i, placedCharms.length, getCharmOrbitConfig(braceletPath, kind));
+        ?? getOrbitCharmTransform(i, placedCharms.length, getCharmOrbitConfig(braceletPath, placeKind));
       return {
         charm, kind,
         position: placement.position,
@@ -1742,6 +1826,9 @@ const deleteCharm = index => {
            <NameChainBracelet
              braceletPath={braceletPath}
              namePendant={namePendant}
+             inlineCharms={charmRenderData
+               .filter((d) => d.kind === 'attached')
+               .map((d) => ({ charm: d.charm, angle: d.angle }))}
              materialProps={materialPropsBracelet}
              pendantMaterialProps={materialProps}
              onGeometryChange={setNameChainGeom}
@@ -1760,6 +1847,21 @@ const deleteCharm = index => {
 
           {charmRenderData.map(({ charm, kind, position, rotation, anchorMode, charmScale, hingeOffset }, i) => {
             const { path } = charm;
+
+            // Stone charms sit IN the chain and are drawn with it (NameChain.jsx).
+            if (kind === 'attached') return null;
+
+            if (kind === 'hanging') {
+              return (
+                <CharmPopIn key={charm.id ?? i} animKey={charmSignature(charm)} position={position} rotation={rotation} wobble={false}>
+                  <HangFromChain hinge={hingeOffset} animKey={charmSignature(charm)}>
+                  <group scale={charmScale}>
+                    <HangingCharm charm={charm} onClick={e => { e.stopPropagation(); deleteCharm(i); }} />
+                  </group>
+                  </HangFromChain>
+                </CharmPopIn>
+              );
+            }
 
             if (kind === 'initial') {
               return (
@@ -1819,6 +1921,18 @@ const deleteCharm = index => {
                     bailRingTube={charmSizeCfg.bailRingTube}
                     metalColor={charm.metalColor}
                   />
+                  </group>
+                  </HangFromChain>
+                </CharmPopIn>
+              );
+            }
+
+            if (kind === 'glb' && getGemGlbCharm(path)) {
+              return (
+                <CharmPopIn key={charm.id ?? i} animKey={charmSignature(charm)} position={position} rotation={rotation} wobble={false}>
+                  <HangFromChain hinge={hingeOffset} animKey={charmSignature(charm)}>
+                  <group scale={charmScale}>
+                    <GemGlbHangingCharm charm={charm} onClick={e => { e.stopPropagation(); deleteCharm(i); }} />
                   </group>
                   </HangFromChain>
                 </CharmPopIn>

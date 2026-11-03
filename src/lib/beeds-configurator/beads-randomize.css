@@ -1,7 +1,6 @@
 .beeds-configurator-root .gb-preview-control--randomize:disabled {
   opacity: 0.38;
   cursor: not-allowed;
-  pointer-events: none;
 }
 
 .beeds-configurator-root .gb-preview-control--randomize:not(:disabled):hover {

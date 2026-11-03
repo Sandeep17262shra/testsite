@@ -1,3 +1,4 @@
+import { getGemGlbCharm } from "./glbGemCharms";
 /**
  * @file This file contains the constant data for bracelets and charms,
  * including their model paths and positioning information.
@@ -10,6 +11,9 @@ export const BRACELETS = [
      // Hidden for this client:
      // { path: "/pc-assets/pendant_models//BRACELET17.glb", name: "Milgrain", price: 3600 },
      // { path: "/pc-assets/pendant_models//BRACELET18.glb", name: "Link", price: 3600 },
+     // Removed: GLB chain models (BRACELET13/14) are no longer used.
+     // { path: "/pc-assets/pendant_models//BRACELET13.glb", name: "Knot Link", price: 3200 },
+     // { path: "/pc-assets/pendant_models//BRACELET14.glb", name: "Box Link", price: 3600 },
 ];
 
 // Every necklace can carry a name pendant. Keep this capability alongside the
@@ -122,9 +126,10 @@ export const withModelVersion = (path) =>
 export const CHARM_METAL_SWATCHES = [
   { key: 'SL', label: 'Silver 925', hex: '#C0C0C0', color: '#DADADA', image: 'white.png' },
   { key: 'YG', label: 'Yellow Gold', hex: '#ECC875', color: '#FFD280', image: 'yellow.png' },
-  { key: 'RG', label: 'Rose Gold', hex: '#FFBAA3', color: '#E6B08F', image: 'rose.png' },
-  { key: 'PL', label: 'Platinum', hex: '#A8A8A6', color: '#E5E4E2', image: 'platinum.png' },
-  { key: 'WG', label: 'White Gold', hex: '#C8C8C8', color: '#F1F1EF', image: 'white.png' },
+  // Hidden for this client:
+  // { key: 'RG', label: 'Rose Gold', hex: '#FFBAA3', color: '#E6B08F', image: 'rose.png' },
+  // { key: 'PL', label: 'Platinum', hex: '#A8A8A6', color: '#E5E4E2', image: 'platinum.png' },
+  // { key: 'WG', label: 'White Gold', hex: '#C8C8C8', color: '#F1F1EF', image: 'white.png' },
 ];
 export const getImageCharmPath = (number, metalKey = 'WG') =>
   `/bc-assets/image_charm/${metalKey === 'YG' ? 'YG' : metalKey === 'RG' ? 'RG' : 'WG'}/CHARMS${number}.png`;
@@ -553,8 +558,8 @@ export const NAME_PENDANT_FONTS = [
 ];
 
 export const DEFAULT_NAME_PENDANT = {
-    enabled: true,
-    text: "Name",
+    enabled: false,
+    text: "",
     fontStyle: "dancing",
 };
 
@@ -617,9 +622,10 @@ export const BRACELET_STONE_COLOR_SWATCHES = [
 export const BRACELET_CHARM_METAL_SWATCHES = [
     { key: "SL", label: "Silver 925", hex: "#B8B8B8", color: "#CFCFCF", image: "white.png" },
     { key: "YG", label: "Yellow Gold", hex: "#FFD280", color: "#FFD280", image: "yellow.png" },
-    { key: "RG", label: "Rose Gold", hex: "#FFBAA3", color: "#E6B08F", image: "rose.png" },
-    { key: "PL", label: "Platinum", hex: "#e5e4e2", color: "#E5E4E2", image: "platinum.png" },
-    { key: "WG", label: "White Gold", hex: "#DBDBDB", color: "#F1F1EF", image: "white.png" },
+    // Hidden for this client:
+    // { key: "RG", label: "Rose Gold", hex: "#FFBAA3", color: "#E6B08F", image: "rose.png" },
+    // { key: "PL", label: "Platinum", hex: "#e5e4e2", color: "#E5E4E2", image: "platinum.png" },
+    // { key: "WG", label: "White Gold", hex: "#DBDBDB", color: "#F1F1EF", image: "white.png" },
 ];
 
 export const getCharmNumberFromPath = (path = "") => {
@@ -1931,5 +1937,9 @@ export const getMappedMetal = (hexOrCode, targetType) => {
 
 export const isCommonCharm = (charm) => {
   if (!charm) return false;
-  return charm.type === "birthstone" || charm.type === "diamond" || charm.type === "initial";
+  return charm.type === "birthstone" || charm.type === "diamond" || charm.type === "initial"
+    // Stone charms (chain stones, hanging charms) and the four 3D gem charms
+    // exist on both jewelry types too, so they travel across with the rest.
+    || charm.type === "attached" || charm.type === "hanging" || charm.type === "gemglb"
+    || (!charm.type && Boolean(getGemGlbCharm(charm.path)));
 };

@@ -6,6 +6,7 @@ import {
   DEFAULT_SEPARATOR_KEY,
   SEPARATORS,
 } from "./assets";
+import { getWarmUrl, whenCriticalReady } from "./beadsCriticalAssets";
 
 const warmedUrls = new Set();
 const decodedUrls = new Set();
@@ -72,7 +73,7 @@ export function ensureBeadImageReady(url) {
       resolve();
     };
 
-    img.src = url;
+    img.src = getWarmUrl(url);
     if (img.complete && img.naturalWidth > 0) {
       done();
     }
@@ -115,11 +116,15 @@ export function preloadCriticalBeadsConfiguratorImages() {
   const charm =
     BEAD_CHARMS.find((entry) => entry.key === DEFAULT_CHARM_KEY) || BEAD_CHARMS[0];
 
-  [bead?.texture, separator?.image, charm?.image]
-    .filter(Boolean)
-    .forEach((url) => {
-      preloadBeadImageUrl(url);
-    });
+  // The first bead texture is part of the ordered critical sequence; the
+  // default spacer / charm art follows once that sequence has finished.
+  whenCriticalReady().then(() => {
+    [bead?.texture, separator?.image, charm?.image]
+      .filter(Boolean)
+      .forEach((url) => {
+        preloadBeadImageUrl(url);
+      });
+  });
 }
 
 /**
@@ -137,18 +142,29 @@ export function preloadBeadsConfiguratorAssets({
 
   preloadCriticalBeadsConfiguratorImages();
 
+  // Picker thumbnails are not needed for first paint. Wait until the 3D scene
+  // has had time to load, then fetch in small batches so they never compete
+  // with the critical bead / HDR / texture requests.
   const unique = [...new Set([...beadUrls, ...spacerUrls, ...charmUrls].filter(Boolean))];
   if (!unique.length) {
     return;
   }
 
-  scheduleIdle(() => {
-    unique.forEach((url) => {
+  const BATCH = 4;
+  const startAfterMs = 600;
+  const runBatch = (index) => {
+    unique.slice(index, index + BATCH).forEach((url) => {
       try {
         preloadBeadImageUrl(url);
       } catch {
         // ignore
       }
     });
+    if (index + BATCH < unique.length) {
+      window.setTimeout(() => scheduleIdle(() => runBatch(index + BATCH)), 250);
+    }
+  };
+  whenCriticalReady().then(() => {
+    window.setTimeout(() => scheduleIdle(() => runBatch(0)), startAfterMs);
   });
 }

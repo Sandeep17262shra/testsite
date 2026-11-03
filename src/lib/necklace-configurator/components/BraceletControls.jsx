@@ -1,3 +1,4 @@
+import { getGemGlbCharm, DEFAULT_GEM_GLB_STONE_COLOR } from "../shared/glbGemCharms";
 import React, { useContext, useState, useEffect, useRef, useImperativeHandle, forwardRef } from "react";
 import { BraceletContext } from "../contexts/BraceletContext";
 import * as THREE from 'three';
@@ -10,6 +11,7 @@ import {
 } from '../shared/assets';
 import { Base64 } from "js-base64";
 import { buildCharmAddOnLines } from "../shared/orderSummary";
+import { ATTACHED_CHARMS, HANGING_CHARMS, getAttachedCharm, getHangingCharm, getAttachedCharmIcon, getHangingCharmIcon } from "../shared/attachedCharms";
 import { playBeadAddSound, playBeadRemoveSound, unlockBeadsAudio } from "../../beeds-configurator/beadsSounds";
 import { useClickSound } from "../hooks/useClickSound";
 import { useSectionScrollSpy } from "../shared/useSectionScrollSpy";
@@ -20,7 +22,7 @@ import {
   formatCountedLabel,
   CHARM_CATEGORY_KEYS,
 } from "@/lib/ring-configurator/jewelryUiTranslations";
-import { NAME_CHAIN_MAX_CHARMS, NAME_CHAIN_MAX_CHARMS_WITH_NAME } from "../bracelet/NameChain";
+import { NAME_CHAIN_MAX_CHARMS, NAME_CHAIN_MAX_CHARMS_WITH_NAME, getNameChainCharmAngles, getNameChainConfig } from "../bracelet/NameChain";
 import {
     getBraceletChainKeyByPath,
     getBraceletMetalId,
@@ -185,21 +187,12 @@ function OptionRow({ title, children, className }) {
   );
 }
 
+// Client: only Stone Charms category shown; all others hidden
 const BRACELET_CHARM_CATEGORIES = [
   {
-    id: "birthstones",
-    label: "Birthstones",
-    icon: (active) => (
-      <svg width="22" height="22" viewBox="0 0 30 30" fill="none">
-        <path d="M11.5 8H18.5L22 11.5V18.5L18.5 22H11.5L8 18.5V11.5L11.5 8Z" stroke={active ? "white" : "#171717"} strokeWidth="1.5" strokeLinejoin="round" />
-        <path d="M8 11.5H22" stroke={active ? "white" : "#171717"} strokeWidth="1.2" />
-        <path d="M8 18.5H22" stroke={active ? "white" : "#171717"} strokeWidth="1.2" />
-      </svg>
-    ),
-  },
-  {
-    id: "diamonds",
-    label: "Diamond",
+    // Stone charms sit IN the chain (the chain runs out of their link rings).
+    id: "attached",
+    label: "Stone Charms",
     icon: (active) => (
       <svg width="22" height="22" viewBox="0 0 30 30" fill="none">
         <path d="M9 10H21L24 13.5L15 23.5L6 13.5L9 10Z" stroke={active ? "white" : "#171717"} strokeLinejoin="round" strokeWidth="1.3"/>
@@ -207,30 +200,12 @@ const BRACELET_CHARM_CATEGORIES = [
       </svg>
     ),
   },
-  // "initial" and "2d" charm categories are hidden for this client
-  // {
-  //   id: "initial",
-  //   label: "Initial",
-  //   ...
-  // },
-  // {
-  //   id: "2d",
-  //   label: "2D Charms",
-  //   ...
-  // },
-  {
-    id: "3d",
-    label: "3D Charms",
-    icon: (active) => (
-      <img
-        src="/images/3d-charm.svg"
-        alt="3D Charms"
-        width={22}
-        height={22}
-        style={{ filter: active ? "invert(1) brightness(2)" : "none" }}
-      />
-    ),
-  },
+  // Hidden for this client: birthstones, diamonds, initial, 2d, 3d
+  // { id: "birthstones", label: "Birthstones", ... },
+  // { id: "diamonds", label: "Diamond", ... },
+  // { id: "initial", label: "Initial", ... },
+  // { id: "2d", label: "2D Charms", ... },
+  // { id: "3d", label: "3D Charms", ... },
 ];
 
 const BraceletControls = forwardRef(function BraceletControls({ activeSection = "bracelet", onSectionChange }, ref) {
@@ -337,7 +312,9 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
     // Only the generated name chain can open up around a name plate.
     const supportsNamePendant = BRACELET_NAME_CHAIN_PATHS.includes(braceletPath);
     const namePendantText = sanitizePendantText(namePendant?.text || "");
-    const hasNamePendant = supportsNamePendant && Boolean(namePendant?.enabled) && namePendantText.length > 0;
+    const hasNamePendant = false; // Hidden for this client (name bracelet disabled)
+    // Stone charms sit IN the chain, which only the generated chains can do.
+    const supportsAttachedCharm = supportsNamePendant;
     // 5 charms on a plain chain; 4 with a name (2 each side, between the name
     // and the lock at the back).
     const maxBraceletCharms = hasNamePendant ? NAME_CHAIN_MAX_CHARMS_WITH_NAME : NAME_CHAIN_MAX_CHARMS;
@@ -356,10 +333,10 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
         setNamePendant((prev) => ({ ...(prev || DEFAULT_NAME_PENDANT), ...updates }));
 
     useEffect(() => {
-        if (!supportsNamePendant && customizeType === "text") {
+        if (customizeType !== "charms") {
             setCustomizeType("charms");
         }
-    }, [supportsNamePendant, customizeType]);
+    }, [customizeType]);
 
     const isPlatinum = String(braceletMetal || "").toLowerCase() === "#e5e4e2";
     const isSilver = String(braceletMetal || "").toLowerCase() === "#b8b8b8" || String(braceletMetal || "").toLowerCase() === "#c0c0c0";
@@ -395,6 +372,8 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
         if (charm.type === "initial") return 40;
         if (charm.type === "birthstone") return 50;
         if (charm.type === "diamond") return 50;
+        if (charm.type === "attached") return getAttachedCharm(charm.attachedId)?.price ?? 150;
+        if (charm.type === "hanging") return getHangingCharm(charm.hangingId)?.price ?? 150;
         const charmData = BRACELET_CHARMS.find((c) => c.path === charm.path);
         return charmData ? charmData.price : 50;
     };
@@ -557,7 +536,9 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
 
     const addMetalVariantCharm = (charm, forceNew = false) => {
         const number = getCharmNumberFromPath(charm.path);
-        const selectedMetal = BRACELET_CHARM_METAL_SWATCHES.find((m) => m.hex === charmMetal) ?? BRACELET_CHARM_METAL_SWATCHES.find((m) => m.key === "WG");
+        const selectedMetal = BRACELET_CHARM_METAL_SWATCHES.find((m) => m.hex === charmMetal)
+            ?? BRACELET_CHARM_METAL_SWATCHES.find((m) => m.key === "WG")
+            ?? BRACELET_CHARM_METAL_SWATCHES[0];
         const variant = {
             path: getImageCharmPath(number, selectedMetal.key),
             imageCharmNumber: number,
@@ -597,7 +578,7 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
             ...(glbPreview ? { preview: glbPreview } : {}),
             // New gem charms default to silver; their metal can still be
             // changed later from the shared Charm Metal control.
-            ...(isGemCharm ? { bodyColor: "#C0C0C0", gemstoneColor: charmGemstoneColor } : {}),
+            ...(isGemCharm ? { bodyColor: getGemGlbCharm(charmPath) ? charmMetal : "#C0C0C0", gemstoneColor: getGemGlbCharm(charmPath) ? DEFAULT_GEM_GLB_STONE_COLOR : charmGemstoneColor } : {}),
         };
         if (!forceNew && activeCharmSlot !== null && charms[activeCharmSlot]) {
             const updated = [...charms];
@@ -617,6 +598,59 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
         setCharms(updated);
         setActiveCharmSlot(updated.length - 1);
         setCameraView(`charmProduct-${updated.length - 1}`);
+    };
+
+    // Whether `list` can be laid out round the bracelet with every stone charm
+    // given room for its links. A name's width is only known to the scene, so a
+    // typical one stands in for it here.
+    const stoneCharmsFit = (list) => {
+        if (!list.some((c) => c?.type === "attached")) return true;
+        return getNameChainCharmAngles(list, hasNamePendant ? 0.55 : 0, getNameChainConfig(braceletPath)).fits;
+    };
+
+    // Hanging stone charms: ordinary charms that hang from the chain by a bail
+    // ring, the way an initial does. They take the slots an initial would.
+    const addHangingCharm = (def, replaceActive = true) => {
+        const charm = {
+            type: "hanging",
+            hangingId: def.id,
+            path: def.path,
+            name: `${def.name} Charm`,
+            bodyColor: charmMetal,
+            gemstoneColor: "#F4F8FF",
+        };
+        const placed = charms.filter(Boolean);
+        const replacing = replaceActive && activeCharmSlot !== null && charms[activeCharmSlot];
+        const next = replacing
+            ? placed.map((c, i) => (i === activeCharmSlot ? charm : c))
+            : [...placed, charm];
+        // A new charm shifts every slot, which can crowd a stone charm.
+        if (!stoneCharmsFit(next)) {
+            toast("There is no room on the chain for another charm next to the stone charms.", { autoClose: 2200 });
+            return;
+        }
+        addCustomCharm(charm, replaceActive);
+    };
+
+    const addAttachedCharm = (def, replaceActive = true) => {
+        const charm = {
+            type: "attached",
+            attachedId: def.id,
+            path: def.path,
+            name: `${def.name} Stone Charm`,
+            bodyColor: charmMetal,
+            gemstoneColor: "#F4F8FF",
+        };
+        const placed = charms.filter(Boolean);
+        const replacing = replaceActive && activeCharmSlot !== null && charms[activeCharmSlot];
+        const next = replacing
+            ? placed.map((c, i) => (i === activeCharmSlot ? charm : c))
+            : [...placed, charm];
+        if (!stoneCharmsFit(next)) {
+            toast("There is no room on the chain for another stone charm.", { autoClose: 1800 });
+            return;
+        }
+        addCustomCharm(charm, replaceActive);
     };
 
     const addBirthstoneCharm = (replaceActive = true, selectedStoneColor = stoneColor) => {
@@ -663,7 +697,7 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
             setCharms(updated);
             return;
         }
-        if (activeCharm.type === 'birthstone' || activeCharm.type === 'diamond') {
+        if (activeCharm.type === 'birthstone' || activeCharm.type === 'diamond' || activeCharm.type === 'attached' || activeCharm.type === 'hanging') {
             updated[activeCharmSlot] = { ...activeCharm, bodyColor: metal.hex };
             setCharms(updated);
             return;
@@ -987,6 +1021,7 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
             );
         }
         if (cat.id === "initial") return isBraceletCatalogProductActive("BIC1");
+        if (cat.id === "attached") return true;
         if (cat.id === "2d") {
             return charms2D.some((charm) =>
                 isBraceletCatalogProductActive(getBracelet2DCharmIdByNumber(getCharmNumberFromPath(charm.path)))
@@ -1030,6 +1065,15 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
         }
         if (activeCharmCategory === "birthstones") {
             addBirthstoneCharm(false);
+            return;
+        }
+        if (activeCharmCategory === "attached" && activeCharmObj?.type === "hanging") {
+            addHangingCharm(getHangingCharm(activeCharmObj.hangingId) || HANGING_CHARMS[0], false);
+            return;
+        }
+        if (activeCharmCategory === "attached") {
+            const def = getAttachedCharm(activeCharmObj?.attachedId) || ATTACHED_CHARMS[0];
+            addAttachedCharm(def, false);
             return;
         }
         if (activeCharmCategory === "diamonds") {
@@ -1200,8 +1244,8 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
                         aria-label={t("nav.jewelryAria")}
                     >
                         <div className="jewelry-category-row-options">
-                        {/* Necklace button hidden for this client */}
-                        {false && isCategoryAllowed(parent || resolveParentUrl(), "necklace") && (
+                        {/* CLIENT CUSTOMIZATION: necklace button hidden */}
+                        {isCategoryAllowed(parent || resolveParentUrl(), "necklace") && (
                             <button
                                 type="button"
                                 role="tab"
@@ -1304,9 +1348,9 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
                 >
                     <header className="theme3-option-section-header">
                         <span className="theme3-section-heading">{t("section.customize")}</span>
-                        {(customizeType === "text" ? namePendantTextPrice : charmsPrice) > 0 && (
+                        {charmsPrice > 0 && (
                             <span className="theme3-section-header-price theme3-section-heading">
-                                ${(customizeType === "text" ? namePendantTextPrice : charmsPrice).toLocaleString()}
+                                ${charmsPrice.toLocaleString()}
                             </span>
                         )}
                     </header>
@@ -1356,6 +1400,20 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
                                         <img
                                             src={(BRACELET_STONE_COLOR_SWATCHES.find((s) => s.hex === charm.gemstoneColor) ?? BRACELET_STONE_COLOR_SWATCHES[0]).image}
                                             alt="Birthstone charm"
+                                            draggable={false}
+                                            style={{ WebkitUserDrag: "none", pointerEvents: "none" }}
+                                        />
+                                    ) : charm.type === "hanging" ? (
+                                        <img
+                                            src={getHangingCharmIcon(charm.hangingId)}
+                                            alt={charm.name ?? "Charm"}
+                                            draggable={false}
+                                            style={{ WebkitUserDrag: "none", pointerEvents: "none" }}
+                                        />
+                                    ) : charm.type === "attached" ? (
+                                        <img
+                                            src={getAttachedCharmIcon(charm.attachedId)}
+                                            alt={charm.name ?? "Stone charm"}
                                             draggable={false}
                                             style={{ WebkitUserDrag: "none", pointerEvents: "none" }}
                                         />
@@ -1423,7 +1481,8 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
                         )}
                     </div>
 
-                    {supportsNamePendant && (
+                    {/* Hidden for this client: name bracelet */}
+                    {/* {supportsNamePendant && (
                         <OptionRow title={t("option.category")}>
                             <TextOption
                                 active={customizeType === "charms"}
@@ -1436,9 +1495,9 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
                                 onClick={() => { playClick(); setCustomizeType("text"); }}
                             />
                         </OptionRow>
-                    )}
+                    )} */}
 
-                    {customizeType === "text" && supportsNamePendant ? (
+                    {false && customizeType === "text" && supportsNamePendant ? (
                         <>
                             <div className="theme3-engraving-controls">
                                 <label>
@@ -1531,9 +1590,12 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
                                     type="button"
                                     title={charmCategoryLabel(cat)}
                                     className={`necklace-charm-category-btn ${isActive ? "active" : ""}`}
+                                    style={cat.icon ? undefined : { width: "auto", minWidth: "44px" }}
                                     onClick={() => { playClick(); setActiveCharmCategory(cat.id); }}
                                 >
-                                    {cat.icon(isActive)}
+                                    {cat.icon
+                                        ? cat.icon(isActive)
+                                        : <span style={{ padding: "0 14px", fontSize: "13px", whiteSpace: "nowrap", color: isActive ? "#fff" : "#171717" }}>{charmCategoryLabel(cat)}</span>}
                                 </button>
                             );
                         })}
@@ -1587,6 +1649,38 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
                                     image={charm.preview}
                                     label={getBraceletCatalogLabel(getBraceletDiamondCharmIdByPath(charm.path), charm.name)}
                                     onClick={() => addDiamondCharm(charm)}
+                                />
+                            ))}
+                        </OptionRow>
+                    )}
+
+                    {activeCharmCategory === "attached" && (
+                        <OptionRow title="Stone Charms" className="gb-option-row--two-line theme3-initial-grid">
+                            {supportsAttachedCharm && ATTACHED_CHARMS.map((def) => (
+                                <CardOption
+                                    key={def.id}
+                                    image={getAttachedCharmIcon(def.id)}
+                                    active={activeCharmObj?.type === "attached" && activeCharmObj.attachedId === def.id}
+                                    label={def.name}
+                                    onClick={() => addAttachedCharm(def)}
+                                />
+                            ))}
+                            {BRACELET_CHARMS.filter((c) => getGemGlbCharm(c.path)).map((charm) => (
+                                <CardOption
+                                    key={charm.path}
+                                    image={getGemGlbCharm(charm.path)?.icon}
+                                    active={activeCharmObj?.path === charm.path}
+                                    label={charm.name.replace(" Charm", "")}
+                                    onClick={() => addCharm(charm.path)}
+                                />
+                            ))}
+                            {HANGING_CHARMS.map((def) => (
+                                <CardOption
+                                    key={def.id}
+                                    image={getHangingCharmIcon(def.id)}
+                                    active={activeCharmObj?.type === "hanging" && activeCharmObj.hangingId === def.id}
+                                    label={def.name}
+                                    onClick={() => addHangingCharm(def)}
                                 />
                             ))}
                         </OptionRow>

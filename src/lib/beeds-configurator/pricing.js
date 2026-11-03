@@ -1,22 +1,44 @@
 import { DEFAULT_BEAD_SIZE_ID } from "./assets";
+import {
+  getBeadedAssetLabel,
+  getBeadedBeadPrice,
+  getBeadedCharmPrice,
+  getBeadedSpacerPrice,
+  getBeadedStringLengthPrice,
+  getBeadedStylePrice,
+  getBeadedThreadColorPrice,
+} from "./beadedPriceConfig";
 
+// Built-in prices, used when the store catalogue (API / fallback file) has no
+// row for an item. With a catalogue loaded, prices come from the API by
+// product_id — see beadedPriceConfig.js and data/beadedProductIds.js.
 export const DEFAULT_BEAD_UNIT_PRICE = 8;
 export const DEFAULT_SPACER_UNIT_PRICE = 4;
 
-/** Thread/string is included; bracelet total is beads, spacers, and charms only. */
-export function getJewelryPriceForLength(_lengthId, _displayInches) {
-  return 0;
+/** Thread/string is included unless the store prices the length (BBLS*) in its catalogue. */
+export function getJewelryPriceForLength(lengthId, _displayInches) {
+  return getBeadedStringLengthPrice(lengthId);
 }
+
+/** String length + style + thread colour. All 0 unless the store prices them in its catalogue. */
+export function getJewelrySetupPrice({ lengthId, styleId, threadColorId } = {}) {
+  return (
+    getJewelryPriceForLength(lengthId) +
+    getBeadedStylePrice(styleId) +
+    getBeadedThreadColorPrice(threadColorId)
+  );
+}
+
 export function getBeadItemPrice(bead, sizeId = DEFAULT_BEAD_SIZE_ID) {
-  return bead?.price ?? DEFAULT_BEAD_UNIT_PRICE;
+  return getBeadedBeadPrice(bead, sizeId);
 }
 
 export function getSpacerItemPrice(spacer) {
-  return spacer?.price ?? DEFAULT_SPACER_UNIT_PRICE;
+  return getBeadedSpacerPrice(spacer);
 }
 
 export function getCharmItemPrice(charm) {
-  return charm?.price ?? 50;
+  return getBeadedCharmPrice(charm);
 }
 
 export function getPatternCustomizePrice(pattern = []) {
@@ -76,7 +98,7 @@ export function buildPatternCustomizeSummaryLines(pattern = []) {
   if (beads.length) {
     const groups = groupPatternItems(
       beads,
-      (item) => item.asset?.name || "Bead",
+      (item) => getBeadedAssetLabel("bead", item.asset) || "Bead",
       (item) => getBeadItemPrice(item.asset, item.sizeId)
     );
 
@@ -92,7 +114,7 @@ export function buildPatternCustomizeSummaryLines(pattern = []) {
   if (charms.length) {
     const groups = groupPatternItems(
       charms,
-      (item) => item.asset?.name || "Charm",
+      (item) => getBeadedAssetLabel("charm", item.asset) || "Charm",
       (item) => getCharmItemPrice(item.asset)
     );
 
@@ -108,7 +130,7 @@ export function buildPatternCustomizeSummaryLines(pattern = []) {
   if (spacers.length) {
     const groups = groupPatternItems(
       spacers,
-      (item) => item.asset?.name || "Spacer",
+      (item) => getBeadedAssetLabel("spacer", item.asset) || "Spacer",
       (item) => getSpacerItemPrice(item.asset)
     );
 

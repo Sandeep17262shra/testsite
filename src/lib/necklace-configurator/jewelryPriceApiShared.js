@@ -89,7 +89,9 @@ const isBraceletProductId = (productId) => {
   const id = String(productId || "").toUpperCase();
   return (
     id.startsWith("BC") ||
-    id.startsWith("BBS") ||
+    // Bracelet birthstones are BBS + digits (BBS01). The beaded bracelet also has
+    // BBST / BBSZ / BBSP IDs, so a bare "BBS" prefix would claim those too.
+    /^BBS\d/.test(id) ||
     id.startsWith("BDC") ||
     id.startsWith("BIC") ||
     id.startsWith("B2D") ||
@@ -98,6 +100,10 @@ const isBraceletProductId = (productId) => {
     id.startsWith("BNF")
   );
 };
+
+/** Beaded bracelet IDs: BBLS (length), BBST (style), BBD (bead), BBSZ (size), BBSP / BBMS (spacers), BBC (charm), BBTC (thread). */
+const isBeadedProductId = (productId) =>
+  /^(BBLS|BBST|BBSZ|BBSP|BBMS|BBTC|BBD|BBC)\d/i.test(String(productId || ""));
 
 const isNecklaceProductId = (productId) => /^(NC|NBS|NDC|NIC|NPF|NCL|NPC)/i.test(String(productId || ""));
 const includesProductFamily = (products, matcher) =>
@@ -139,6 +145,24 @@ export function extractBraceletPricingPayload(response) {
   return null;
 }
 
+/** @param {unknown} response Full API body or local fallback JSON */
+export function extractBeadedPricingPayload(response) {
+  const fromUnified = catalogFromJewelryKey(response, "beaded");
+  if (fromUnified) return fromUnified;
+
+  const direct = productList(response);
+  if (includesProductFamily(direct, isBeadedProductId)) {
+    return { products: direct };
+  }
+
+  const legacy = productList(response?.pricing ?? response?.data);
+  if (includesProductFamily(legacy, isBeadedProductId)) {
+    return { products: legacy };
+  }
+
+  return null;
+}
+
 export function hasNecklacePricingCatalogue(response) {
   const payload = extractNecklacePricingPayload(response);
   return Boolean(payload?.products?.length);
@@ -146,6 +170,11 @@ export function hasNecklacePricingCatalogue(response) {
 
 export function hasBraceletPricingCatalogue(response) {
   const payload = extractBraceletPricingPayload(response);
+  return Boolean(payload?.products?.length);
+}
+
+export function hasBeadedPricingCatalogue(response) {
+  const payload = extractBeadedPricingPayload(response);
   return Boolean(payload?.products?.length);
 }
 

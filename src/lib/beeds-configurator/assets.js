@@ -48,7 +48,6 @@ const LEGACY_SEPARATOR_IMAGE_FILES = [
   "s12.webp",
   "s13.webp",
   "s14.webp",
-  "s15.webp"
 ];
 
 /**
@@ -453,9 +452,9 @@ export function getAvailableBeadSizes(assetKey) {
  * Override images for Classic S7–S9 twister-band spacers.
  */
 const LEGACY_SPACER_TWISTER_IMAGE_OVERRIDE = {
-  s7: "s7-rose.webp",
+  s7: "s9-gold.webp",
   s8: "s8-silver.webp",
-  s9: "s9-gold.webp",
+  s9: "s7-rose.webp",
 };
 
 /**
@@ -970,13 +969,17 @@ export const BEAD_COLLECTIONS = [
 
 export const BEAD_GRID_SIZE_FILTERS = [
   { id: "all", label: "All" },
+  { id: "6", label: "6" },
   { id: "8", label: "8" },
   { id: "10", label: "10" },
+  { id: "12", label: "12" },
 ];
 
 const BEAD_PICKER_SIZE_OPTIONS = [
+  { id: "6mm", label: "6mm" },
   { id: "8mm", label: "8mm" },
   { id: "10mm", label: "10mm" },
+  { id: "12mm", label: "12mm" },
 ];
 
 /** Bead picker rows: every size per stone when filter is "all", else one row per bead. */

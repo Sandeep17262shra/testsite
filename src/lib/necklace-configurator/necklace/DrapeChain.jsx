@@ -483,6 +483,10 @@ const anchorKey = (point) => (point
   ? `${point[0].toFixed(3)},${point[1].toFixed(3)},${(point[2] ?? 0).toFixed(3)}`
   : '');
 
+const washerKey = (washer) => (washer
+  ? Object.values(washer).map((v) => v.toFixed(3)).join(',')
+  : '');
+
 function chainCacheKey(cfg, charmAnchors, shrinkAnchors) {
   return [
     anchorKey(cfg.left), anchorKey(cfg.right), (cfg.sag ?? 0).toFixed(4), (cfg.depthScale ?? 1).toFixed(4),
@@ -490,9 +494,10 @@ function chainCacheKey(cfg, charmAnchors, shrinkAnchors) {
     cfg.bulgeSag ?? '', cfg.bulgeSamples ?? '', cfg.charmSpan ?? '',
     cfg.pendantAnchors
       ? `${anchorKey(cfg.pendantAnchors.left)}>${anchorKey(cfg.pendantAnchors.right)}`
-        + `@${cfg.pendantAnchors.washer
-          ? Object.values(cfg.pendantAnchors.washer).map((v) => v.toFixed(3)).join(',')
-          : ''}`
+        + `@${washerKey(cfg.pendantAnchors.washerLeft ?? cfg.pendantAnchors.washer)}`
+        + `@${washerKey(cfg.pendantAnchors.washerRight ?? cfg.pendantAnchors.washer)}`
+        + (cfg.pendantAnchors.gaps || []).map((g) => `|${anchorKey(g.from)}>${anchorKey(g.to)}`
+          + `@${washerKey(g.washerFrom)}@${washerKey(g.washerTo)}`).join('')
       : '',
     charmAnchors.map(anchorKey).join(';'),
     shrinkAnchors === charmAnchors ? '=' : shrinkAnchors.map(anchorKey).join(';'),
@@ -586,18 +591,30 @@ function computeChainLinkTransforms(cfg, charmAnchors = [], shrinkAnchors = char
     // clasp → charms on that side → washer, taking the same bend at every one
     // of them. So the chain visibly angles where the name hangs, instead of
     // sweeping past it as if nothing were attached.
-    const leftAnchors  = sortedAnchors.filter((anchor) => anchor[0] < pendant.left[0]);
-    const rightAnchors = sortedAnchors.filter((anchor) => anchor[0] > pendant.right[0]);
-
     // Aimed at the washer's mid-plane, not its front face, so the link that
     // threads it is centred in the ring rather than clipping its rim.
-    const leftWasher  = washerMidPlane(pendant.left, pendant.washer);
-    const rightWasher = washerMidPlane(pendant.right, pendant.washer);
+    const leftWasher  = washerMidPlane(pendant.left, pendant.washerLeft ?? pendant.washer);
+    const rightWasher = washerMidPlane(pendant.right, pendant.washerRight ?? pendant.washer);
 
-    paths = [
-      buildPathSampler(buildRelaxedRunPoints([left, ...leftAnchors, leftWasher], cfg), 0, 2),
-      buildPathSampler(buildRelaxedRunPoints([rightWasher, ...rightAnchors, right], cfg), 0, 2),
+    // A row of several stone charms: the chain also runs BETWEEN them, from
+    // one charm's right ring to the next one's left ring (pendant.gaps). Every
+    // charm bends the stretch of chain it sits on, whichever stretch that is.
+    const gaps = pendant.gaps || [];
+    const segments = [
+      { start: left, end: leftWasher, lo: -Infinity, hi: pendant.left[0] },
+      ...gaps.map((gap) => ({
+        start: washerMidPlane(gap.from, gap.washerFrom),
+        end: washerMidPlane(gap.to, gap.washerTo),
+        lo: gap.from[0],
+        hi: gap.to[0],
+      })),
+      { start: rightWasher, end: right, lo: pendant.right[0], hi: Infinity },
     ];
+    paths = segments.map((seg) => buildPathSampler(buildRelaxedRunPoints([
+      seg.start,
+      ...sortedAnchors.filter((anchor) => anchor[0] > seg.lo && anchor[0] < seg.hi),
+      seg.end,
+    ], cfg), 0, 2));
   } else if (hasCharms) {
     // Relaxed runs between the attachment points - see CHARM_CHAIN_TENSION.
     paths = [buildPathSampler(buildRelaxedRunPoints([left, ...sortedAnchors, right], cfg), 0, 2)];
@@ -607,18 +624,29 @@ function computeChainLinkTransforms(cfg, charmAnchors = [], shrinkAnchors = char
 
   const totalLen = paths.reduce((sum, path) => sum + path.totalLen, 0);
 
-  // Each half stops a `hook` short of its washer; that gap is where the last
-  // link hangs THROUGH the ring instead of sitting on top of its centre.
-  const hook = pendant ? getWasherHook(cfg, pendant.washer) : 0;
+  // Each run stops a `hook` short of a washer at either end; that gap is where
+  // the last link hangs THROUGH the ring instead of sitting on top of its centre.
+  const washerLeftDims = pendant ? (pendant.washerLeft ?? pendant.washer) : null;
+  const washerRightDims = pendant ? (pendant.washerRight ?? pendant.washer) : null;
+  const gapList = pendant?.gaps || [];
   const runs = paths.map((path, pathIndex) => {
-    // Path 0 ends on the left washer, path 1 starts on the right one.
-    const atStart = Boolean(pendant) && pathIndex === 1;
-    const atEnd   = Boolean(pendant) && pathIndex === 0;
-    // Never eat more than a fifth of a half - a very short run (a name almost
-    // as wide as the necklace) would otherwise lose its chain altogether.
-    const trim = Math.min(hook, path.totalLen * 0.2);
-    const startDist = atStart ? trim : 0;
-    const endDist   = atEnd ? path.totalLen - trim : path.totalLen;
+    // First path ends on the left washer, last starts on the right one, and a
+    // gap path runs washer to washer.
+    const atStart = Boolean(pendant) && pathIndex > 0;
+    const atEnd   = Boolean(pendant) && pathIndex < paths.length - 1;
+    const startDims = atStart
+      ? (pathIndex === paths.length - 1 ? washerRightDims : gapList[pathIndex - 1].washerFrom)
+      : null;
+    const endDims = atEnd
+      ? (pathIndex === 0 ? washerLeftDims : gapList[pathIndex - 1].washerTo)
+      : null;
+    // Never eat more than a fifth of a half (or 0.3 of a run that is trimmed at
+    // both ends) - a very short run would otherwise lose its chain altogether.
+    const cap = path.totalLen * (atStart && atEnd ? 0.3 : 0.2);
+    const trimStart = atStart ? Math.min(getWasherHook(cfg, startDims), cap) : 0;
+    const trimEnd = atEnd ? Math.min(getWasherHook(cfg, endDims), cap) : 0;
+    const startDist = trimStart;
+    const endDist   = path.totalLen - trimEnd;
     return { path, startDist, runLen: Math.max(endDist - startDist, 0), atStart, atEnd };
   });
   const totalRun = runs.reduce((sum, run) => sum + run.runLen, 0);
@@ -661,6 +689,7 @@ function computeChainLinkTransforms(cfg, charmAnchors = [], shrinkAnchors = char
   const zAxis = new THREE.Vector3(0, 0, 1);
   const links = [];
   let seamIndex = null;
+  let seamRightIndex = null;
 
   // Links are spread across the halves by length, and their interlock parity
   // keeps running across the seam, so a split chain has the same density and
@@ -676,7 +705,10 @@ function computeChainLinkTransforms(cfg, charmAnchors = [], shrinkAnchors = char
     // side and one clasp end sat visibly higher than the other - and an odd
     // count also ended the two sides on different link kinds.
     const rawCount = Math.max(1, Math.round(linkBudget * share));
-    const count = runs.length === 1 ? Math.max(4, Math.round(rawCount / 4) * 4) : rawCount;
+    let count = runs.length === 1 ? Math.max(4, Math.round(rawCount / 4) * 4) : rawCount;
+    // Trimmed at both ends: both end links must be the edge-on kind, which
+    // takes an even number of steps.
+    if (run.atStart && run.atEnd) count = Math.max(2, Math.round(rawCount / 2) * 2);
     for (let i = 0; i <= count; i += 1) {
       const { point, tangent } = run.path.sampleAt(run.startDist + (i / count) * run.runLen);
       const T = new THREE.Vector3(tangent[0], tangent[1], 0).normalize();
@@ -685,7 +717,7 @@ function computeChainLinkTransforms(cfg, charmAnchors = [], shrinkAnchors = char
       // even index = flat/front-facing "full circle" link. Counted FROM the
       // washer where there is one, so the link that meets it is always the
       // edge-on kind - the only one that can thread an upright ring.
-      const fromWasher = run.atEnd ? count - i : (run.atStart ? i : null);
+      const fromWasher = run.atStart ? i : (run.atEnd ? count - i : null);
       const isFrontFacing = fromWasher != null
         ? fromWasher % 2 === 1
         : links.length % 2 === 0;
@@ -696,13 +728,14 @@ function computeChainLinkTransforms(cfg, charmAnchors = [], shrinkAnchors = char
       links.push({ position: point, quaternion: quat, tangent: T, isFrontFacing, scale: getLinkScale(point) });
     }
     if (pathIndex === 0 && runs.length > 1) seamIndex = links.length - 1;
+    if (pathIndex === runs.length - 2 && runs.length > 1) seamRightIndex = links.length;
   });
 
   const totalLinks = links.length - 1;
   // Where the pendant sits, as 0..1 params — this is the stretch of chain that
   // is not there, which is what charm placement lays itself out around.
   const seam = seamIndex != null
-    ? { tLeft: seamIndex / totalLinks, tRight: (seamIndex + 1) / totalLinks }
+    ? { tLeft: seamIndex / totalLinks, tRight: (seamRightIndex ?? seamIndex + 1) / totalLinks }
     : null;
 
   return { links, totalLinks, totalLen, seam };
@@ -765,6 +798,17 @@ function getChainPointAtX(cfg, x) {
   const span = b[0] - a[0];
   const localT = Math.abs(span) > 1e-6 ? Math.min(Math.max((x - a[0]) / span, 0), 1) : 0;
   return [x, a[1] + (b[1] - a[1]) * localT, a[2] + (b[2] - a[2]) * localT];
+}
+
+// World X of the chain at parameter t (0..1), interpolated between links - unlike
+// the link a hanging charm snaps to, this follows t exactly.
+function getChainXAtT(cfg, t) {
+  const { links, totalLinks } = buildChainLinkTransforms(cfg);
+  const f = Math.min(Math.max(t, 0), 1) * totalLinks;
+  const i = Math.min(Math.floor(f), links.length - 2);
+  const a = links[Math.max(i, 0)].position[0];
+  const b = links[Math.min(i + 1, links.length - 1)].position[0];
+  return a + (b - a) * (f - i);
 }
 
 // Chain drapes deeper as more charms hang from it — scales the *magnitude*
@@ -1367,6 +1411,7 @@ export {
   getSeamCharmSlots,
   getChainSeamX,
   getChainPointAtX,
+  getChainXAtT,
   useChainCharmDropOffset,
   chainDropOffsetAt,
   getChainFallStartTime,

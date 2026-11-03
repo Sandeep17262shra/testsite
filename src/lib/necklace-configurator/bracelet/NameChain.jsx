@@ -22,6 +22,7 @@
 // same world units the bracelet scene already uses (the GLB chains sit at
 // y ~ 0.6 with a radius of ~1.0, so these defaults line up with them).
 
+import { getGemGlbCharm } from "../shared/glbGemCharms";
 import React, { useEffect, useMemo, useRef, useState, useLayoutEffect, Suspense } from "react";
 import { useFrame, useLoader } from "@react-three/fiber";
 import { RGBELoader, GLTFLoader } from "three-stdlib";
@@ -33,6 +34,10 @@ import {
   GENERATED_NAME_CHAIN_SQUARE_PATH,
 } from "../shared/assets";
 import { RING_METAL, RING_METAL_ENV_URL, toRingMetalColor } from "../shared/metalMaterial";
+import AttachedStoneCharm from "../shared/AttachedStoneCharm";
+import {
+  ATTACHED_CHARM_SCALE, getAttachedCharm, getAttachedCharmDimensions,
+} from "../shared/attachedCharms";
 
 export const NAME_CHAIN_CONFIG = {
   // ── Ring ──────────────────────────────────────────────────────────────────
@@ -220,12 +225,13 @@ const NAME_CHAIN_LINK_STYLES = {
 // apart - different models, different bezels.
 export function getNameChainCharmCategory(charm) {
   if (!charm) return "glb";
-  if (charm.type === "initial") return "initial";
+  if (charm.type === "initial" || charm.type === "hanging") return "initial";
   if (charm.type === "birthstone") return "birthstone";
   if (charm.type === "diamond") {
     return /princess/i.test(charm.path || "") ? "princessDiamond" : "diamond";
   }
   if (charm.type === "cushion") return "gemstone";
+  if (getGemGlbCharm(charm.path)) return "initial";
   return /\.(png|jpe?g|webp|gif|svg)$/i.test(charm.path || "") ? "image" : "glb";
 }
 
@@ -388,14 +394,17 @@ function ringPoint(angle, cfg = NAME_CHAIN_CONFIG) {
 // NAME PRESENT (gapHalfAngle > 0):
 //   Charms are spread evenly along the BACK arc (chain arc, not the name gap).
 //   They never collide with the name plate and re-space when the name changes.
-export function getNameChainCharmPlacement(index, total, gapHalfAngle = 0, cfg = NAME_CHAIN_CONFIG, category = "glb") {
+export function getNameChainCharmPlacement(index, total, gapHalfAngle = 0, cfg = NAME_CHAIN_CONFIG, category = "glb", angleOverride = null) {
   let angle;
 
   // Charm 1 is the LEFT-hand charm and the row reads left to right, the same
   // way it does on a necklace and on the GLB bracelets (getOrbitCharmTransform).
   // This used to run the other way, so the identical set of charms came out
   // mirrored the moment you switched a necklace over to a name chain.
-  if (gapHalfAngle === 0) {
+  if (angleOverride != null) {
+    // The caller has laid the charms out itself (see getNameChainCharmAngles).
+    angle = angleOverride;
+  } else if (gapHalfAngle === 0) {
     // No name: fan charms symmetrically around the FRONT
     const MAX_HALF_SPREAD = (2 * Math.PI) / 3; // 120° each side = 240° total
     const halfSpread = total > 1 ? Math.min((total - 1) * 0.42, MAX_HALF_SPREAD) : 0;
@@ -456,6 +465,7 @@ export function getNameChainCharmPlacement(index, total, gapHalfAngle = 0, cfg =
   const rotationAngle = angle;
 
   return {
+    angle,
     position: [x, cfg.centerY + placement.yOffset, z],
     // Same convention as getOrbitCharmTransform: the Y-flip baked into this
     // Euler triple reverses the Z rotation, so the angle has to be mirrored
@@ -466,6 +476,96 @@ export function getNameChainCharmPlacement(index, total, gapHalfAngle = 0, cfg =
     // How far OUTWARD from the chain line this charm's origin sits - lets the
     // bracelet tilt a hanging charm about the chain it hangs from.
     radiusOffset: placement.radiusOffset,
+  };
+}
+
+// ─── Stone charms IN the chain ──────────────────────────────────────────────
+// A stone charm (Oval / Round / Square) is an ordinary charm in the list, but
+// it does not hang off the chain: it sits IN it, like the name plate. The
+// chain is cut at its angle and runs out of its two link rings. Several can be
+// placed, so the chain is a loop broken at every one of them (and at the lock).
+const meanRadius = (cfg) => (cfg.radiusX + cfg.radiusZ) / 2;
+const TWO_PI = Math.PI * 2;
+const mod2pi = (a) => ((a % TWO_PI) + TWO_PI) % TWO_PI;
+
+// Angular width a hanging (ordinary) charm needs, and the clear chain kept
+// between neighbours so each stone charm has links to hook into.
+const HANGING_CHARM_WIDTH = 0.22;
+const CHARM_SPACING = 0.2;
+const MIN_SIDE_SPACING = 0.12;
+
+const pieceCache = new WeakMap();
+// Everything the chain needs to know about one stone charm: its ring-to-ring
+// half span as an angle round the loop, and a cfg whose "washer" is its ring.
+export function getAttachedPiece(charm, cfg = NAME_CHAIN_CONFIG) {
+  const def = getAttachedCharm(charm?.attachedId);
+  if (!def) return null;
+  let byId = pieceCache.get(cfg);
+  if (!byId) { byId = new Map(); pieceCache.set(cfg, byId); }
+  if (byId.has(def.id)) return byId.get(def.id);
+  const dims = getAttachedCharmDimensions(def, ATTACHED_CHARM_SCALE.bracelet);
+  const R = meanRadius(cfg);
+  const piece = {
+    def,
+    scale: ATTACHED_CHARM_SCALE.bracelet,
+    // angle from the charm's centre to each ring's centre
+    alpha: Math.asin(Math.min(dims.halfSpan / R, 0.95)),
+    // angle from the centre to the outer edge of each ring
+    extent: Math.asin(Math.min((dims.halfSpan + dims.washer.outer) / R, 0.99)),
+    cfg: {
+      ...cfg,
+      washerOuter: dims.washer.outer,
+      washerInner: dims.washer.inner,
+      washerDepth: dims.washer.depth,
+      washerOverlap: dims.washer.outer,
+    },
+  };
+  byId.set(def.id, piece);
+  return piece;
+}
+
+// Where each placed charm sits round the loop. A stone charm takes exactly the
+// slot an ordinary charm would, so swapping one charm for a stone charm never
+// moves the others. `fits` is false when a stone charm would overlap its
+// neighbour (or the name plate / lock) in that slot.
+export function getNameChainCharmAngles(charms, gapHalfAngle = 0, cfg = NAME_CHAIN_CONFIG) {
+  const total = charms.length;
+  const angles = charms.map((charm, i) => (
+    getNameChainCharmPlacement(i, total, gapHalfAngle, cfg, getNameChainCharmCategory(charm)).angle
+  ));
+  const widths = charms.map((charm) => {
+    const piece = charm?.type === "attached" ? getAttachedPiece(charm, cfg) : null;
+    return piece ? 2 * piece.extent : HANGING_CHARM_WIDTH;
+  });
+  let fits = true;
+  const order = angles.map((_, i) => i).sort((p, q) => angles[p] - angles[q]);
+  for (let k = 1; k < order.length; k += 1) {
+    const p = order[k - 1];
+    const q = order[k];
+    if (charms[p]?.type !== "attached" && charms[q]?.type !== "attached") continue;
+    if (angles[q] - angles[p] < (widths[p] + widths[q]) / 2 + 0.02) fits = false;
+  }
+  if (gapHalfAngle > GAP_EPSILON) {
+    // Keep clear of the name plate at the front.
+    charms.forEach((charm, i) => {
+      if (charm?.type !== "attached") return;
+      const d = Math.abs(((angles[i] - FRONT_ANGLE) % TWO_PI + TWO_PI) % TWO_PI);
+      const fromFront = Math.min(d, TWO_PI - d);
+      if (fromFront < gapHalfAngle + widths[i] / 2) fits = false;
+    });
+  }
+  return { angles, fits };
+}
+
+// How far out from the loop's centre a stone charm's origin sits, and where
+// that puts it, so both its rings land on the chain.
+export function getAttachedPiecePose(piece, angle) {
+  const R = meanRadius(piece.cfg);
+  const dist = R * Math.cos(piece.alpha) + getPlateDepthOffset(piece.alpha, piece.cfg);
+  return {
+    position: [dist * Math.cos(angle), piece.cfg.centerY, dist * Math.sin(angle)],
+    // +Z (the stone's face) must point outward along `angle`.
+    rotationY: Math.PI / 2 - angle,
   };
 }
 
@@ -626,7 +726,8 @@ export function getPlateDepthOffset(gapHalfAngle, cfg = NAME_CHAIN_CONFIG) {
   return Math.max(Math.min(depthOffset, limit), -limit);
 }
 
-function buildLinkMatrices(gapHalfAngle, cfg = NAME_CHAIN_CONFIG) {
+function buildLinkMatrices(gapHalfAngle, cfg = NAME_CHAIN_CONFIG, pieces = []) {
+  if (pieces.length) return buildMultiPieceLinkMatrices(gapHalfAngle, cfg, pieces);
   const { hook, sampler } = solveChainAnchor(gapHalfAngle, cfg);
   const { totalLen, angleAtDistance } = sampler;
   const spacing = Math.max(cfg.linkLength * cfg.linkOverlap, 0.01);
@@ -676,6 +777,56 @@ function buildLinkMatrices(gapHalfAngle, cfg = NAME_CHAIN_CONFIG) {
   });
 }
 
+// The chain when stone charms sit in it. The loop is walked once by arc length;
+// the name (if any), every stone charm and the lock each take a stretch of it,
+// and a run of links fills the space between each consecutive pair - starting
+// a `hook` past one piece's ring and stopping a `hook` short of the next.
+function buildMultiPieceLinkMatrices(gapHalfAngle, cfg, pieces) {
+  const R = meanRadius(cfg);
+  const sampler = createArcSampler(0, cfg);
+  const { totalLen, angleAtDistance } = sampler;
+  const spacing = Math.max(cfg.linkLength * cfg.linkOverlap, 0.01);
+  const distOf = (angle) => R * mod2pi(FRONT_ANGLE - angle);
+
+  const entries = [];
+  if (gapHalfAngle > GAP_EPSILON) {
+    entries.push({ at: 0, half: R * gapHalfAngle, hook: solveChainAnchor(gapHalfAngle, cfg).hook });
+  }
+  pieces.forEach(({ piece, angle }) => {
+    entries.push({
+      at: distOf(angle),
+      half: R * piece.alpha,
+      hook: solveChainAnchor(piece.alpha, piece.cfg).hook,
+    });
+  });
+  const lockLayout = getLockLayout(cfg);
+  if (lockLayout) entries.push({ at: totalLen / 2, half: 0, hook: lockLayout.endLinkOffset });
+  entries.sort((a, b) => a.at - b.at);
+
+  const links = [];
+  const addRun = (from, to) => {
+    const span = to - from;
+    if (span < spacing * 0.5) return;
+    let steps = Math.max(2, Math.round(span / spacing));
+    if (steps % 2 !== 0) steps += 1;   // both end links flat, so both thread
+    const step = span / steps;
+    for (let k = 0; k <= steps; k += 1) links.push({ d: from + k * step, flat: k % 2 === 0 });
+  };
+  entries.forEach((a, i) => {
+    const wrap = i === entries.length - 1;
+    const b = entries[(i + 1) % entries.length];
+    addRun(a.at + a.half + a.hook, b.at - b.half - b.hook + (wrap ? totalLen : 0));
+  });
+
+  return links.map(({ d, flat }) => {
+    const wrapped = ((d % totalLen) + totalLen) % totalLen;
+    const { position, axisX, axisY, axisZ } = getLinkFrame(angleAtDistance(wrapped), flat, cfg);
+    const matrix = new THREE.Matrix4().makeBasis(axisX, axisY, axisZ);
+    matrix.setPosition(position);
+    return matrix;
+  });
+}
+
 // ─── Metal material shared by links, plate and washers ──────────────────────
 // `minRoughness` matters: the name plate is a large FLAT face pointing straight
 // at the camera, and a mirror-smooth metal (roughness 0) has no diffuse term at
@@ -709,7 +860,7 @@ const FLAT_FACE_MIN_ROUGHNESS = 0;
 const FLAT_FACE_ENV_INTENSITY = 1;
 
 // ─── Chain links ────────────────────────────────────────────────────────────
-const ChainLinks = ({ gapHalfAngle, materialProps, cfg = NAME_CHAIN_CONFIG }) => {
+const ChainLinks = ({ gapHalfAngle, materialProps, cfg = NAME_CHAIN_CONFIG, pieces = [] }) => {
   const meshRef = useRef();
   const metal = useMetalMaterialProps(materialProps);
 
@@ -719,7 +870,9 @@ const ChainLinks = ({ gapHalfAngle, materialProps, cfg = NAME_CHAIN_CONFIG }) =>
   ]);
   useEffect(() => () => geometry.dispose(), [geometry]);
 
-  const matrices = useMemo(() => buildLinkMatrices(gapHalfAngle, cfg), [gapHalfAngle, cfg]);
+  const piecesKey = pieces.map(({ piece, angle }) => `${piece.def.id}@${angle.toFixed(4)}`).join("|");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const matrices = useMemo(() => buildLinkMatrices(gapHalfAngle, cfg, pieces), [gapHalfAngle, cfg, piecesKey]);
 
   useLayoutEffect(() => {
     const mesh = meshRef.current;
@@ -924,10 +1077,14 @@ const TextBoundsProbe = ({ targetRef, onMeasured, deps, band, measurementKey }) 
 };
 
 // ─── The whole generated bracelet ───────────────────────────────────────────
-const NameChainBracelet = ({ namePendant, materialProps, pendantMaterialProps, onGeometryChange, braceletPath, cfg: cfgOverride }) => {
+const NameChainBracelet = ({ namePendant, inlineCharms = [], materialProps, pendantMaterialProps, onGeometryChange, braceletPath, cfg: cfgOverride }) => {
   // Link geometry comes from the selected style; everything else (ring size,
   // plate, washers) is shared.
   const cfg = cfgOverride ?? getNameChainConfig(braceletPath);
+  // Stone charms sitting in the chain: [{ piece, angle, charm }].
+  const pieces = inlineCharms
+    .map(({ charm, angle }) => ({ piece: getAttachedPiece(charm, cfg), angle, charm }))
+    .filter(({ piece }) => piece);
   const cleanText = sanitizePendantText(namePendant?.text || "");
   const hasName = Boolean(namePendant?.enabled) && cleanText.length > 0;
 
@@ -987,10 +1144,23 @@ const NameChainBracelet = ({ namePendant, materialProps, pendantMaterialProps, o
       {/* Chain + lock share one Suspense: the chain only shows once the lock
           GLB is loaded, so the chain never appears without its lock. */}
       <Suspense fallback={null}>
-        <ChainLinks gapHalfAngle={gapHalfAngle} materialProps={materialProps} cfg={cfg} />
+        <ChainLinks gapHalfAngle={gapHalfAngle} materialProps={materialProps} cfg={cfg} pieces={pieces} />
         {cfg.lock?.enabled && (
           <BraceletLock materialProps={materialProps} cfg={cfg} />
         )}
+        {pieces.map(({ piece, angle, charm }, i) => {
+          const pose = getAttachedPiecePose(piece, angle);
+          return (
+            <group key={charm.id ?? i} position={pose.position} rotation={[0, pose.rotationY, 0]}>
+              <AttachedStoneCharm
+                charm={piece.def}
+                scale={piece.scale}
+                metalColor={charm.bodyColor}
+                stoneColor={charm.gemstoneColor}
+              />
+            </group>
+          );
+        })}
       </Suspense>
 
       {hasName && (

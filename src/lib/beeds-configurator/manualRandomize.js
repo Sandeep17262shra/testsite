@@ -21,7 +21,7 @@ export const MANUAL_RANDOMIZE_POP_MS = 320;
 const SHUFFLED_ASSET_TYPES = ["bead", "spacer"];
 
 export function countManualBeads(manualItems) {
-  return manualItems.filter((item) => item.type === "bead").length;
+  return manualItems.filter((item) => item.type === "bead" || item.type === "spacer").length;
 }
 
 function getVariantsOfType(manualItems, type) {

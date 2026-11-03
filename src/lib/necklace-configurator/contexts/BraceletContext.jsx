@@ -3,11 +3,13 @@ import { Base64 } from "js-base64";
 import {
   BRACELETS, BRACELET_STYLES, DEFAULT_PENDANT_CHARM, DEFAULT_CHAIN_LENGTH,
   DEFAULT_BRACELET_CHAIN_PATH, DEFAULT_NAME_PENDANT, BRACELET_NAME_CHAIN_PATHS,
-  MAX_CHARMS_BY_NECKLACE,
+  MAX_CHARMS_BY_NECKLACE, NAME_PENDANT_SUPPORTED_PATHS,
   STONE_COLOR_SWATCHES, CHARMS,
   getMappedMetal, isCommonCharm,
 } from "../shared/assets";
 // TEMP: parent page -> category (pendant/bracelet customizer pages)
+import { CHAIN_DRAPE_CONFIG } from "../necklace/DrapeChain";
+import { getGemGlbCharm, DEFAULT_GEM_GLB_STONE_COLOR } from "../shared/glbGemCharms";
 import { getTempCategoryForParentUrl, getTempInitialParentCategory } from "../shared/tempParentCategory";
 import { JEWELRY_TYPE_SWITCH_MESSAGE } from "@/lib/jewelry-shell/jewelryCategoryBus";
 
@@ -160,10 +162,8 @@ export const BraceletProvider = ({ children, initialType }) => {
     config?.chainLength != null ? String(config.chainLength) : DEFAULT_CHAIN_LENGTH
   );
   const [namePendant, setNamePendant] = useState(
-    // Bracelet also opens as a plain chain (no "Name" plate) — same as reset.
-    config?.namePendant ?? (initialJewelryType === "bracelet"
-      ? { ...DEFAULT_NAME_PENDANT, text: "", enabled: false }
-      : { text: "", fontStyle: "dancing", enabled: false })
+    // Name pendant / name bracelet disabled for this client
+    { ...DEFAULT_NAME_PENDANT, text: "", enabled: false }
   );
 
   // Shared UI states between necklace and bracelet
@@ -279,12 +279,12 @@ export const BraceletProvider = ({ children, initialType }) => {
       setCurrentPurityPrice(100);
     }
 
-    // 2. Sync Name Pendant / Name Bracelet:
-    const hasNameText = Boolean(namePendant?.text && namePendant.text.trim().length > 0);
+    // 2. Sync Name Pendant / Name Bracelet (disabled for this client):
+    const hasNameText = false;
     const syncedNamePendant = {
-      text: namePendant?.text || "",
-      fontStyle: namePendant?.fontStyle || "dancing",
-      enabled: hasNameText,
+      text: "",
+      fontStyle: "dancing",
+      enabled: false,
     };
     setNamePendant(syncedNamePendant);
 
@@ -306,7 +306,7 @@ export const BraceletProvider = ({ children, initialType }) => {
       setSelectedBraceletState(targetIndex);
       setBraceletPathState(targetPath);
       // Ensure active category is valid for necklace
-      if (activeCharmCategory !== "birthstones" && activeCharmCategory !== "diamonds" && activeCharmCategory !== "initial") {
+      if (activeCharmCategory !== "birthstones" && activeCharmCategory !== "diamonds" && activeCharmCategory !== "initial" && activeCharmCategory !== "attached") {
         setActiveCharmCategory("birthstones");
       }
     }
@@ -327,9 +327,30 @@ export const BraceletProvider = ({ children, initialType }) => {
     // the fallback, for a charm that never had one of its own.
     const mapCharmHex = (hex) => (hex ? getMappedMetal(hex, type).hex : targetCharmHex);
 
-    const validCharms = (charms || []).filter(isCommonCharm);
+    // Chain stones sit IN the chain, which only some chains can do (and on a
+    // necklace not next to a name): they stay behind where the target can't hold them.
+    const targetHoldsChainStones = isTargetBracelet
+      ? BRACELET_NAME_CHAIN_PATHS.includes(targetChainPath)
+      : Boolean(CHAIN_DRAPE_CONFIG[targetChainPath]) && NAME_PENDANT_SUPPORTED_PATHS.includes(targetChainPath) && !hasNameText;
+    const validCharms = (charms || [])
+      .filter(isCommonCharm)
+      .filter((charm) => charm.type !== "attached" || targetHoldsChainStones);
     const updatedCharms = validCharms.map((charm) => {
       const mapped = { ...charm };
+      // The four 3D gem charms are a typed "gemglb" charm on the necklace and a
+      // plain path-only charm on the bracelet.
+      const gemDef = (charm.type === "gemglb" || !charm.type) ? getGemGlbCharm(charm.path) : null;
+      if (gemDef) {
+        mapped.name = gemDef.name;
+        mapped.gemstoneColor = charm.gemstoneColor || DEFAULT_GEM_GLB_STONE_COLOR;
+        if (isTargetBracelet) {
+          delete mapped.type;
+          mapped.preview = gemDef.icon;
+        } else {
+          mapped.type = "gemglb";
+          delete mapped.preview;
+        }
+      }
       // Both fields are mapped wherever they exist: an initial charm carries
       // its metal as metalColor, a birthstone/diamond as bodyColor, and a
       // charm that has picked up both must not end up with them disagreeing.
@@ -339,7 +360,7 @@ export const BraceletProvider = ({ children, initialType }) => {
       if (charm.type === "initial") {
         if (!charm.metalColor) mapped.metalColor = targetCharmHex;
         mapped.fontStyle = charm.fontStyle || namePendant?.fontStyle || "dancing";
-      } else if (charm.type === "birthstone" || charm.type === "diamond") {
+      } else if (charm.type === "birthstone" || charm.type === "diamond" || charm.type === "attached" || charm.type === "hanging" || gemDef) {
         if (!charm.bodyColor) mapped.bodyColor = targetCharmHex;
       }
       return mapped;

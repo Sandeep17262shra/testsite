@@ -30,13 +30,14 @@ import { View360Context } from '../contexts/View360Context';
 import { Base64 } from 'js-base64';
 // NamePendantNecklace (GLB chain BRACELET13/14) removed - no longer used.
 import { /* NamePendantNecklace, */ DrapeNamePendant, ZERO_CHAIN_OFFSET } from './NamePendantChain';
+import DrapeStonePendant, { getSlotX } from './DrapeStonePendant';
 import {
   CHAIN_DRAPE_CONFIG, CHAIN_LENGTH_MULTIPLIERS, getSizedDrapeConfig, getDrapePoint,
   getChainCharmTransform, getSeamCharmSlots, getChainSeamX, ChainDrape, ChainSagAnimator,
   resetChainFallAnimation,
 } from './DrapeChain';
 import {
-  buildCharmKeys, NecklaceImageCharm, NecklaceInitialCharm, NecklaceGemstoneCharm,
+  buildCharmKeys, NecklaceImageCharm, NecklaceInitialCharm, NecklaceHangingCharm, NecklaceGlbCharm, NecklaceGemstoneCharm,
 } from './NecklaceCharms';
 
 // The ring configurator's metal reflection map (see shared/metalMaterial.js).
@@ -152,8 +153,17 @@ const {
   const supportsNamePendant = NAME_PENDANT_SUPPORTED_PATHS.includes(braceletPath);
   const namePendantActive =
     supportsNamePendant && Boolean(namePendant.enabled) && Boolean((namePendant.text || '').trim());
-  const resolvedChainLength = chainLength ?? DEFAULT_CHAIN_LENGTH;
+  // Stone charms sit IN the chain in the name's place (same washer-style
+  // anchors), so for everything about how the chain is built they count as a
+  // pendant too. Only drape chains can be cut open for them.
   const drapeCfgBase = CHAIN_DRAPE_CONFIG[braceletPath];
+  const stoneCharms = useMemo(
+    () => (drapeCfgBase && supportsNamePendant ? charms.filter((c) => c?.type === 'attached') : []),
+    [charms, drapeCfgBase, supportsNamePendant],
+  );
+  const stoneActive = stoneCharms.length > 0 && !namePendantActive;
+  const pendantActive = namePendantActive || stoneActive;
+  const resolvedChainLength = chainLength ?? DEFAULT_CHAIN_LENGTH;
   const drapeCfg = useMemo(
     () => getSizedDrapeConfig(drapeCfgBase, resolvedChainLength),
     [drapeCfgBase, resolvedChainLength],
@@ -173,8 +183,8 @@ const {
   const [pendantAnchors, setPendantAnchors] = useState(null);
   const handlePendantAnchorsChange = useCallback((anchors) => setPendantAnchors(anchors), []);
   useEffect(() => {
-    if (!drapeCfgBase || !namePendantActive) setPendantAnchors(null);
-  }, [drapeCfgBase, namePendantActive]);
+    if (!drapeCfgBase || !pendantActive) setPendantAnchors(null);
+  }, [drapeCfgBase, pendantActive]);
 
   useEffect(() => {
     resetChainFallAnimation();
@@ -185,7 +195,7 @@ const {
   // Cleared for a new chain, and whenever a name pendant appears or goes away:
   // the pendant path ignores the animated sag, so whatever value it was left
   // holding is stale, and falling back to it for a frame would show as a jump.
-  useEffect(() => { setAnimatedSag(null); }, [drapeCfg, namePendantActive]);
+  useEffect(() => { setAnimatedSag(null); }, [drapeCfg, pendantActive]);
   const animatedDrapeCfg = useMemo(() => {
     if (!drapeCfg || animatedSag == null) return drapeCfg;
     return { ...drapeCfg, sag: animatedSag };
@@ -385,8 +395,12 @@ const {
   // Slot each charm gets in the layout, or -1 while it is still loading.
   const charmLayoutSlots = useMemo(() => {
     let n = 0;
-    return charmKeys.map((key) => (readyCharmKeys.has(key) ? n++ : -1));
-  }, [charmKeys, readyCharmKeys]);
+    // Stone charms load inside DrapeStonePendant and never report in, so they
+    // always hold their slot.
+    return charmKeys.map((key, i) => (
+      readyCharmKeys.has(key) || placedCharms[i]?.type === 'attached' ? n++ : -1
+    ));
+  }, [charmKeys, readyCharmKeys, placedCharms]);
 
   const loadedCharms = useMemo(
     () => placedCharms.filter((_, i) => charmLayoutSlots[i] >= 0),
@@ -406,22 +420,46 @@ const {
     [drapeSidesKey],
   );
 
+  // Charms are laid out on the chain as it would drape WITHOUT the stone
+  // charms' rings: those take slots like any other charm, so the chain they
+  // cut open must not also open a gap the others have to avoid.
+  const layoutCfg = stoneActive ? animatedDrapeCfg : chainCfg;
+
   const chainCharmAnchors = useMemo(() => {
-    if (!chainCfg) return [];
-    return drapeCharms.map((_, i) => getChainCharmTransform(i, drapeCharms.length, chainCfg, drapeSeamSlots[i]).position);
-  }, [chainCfg, drapeCharms.length, drapeSeamSlots, braceletPath]);
+    if (!layoutCfg) return [];
+    return drapeCharms.map((_, i) => getChainCharmTransform(i, drapeCharms.length, layoutCfg, drapeSeamSlots[i]).position);
+  }, [layoutCfg, drapeCharms.length, drapeSeamSlots, braceletPath]);
+
+  // The chain bends through the hanging charms only: a stone charm is part of
+  // the chain, not something hung from it.
+  const chainDrawAnchors = useMemo(() => (
+    stoneActive
+      ? chainCharmAnchors.filter((_, i) => drapeCharms[i]?.type !== 'attached')
+      : chainCharmAnchors
+  ), [stoneActive, chainCharmAnchors, drapeCharms]);
+
+  const stoneItems = useMemo(() => {
+    if (!stoneActive || !layoutCfg) return [];
+    return drapeCharms
+      .map((charm, i) => ({ charm, i }))
+      .filter(({ charm }) => charm.type === 'attached')
+      .map(({ charm, i }) => ({
+        charm,
+        x: getSlotX(charm, i, drapeCharms.length, layoutCfg),
+      }));
+  }, [stoneActive, layoutCfg, drapeCharms]);
 
   // Same positions as above, just narrowed to the charms whose bodies the
   // links have to make room for — derived from that array rather than solved
   // a second time.
   const chainShrinkAnchors = useMemo(() => {
-    if (!chainCfg) return [];
+    if (!layoutCfg) return [];
     return drapeCharms
       .map((charm, i) => ({ charm, position: chainCharmAnchors[i] }))
       .filter(({ charm, position }) => position
         && (charm.type === 'birthstone' || charm.type === 'diamond'))
       .map(({ position }) => position);
-  }, [chainCfg, drapeCharms, chainCharmAnchors]);
+  }, [layoutCfg, drapeCharms, chainCharmAnchors]);
 
   // ─── Click the chain to place another charm ──────────────────────────────
   // Repeats whatever charm was last picked from the panel; before anything
@@ -583,7 +621,7 @@ const {
               // settle play in that gap meant a pendant chain waved once,
               // snapped into its pendant shape, and never dropped. With a name
               // the entrance is the per-link fall, from the first frame.
-              cfg={namePendantActive ? null : drapeCfg}
+              cfg={pendantActive ? null : drapeCfg}
               resetKey={`${braceletPath}|${resolvedChainLength}`}
               onSag={setAnimatedSag}
             />
@@ -602,11 +640,19 @@ const {
               />
             )}
 
+            {drapeCfg && stoneActive && (
+              <DrapeStonePendant
+                items={stoneItems}
+                drapeCfg={drapeCfg}
+                onAnchorsChange={handlePendantAnchorsChange}
+              />
+            )}
+
             <ChainDrape
               key={braceletPath}
               braceletPath={braceletPath}
               materialProps={materialPropsBracelet}
-              charmAnchors={chainCharmAnchors}
+              charmAnchors={chainDrawAnchors}
               shrinkAnchors={chainShrinkAnchors}
               cfg={chainCfg}
               dropKey={`${braceletPath}|${resolvedChainLength}`}
@@ -617,7 +663,7 @@ const {
               // be rebuilt. With a name on it the piece is simply drawn at
               // rest - no drop, and no sag settle either (see ChainSagAnimator
               // above). Without one, both play exactly as before.
-              animateFall={!namePendantActive}
+              animateFall={!pendantActive}
               onAddCharm={chainCharmLimitReached ? undefined : addCharmFromChain}
             />
 
@@ -637,15 +683,23 @@ const {
                 chainAnchors: chainCharmAnchors,
                 chainShrinkAnchors,
                 materialProps, namePendant, braceletPath, chainOffsetX,
-                drapeCfg: chainCfg,
+                drapeCfg: layoutCfg,
                 dropKey: `${braceletPath}|${resolvedChainLength}`,
                 // Charms ride the chain, so they enter with it - or, with a
                 // name pendant, not at all.
-                animateDrop: !namePendantActive,
+                animateDrop: !pendantActive,
                 charmKey: charmKeys[i],
                 onReady: markCharmReady,
                 onClick: (e) => { e.stopPropagation(); deleteCharm(i); },
               };
+              // Stone charms sit IN the chain and are drawn by DrapeStonePendant.
+              if (charm.type === 'attached') return null;
+              if (charm.type === 'gemglb') {
+                return <NecklaceGlbCharm key={charm.id ?? `gemglb-${i}`} {...shared} />;
+              }
+              if (charm.type === 'hanging') {
+                return <NecklaceHangingCharm key={charm.id ?? `hanging-${i}`} {...shared} />;
+              }
               return charm.type === 'initial' ? (
                 <NecklaceInitialCharm key={charm.id ?? `initial-${i}`} {...shared} />
               ) : (charm.type === 'birthstone' || charm.type === 'diamond') ? (

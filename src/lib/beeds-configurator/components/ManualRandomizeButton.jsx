@@ -1,6 +1,7 @@
 import React from "react";
 
 import { useBeedsContext } from "../contexts/BeedsContext";
+import { usePreviewFocus } from "../contexts/PreviewFocusContext";
 import { useStorefrontControls } from "@/lib/ring-configurator/contexts/StoreContext";
 
 export function ManualRandomizeButton({
@@ -14,23 +15,34 @@ export function ManualRandomizeButton({
     isManualRandomizing,
     manualRandomizeMinBeads,
   } = useBeedsContext();
+  const { clearPreviewFocus } = usePreviewFocus();
   const storefrontControls = useStorefrontControls();
 
   if (!storefrontControls.randomise || !showManualRandomizeButton) {
     return null;
   }
 
-  const busy = disabled || isManualRandomizing || !canRandomizeManualBracelet;
+  const isBusy = isManualRandomizing;
+  const isDisabled = disabled || isManualRandomizing || !canRandomizeManualBracelet;
 
   return (
     <button
       type="button"
-      className={`${className}${busy ? " is-busy" : ""}`}
-      onClick={() => randomizeManualBracelet()}
-      disabled={busy}
+      className={`${className}${isBusy ? " is-busy" : ""}`}
+      onClick={() => {
+        clearPreviewFocus();
+        randomizeManualBracelet();
+      }}
+      disabled={isDisabled}
       aria-busy={isManualRandomizing || undefined}
       aria-label={`Shuffle the beads, spacers and charms on the string (${manualRandomizeMinBeads}+ beads on empty string)`}
-      title={isManualRandomizing ? "Randomizing…" : "Shuffle your design"}
+      title={
+        isManualRandomizing
+          ? "Randomizing…"
+          : !canRandomizeManualBracelet
+            ? "Add different beads or spacers to shuffle"
+            : "Shuffle your design"
+      }
     >
       <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <g transform="translate(8 8)" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">

@@ -19,6 +19,9 @@ import {
   useCharmAddWobble, WasherBail,
 } from '../shared/necklaceShared';
 import { GEM_REFRACTION_PARAMS, useGemEnvTexture } from '../shared/gemMaterial';
+import HangingStoneCharm from '../shared/HangingStoneCharm';
+import { getGemGlbCharm, NECKLACE_GLB_CHARM_SCALE } from '../shared/glbGemCharms';
+import { getHangingCharm, getHangingCharmScale, getCharmNudge } from '../shared/attachedCharms';
 import {
   BRACELET_ELLIPSE_CONFIG, getEllipseCharmTransform, getEllipseSlotOffsets,
   getChainCharmTransform, useChainCharmDropOffset, buildChainLinkTransforms,
@@ -332,7 +335,7 @@ const getNecklaceCharmPlacement = ({ index, total, namePendant, braceletPath, ch
 // Birthstones category. Keep their orbit independently tuneable, while an
 // explicit `orbitType` on a future charm record always takes precedence.
 const getNecklaceCharmKind = (charm) => {
-  if (charm.type === 'initial') return 'initial';
+  if (charm.type === 'initial' || charm.type === 'hanging' || charm.type === 'gemglb') return 'initial';
   if (charm.type === 'birthstone' || charm.type === 'diamond') return 'gemstone';
   if (charm.orbitType) return charm.orbitType;
   const catalogueIndex = CHARMS.findIndex((item) => item.path === charm.path);
@@ -621,6 +624,273 @@ const NecklaceInitialCharm = ({ charm, index, total, seamSide = null, seamRank =
   );
 };
 
+// ─── Hanging stone charm ─────────────────────────────────────────────────────
+// Hangs exactly like an initial (NecklaceInitialCharm): the model's own top loop
+// stands where the initial's washer does, and the same bail ring goes through it
+// and hooks the chain link this charm sits on. The letter is just replaced by a
+// stone / pearl model.
+const NecklaceHangingCharm = ({ charm, index, total, seamSide = null, seamRank = null, chainAnchors = null, chainShrinkAnchors = null, materialProps, namePendant, braceletPath, chainOffsetX, drapeCfg, dropKey, animateDrop = true, charmKey, onReady, onClick }) => {
+  const def = getHangingCharm(charm.hangingId);
+  const nudge = getCharmNudge(charm.hangingId, 'necklace');
+  const charmStyle = NECKLACE_CHARM_STYLE_BY_BRACELET[braceletPath] ?? DEFAULT_NECKLACE_CHARM_STYLE;
+
+  const placement = useMemo(
+    () => getNecklaceCharmPlacement({
+      index, total, namePendant, braceletPath, chainOffsetX, charmKind: 'initial', drapeCfg, seamSide, seamRank,
+    }),
+    [index, total, namePendant, braceletPath, chainOffsetX, drapeCfg, seamSide, seamRank],
+  );
+
+  const wobbleRef = useCharmAddWobble(0, 1, charm.hangingId, true);
+  const dropOffsetY = useChainCharmDropOffset(placement.t, dropKey, Boolean(drapeCfg), animateDrop);
+  useReportCharmReady(Boolean(def), charmKey, onReady);
+
+  const material = ringMetalProps(charm.bodyColor || charm.metalColor || materialProps.color || '#ECC875', { side: THREE.DoubleSide });
+  const drop = charmStyle.initialDrop ?? charmStyle.charmDrop ?? 0.05;
+
+  // Same link lookup as NecklaceInitialCharm: the nearest front-facing link on
+  // the chain as rendered, so the bail rests inside that link's bottom wire.
+  const hookLink = useMemo(() => {
+    if (!drapeCfg || !placement.linkPosition) return null;
+    const fallback = {
+      position: placement.linkPosition, reach: placement.linkBottomReach, tube: placement.linkTube,
+    };
+    if (!chainAnchors?.length) return fallback;
+    const { links } = buildChainLinkTransforms(drapeCfg, chainAnchors, chainShrinkAnchors ?? chainAnchors);
+    const [px, py] = placement.position;
+    let best = null;
+    let bestD = Infinity;
+    links.forEach((link) => {
+      if (!link.isFrontFacing) return;
+      const d = Math.hypot(link.position[0] - px, link.position[1] - py);
+      if (d < bestD) { bestD = d; best = link; }
+    });
+    if (!best) return fallback;
+    const k = best.scale ?? 1;
+    const isOval = drapeCfg.linkShape === 'oval';
+    const reach = isOval
+      ? (Math.max((drapeCfg.linkLength ?? 0.34) - (drapeCfg.linkWidth ?? 0.15), 0) / 2 * Math.abs(best.tangent?.y ?? 0)
+        + (drapeCfg.linkWidth ?? 0.15) / 2) * k
+      : (drapeCfg.linkOuterRadius ?? 0.12) * k;
+    return { position: best.position, reach, tube: placement.linkTube * k };
+  }, [drapeCfg, chainAnchors, chainShrinkAnchors, placement]);
+
+  let hookX = 0;
+  let bailTopY = NECKLACE_INITIAL_HW.bailTopY;
+  if (hookLink) {
+    const originY = placement.position[1] - drop;
+    const linkLocalY = hookLink.position[1] - originY;
+    hookX = hookLink.position[0] - placement.position[0];
+    bailTopY = linkLocalY - hookLink.reach + hookLink.tube + NECKLACE_INITIAL_HW.bailTube;
+  }
+  const hw = getNecklaceInitialLayout(bailTopY);
+
+  if (!def) return null;
+  return (
+    <group
+      ref={wobbleRef}
+      position={[
+        placement.position[0],
+        placement.position[1] - drop + dropOffsetY,
+        placement.position[2],
+      ]}
+      rotation={[placement.rotation[0], placement.rotation[1], 0]}
+      onClick={onClick}
+    >
+      <group position={[hookX + nudge[0], hw.bailTopY + nudge[1], nudge[2]]} rotation={[0, 0, placement.rotation[2] * 0.15]}>
+        <group position={[0, -hw.bailTopY, 0]}>
+          {/* The loop centre is the group's origin, where the initial's washer sits. */}
+          <group position={[0, hw.washerY, 0]}>
+            <HangingStoneCharm
+              charm={def}
+              scale={getHangingCharmScale(def.id, 'necklace')}
+              metalColor={charm.bodyColor}
+              stoneColor={charm.gemstoneColor}
+              materialProps={material}
+              bailRadius={NECKLACE_INITIAL_HW.bailR}
+              bailTube={NECKLACE_INITIAL_HW.bailTube}
+              bailY={hw.bailY - hw.washerY}
+            />
+          </group>
+        </group>
+      </group>
+    </group>
+  );
+};
+
+// ─── 3D gem charm (Princess / Pear Petal / Elephant / Camel) ────────────────
+// The same four charms as the bracelet, built the same way (shared/glbGemCharms.js)
+// at NECKLACE_GLB_CHARM_SCALE times the size. Hangs like an initial: its own bail
+// ring goes up onto the chain link this charm sits on.
+const GEM_GLB_NAME_RE = /all-diamonds|material_1|gltf_2|gem|stone|diamond/i;
+
+const NecklaceGlbCharm = ({ charm, index, total, seamSide = null, seamRank = null, chainAnchors = null, chainShrinkAnchors = null, materialProps, namePendant, braceletPath, chainOffsetX, drapeCfg, dropKey, animateDrop = true, charmKey, onReady, onClick }) => {
+  const def = getGemGlbCharm(charm.path);
+  const [model, setModel] = useState(null);
+  const [anchor, setAnchor] = useState(null);
+  const [gemGeometry, setGemGeometry] = useState(null);
+  const envTexture = useGemEnvTexture();
+  const charmStyle = NECKLACE_CHARM_STYLE_BY_BRACELET[braceletPath] ?? DEFAULT_NECKLACE_CHARM_STYLE;
+
+  const placement = useMemo(
+    () => getNecklaceCharmPlacement({
+      index, total, namePendant, braceletPath, chainOffsetX, charmKind: 'initial', drapeCfg, seamSide, seamRank,
+    }),
+    [index, total, namePendant, braceletPath, chainOffsetX, drapeCfg, seamSide, seamRank],
+  );
+  const wobbleRef = useCharmAddWobble(0, 1, `${charm.path}-${charm.gemstoneColor}`, Boolean(model));
+  const dropOffsetY = useChainCharmDropOffset(placement.t, dropKey, Boolean(drapeCfg), animateDrop);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadGLBCached(charm.path).then((obj) => {
+      if (cancelled) return;
+      obj.updateMatrixWorld(true);
+      // The primitive's own transform is overwritten, so the stone is baked
+      // into root-local space (same as the bracelet's GLBCharmModel).
+      const rootInverse = new THREE.Matrix4().copy(obj.matrixWorld).invert();
+      let foundGem = null;
+      const gemMeshes = [];
+      obj.traverse((child) => {
+        if (!child.isMesh) return;
+        child.castShadow = true;
+        if (charm.gemstoneColor && GEM_GLB_NAME_RE.test(`${child.name} ${child.material?.name || ''}`)) {
+          const geo = child.geometry.clone().toNonIndexed();
+          geo.applyMatrix4(new THREE.Matrix4().multiplyMatrices(rootInverse, child.matrixWorld));
+          geo.computeVertexNormals();
+          foundGem = geo;
+          gemMeshes.push(child);
+          return;
+        }
+        child.material = createRingMetalMaterial(charm.bodyColor || '#C0C0C0', { side: THREE.DoubleSide });
+      });
+      // Measure while the stone is still visible, then hide it.
+      const box = new THREE.Box3().setFromObject(obj);
+      const c = box.getCenter(new THREE.Vector3());
+      setAnchor({ x: c.x, y: box.max.y, z: c.z });
+      gemMeshes.forEach((m) => { m.visible = false; });
+      setGemGeometry(foundGem);
+      setModel(obj);
+    }).catch((err) => console.error(`Failed to load ${charm.path}`, err));
+    return () => { cancelled = true; };
+  }, [charm.path, charm.bodyColor, charm.gemstoneColor]);
+
+  const ready = Boolean(model) && Boolean(anchor) && Boolean(def) && (Boolean(envTexture) || !gemGeometry);
+  useReportCharmReady(ready, charmKey, onReady);
+
+  const material = ringMetalProps(charm.bodyColor || '#C0C0C0', { side: THREE.DoubleSide });
+  const drop = charmStyle.initialDrop ?? charmStyle.charmDrop ?? 0.05;
+
+  // Same link lookup as NecklaceInitialCharm.
+  const hookLink = useMemo(() => {
+    if (!drapeCfg || !placement.linkPosition) return null;
+    const fallback = {
+      position: placement.linkPosition, reach: placement.linkBottomReach, tube: placement.linkTube,
+    };
+    if (!chainAnchors?.length) return fallback;
+    const { links } = buildChainLinkTransforms(drapeCfg, chainAnchors, chainShrinkAnchors ?? chainAnchors);
+    const [px, py] = placement.position;
+    let best = null;
+    let bestD = Infinity;
+    links.forEach((link) => {
+      if (!link.isFrontFacing) return;
+      const d = Math.hypot(link.position[0] - px, link.position[1] - py);
+      if (d < bestD) { bestD = d; best = link; }
+    });
+    if (!best) return fallback;
+    const k = best.scale ?? 1;
+    const isOval = drapeCfg.linkShape === 'oval';
+    const reach = isOval
+      ? (Math.max((drapeCfg.linkLength ?? 0.34) - (drapeCfg.linkWidth ?? 0.15), 0) / 2 * Math.abs(best.tangent?.y ?? 0)
+        + (drapeCfg.linkWidth ?? 0.15) / 2) * k
+      : (drapeCfg.linkOuterRadius ?? 0.12) * k;
+    return { position: best.position, reach, tube: placement.linkTube * k };
+  }, [drapeCfg, chainAnchors, chainShrinkAnchors, placement]);
+
+  if (!ready) return null;
+
+  const K = NECKLACE_GLB_CHARM_SCALE;
+  const gemNudge = getCharmNudge(def.id, 'necklace');
+  const scale = def.scale.map((v) => v * K);
+  const bailR = def.bail.ringR * K;
+  const bailTube = def.bail.ringTube * K;
+  // The bail ring, in the charm's own frame (the bracelet's CharmBail layout).
+  const bailCentreY = def.bail.offset[1] * K + bailR * 0.3;
+  const bailTopLocal = bailCentreY + bailR + bailTube;
+
+  let hookX = 0;
+  let bailTopY = NECKLACE_INITIAL_HW.bailTopY;
+  if (hookLink) {
+    const originY = placement.position[1] - drop;
+    const linkLocalY = hookLink.position[1] - originY;
+    hookX = hookLink.position[0] - placement.position[0];
+    // Bail's top wire resting on the inside of the link's bottom wire.
+    bailTopY = linkLocalY - hookLink.reach + hookLink.tube + bailTube;
+  }
+  // Group origin such that the bail's top sits at bailTopY.
+  const y0 = bailTopY - bailTopLocal;
+
+  const innerPosition = new THREE.Vector3(anchor.x * scale[0], anchor.y * scale[1], anchor.z * scale[2])
+    .applyEuler(new THREE.Euler(...def.rotation))
+    .multiplyScalar(-1)
+    .toArray();
+  // The bail ring itself is what hooks the link, so it sits exactly on it.
+  const modelPosition = [-def.bail.offset[0] * K, y0, -def.bail.offset[2] * K];
+
+  return (
+    <group
+      ref={wobbleRef}
+      position={[
+        placement.position[0],
+        placement.position[1] - drop + dropOffsetY,
+        placement.position[2],
+      ]}
+      rotation={[placement.rotation[0], placement.rotation[1], 0]}
+      onClick={onClick}
+    >
+      <group position={[hookX + gemNudge[0], bailTopY + gemNudge[1], gemNudge[2]]} rotation={[0, 0, placement.rotation[2] * 0.15]}>
+        <group position={[0, -bailTopY, 0]}>
+          <group position={modelPosition}>
+            <primitive object={model} position={innerPosition} rotation={def.rotation} scale={scale} />
+            {gemGeometry && (
+              <mesh
+                key={`gem_${charm.path}_${charm.gemstoneColor}`}
+                geometry={gemGeometry}
+                position={innerPosition}
+                rotation={def.rotation}
+                scale={scale}
+                castShadow
+              >
+                {envTexture ? (
+                  <MeshRefractionMaterial
+                    envMap={envTexture}
+                    color={new THREE.Color(charm.gemstoneColor)}
+                    ior={GEM_REFRACTION_PARAMS.ior}
+                    bounces={GEM_REFRACTION_PARAMS.bounces}
+                    aberrationStrength={GEM_REFRACTION_PARAMS.aberrationStrength}
+                    fresnel={GEM_REFRACTION_PARAMS.fresnel}
+                    toneMapped={false}
+                    transparent
+                    fastChroma
+                  />
+                ) : null}
+              </mesh>
+            )}
+          <mesh
+            position={[def.bail.offset[0] * K, bailCentreY, def.bail.offset[2] * K]}
+            rotation={[0, Math.PI / 2, 0]}
+            castShadow
+          >
+            <torusGeometry args={[bailR, bailTube, 16, 48]} />
+            <meshPhysicalMaterial {...material} />
+          </mesh>
+          </group>
+        </group>
+      </group>
+    </group>
+  );
+};
+
 const glbCharmAnchorOffsetCache = new Map();
 function getGlbCharmAnchorOffset(path, obj) {
   if (glbCharmAnchorOffsetCache.has(path)) return glbCharmAnchorOffsetCache.get(path);
@@ -867,5 +1137,7 @@ export {
   buildCharmKeys,
   NecklaceImageCharm,
   NecklaceInitialCharm,
+  NecklaceHangingCharm,
+  NecklaceGlbCharm,
   NecklaceGemstoneCharm,
 };

@@ -47,6 +47,18 @@ import { View360Context } from "../contexts/View360Context";
 import { unlockBeadsAudio } from "../beadsSounds";
 import { buildBeadPreviewLabel, buildPatternCustomizeSummaryLines } from "../pricing";
 import { ShareContext } from "../contexts/ShareContext";
+import {
+  getBeadedCatalogAssets,
+  getBeadedCatalogGridItems,
+  getBeadedCatalogLengthLabel,
+  getBeadedCatalogStyleLabel,
+  getBeadedCatalogThreadColorLabel,
+  getBeadedVisibleLengths,
+  getBeadedVisibleSizeFilters,
+  getBeadedVisibleStyles,
+  getBeadedVisibleThreadColors,
+  useBeadedPriceConfigVersion,
+} from "../beadedPriceConfig";
 import { Base64 } from "js-base64";
 import { renderOptionBoxLabel } from "@/lib/ring-configurator/theme3OptionLabels";
 import { useJewelryText } from "@/lib/ring-configurator/useJewelryText";
@@ -141,7 +153,7 @@ function BeadPickerCard({
       <span className="beads-grid-card__label theme3-option-box-label">{cardLabel}</span>
       {showPrice && (
         <span className="beads-grid-card__meta theme3-option-box-price">
-          {sizeLabel && !showSizeInLabel ? `${sizeLabel} · ` : ""}${asset.price || 8}
+          {sizeLabel && !showSizeInLabel ? `${sizeLabel} · ` : ""}${asset.price ?? 8}
         </span>
       )}
     </button>
@@ -259,9 +271,13 @@ function StylePreviewThumb({ styleId }) {
 const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewelry", onSectionChange }, ref) {
   const t = useJewelryText("beaded");
   const storefrontControls = useStorefrontControls();
+  // Store catalogue (API / fallback file) names win over the built-in labels.
   const beadStyleLabel = (id) =>
-    id === "empty" ? t("beaded.style.custom") : getBeadStyleLabel(id);
-  const beadLengthLabel = (length) => length.label;
+    getBeadedCatalogStyleLabel(
+      id,
+      id === "empty" ? t("beaded.style.custom") : getBeadStyleLabel(id)
+    );
+  const beadLengthLabel = (length) => getBeadedCatalogLengthLabel(length.id, length.label);
   const {
     jewelryCategory,
     setJewelryCategory,
@@ -321,10 +337,13 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
     setThreadColorId,
     selectedThreadColor,
     threadColors,
+    isManualRandomizing,
   } = useBeedsContext();
   const { requestPreviewFocus, clearPreviewFocus } = usePreviewFocus();
   const { view360 } = useContext(View360Context);
   const { shareUrl, setShareUrl, parent } = useContext(ShareContext);
+  // Re-render when the store catalogue (prices / names / active state) loads.
+  const beadedCatalogVersion = useBeadedPriceConfigVersion();
 
   const sectionRefs = {
     jewelry: useRef(null),
@@ -500,7 +519,7 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
       Category: t("category.beadBracelet"),
       Style: styleLabel,
       Length: displayLengthLabel,
-      ThreadColor: selectedThreadColor?.label || "Black",
+      ThreadColor: getBeadedCatalogThreadColorLabel(selectedThreadColor?.id, selectedThreadColor?.label || "Black"),
       BeadSize: sizeId,
       Media: media,
     });
@@ -589,22 +608,25 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
     if (customizeTab !== "beads") {
       return [];
     }
-    return getBeadPickerGridItems(filteredBeads, gridSizeFilter);
-  }, [customizeTab, filteredBeads, gridSizeFilter]);
+    return getBeadedCatalogGridItems("bead", getBeadPickerGridItems(filteredBeads, gridSizeFilter));
+  }, [customizeTab, filteredBeads, gridSizeFilter, beadedCatalogVersion]);
 
   const metalicGridItems = useMemo(() => {
     if (customizeTab !== "metalic-beads") {
       return [];
     }
-    return getMetalicBeadPickerGridItems(metalicSizeFilter);
-  }, [customizeTab, metalicSizeFilter]);
+    return getBeadedCatalogGridItems("spacer", getMetalicBeadPickerGridItems(metalicSizeFilter));
+  }, [customizeTab, metalicSizeFilter, beadedCatalogVersion]);
 
-  const visibleAssets =
-    customizeTab === "spacers"
-      ? CLASSIC_SEPARATORS
-      : customizeTab === "charms"
-        ? BEAD_CHARMS
-        : [];
+  const visibleAssets = useMemo(
+    () =>
+      customizeTab === "spacers"
+        ? getBeadedCatalogAssets("spacer", CLASSIC_SEPARATORS)
+        : customizeTab === "charms"
+          ? getBeadedCatalogAssets("charm", BEAD_CHARMS)
+          : [],
+    [customizeTab, beadedCatalogVersion]
+  );
 
   const selectedAssetKey =
     customizeTab === "spacers"
@@ -686,6 +708,9 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
   ]);
 
   const handleSlotSelect = (index) => {
+    if (isManualRandomizing) {
+      return;
+    }
     if (activeSlotIndex === index) {
       setActiveSlotIndex(null);
       clearPreviewFocus();
@@ -704,6 +729,10 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
       // 8mm/10mm must always appear disabled for 6mm and 12mm grid cards.
       if (!isBeadSizeSupported(assetKey, beadSizeId)) {
         return false;
+      }
+
+      if (isManualRandomizing) {
+        return canAddBead(beadSizeId, assetKey);
       }
 
       if (activeSlotIndex !== null && activeSlotItem) {
@@ -734,11 +763,15 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
       canReplaceCustomizeSlotAt,
       customizeSlotItems,
       isManualMode,
+      isManualRandomizing,
     ]
   );
 
   const isSpacerPickerEntryEnabled = useCallback(
     (assetKey) => {
+      if (isManualRandomizing) {
+        return canAddSpacer();
+      }
       if (activeSlotIndex !== null && activeSlotItem) {
         if (
           activeSlotItem.type === "spacer" ||
@@ -764,10 +797,14 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
       canReplaceCustomizeSlotAt,
       customizeSlotItems,
       isManualMode,
+      isManualRandomizing,
     ]
   );
 
   const handleAssetSelect = (key, event, beadSizeIdOverride) => {
+    if (isManualRandomizing) {
+      return;
+    }
     const sourceRect = getFlyInSourceRect(event);
 
     if (customizeTab === "spacers") {
@@ -954,6 +991,9 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
   };
 
   const handleAddSlotClick = (event) => {
+    if (isManualRandomizing) {
+      return;
+    }
     const sourceRect = getFlyInSourceRect(event);
 
     if (customizeTab === "spacers" && canAddSpacer()) {
@@ -1192,7 +1232,7 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
     spacers: "beaded.summary.spacersQty",
   };
   const footerSummaryTaxLabel = getFooterSummaryTaxLabel();
-  const lengthOptions = isManualMode ? BEAD_LENGTH_OPTIONS : BEAD_LENGTHS;
+  const lengthOptions = getBeadedVisibleLengths(isManualMode ? BEAD_LENGTH_OPTIONS : BEAD_LENGTHS);
 
   const customizeSummaryLines = useMemo(
     () => buildPatternCustomizeSummaryLines(pattern),
@@ -1208,7 +1248,7 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
         <div className="order-summary-row">
           <span className="order-summary-title theme3-section-heading">{t("beaded.summary.string")}</span>
         </div>
-        <div className="order-summary-desc">{t("beaded.summary.threadIncluded")} · {styleLabel} · {selectedThreadColor?.label || "Black"} Thread</div>
+        <div className="order-summary-desc">{t("beaded.summary.threadIncluded")} · {styleLabel} · {getBeadedCatalogThreadColorLabel(selectedThreadColor?.id, selectedThreadColor?.label || "Black")} Thread</div>
         <div className="order-summary-desc">{t("beaded.summary.lengthPrefix")} {summaryLengthLabel}</div>
       </div>
       {customizeSummaryLines.length > 0 && (
@@ -1251,8 +1291,7 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
             <div className="jewelry-category-row-options">
               {isJewelryShellActive() && (
                 <>
-                  {/* CLIENT CUSTOMIZATION: necklace button hidden */}
-                  {false && <button
+                  <button
                     type="button"
                     role="tab"
                     aria-selected="false"
@@ -1260,7 +1299,7 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
                     onClick={() => requestJewelryCategory("necklace")}
                   >
                     {t("category.necklace")}
-                  </button>}
+                  </button>
                   <button
                     type="button"
                     role="tab"
@@ -1289,7 +1328,7 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
           </div>
 
           <OptionRow title={t("option.style")} className="beads-style-row">
-            {VISIBLE_BEAD_STYLES.map((style) => (
+            {getBeadedVisibleStyles(VISIBLE_BEAD_STYLES).map((style) => (
               <button
                 key={style.id}
                 type="button"
@@ -1316,8 +1355,8 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
             ))}
           </OptionRow>
 
-          <OptionRow title={t("option.threadColor") || "String Color"}>
-            {(threadColors || THREAD_COLORS).map((tc) => (
+          <OptionRow title={t("option.threadColor") || "String Color"} className="gb-thread-color-row">
+            {getBeadedVisibleThreadColors(threadColors || THREAD_COLORS).map((tc) => (
               <button
                 key={tc.id}
                 type="button"
@@ -1333,7 +1372,7 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
                   }}
                   aria-hidden="true"
                 />
-                <span>{tc.label}</span>
+                <span className="gb-thread-color-label">{tc.label}</span>
               </button>
             ))}
           </OptionRow>
@@ -1545,7 +1584,7 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
                   <div className="beads-picker-filter beads-picker-filter--size">
                     <span className="beads-picker-filter__label theme3-section-heading">{t("beaded.filter.size")}</span>
                     <div className="beads-picker-size-options">
-                      {BEAD_GRID_SIZE_FILTERS.map((filter) => {
+                      {getBeadedVisibleSizeFilters(BEAD_GRID_SIZE_FILTERS).map((filter) => {
                         const isActive = gridSizeFilter === filter.id;
 
                         return (
