@@ -139,28 +139,27 @@ export const NAME_CHAIN_CONFIG = {
     glb:        { anchor: "top",    radiusOffset: 0.00, yOffset: 0.01, rotationOffset: 0, scale: 0.8 },
   },
 
-  // ── Clasp: spring-ring lock at the BACK, opposite the name plate ──────────
+  // ── Clasp: lock at the BACK, opposite the name plate ──────────────────────
   // The chain is split at the back and its two end links hook into the lock:
-  // one through the tab's hole, the other through the spring ring.
-  //   scale       size of flat_spring_ring.glb in the bracelet (model units
-  //               -> world units). 0.02 = ring about 0.12 across.
+  // one through JumpRing_End, the other through the Clasp.
+  //   scale       size of Pavitra_lock.glb in the bracelet (model units
+  //               -> world units). 0.08 = clasp height ~0.09 across, matching link size.
   //   tabAttach / ringAttach
   //               points in the MODEL's own units where the end links pass
-  //               through (the tab's hole, and just inside the bottom of the
-  //               spring ring). The lock is centred between them and laid
-  //               along the chain.
-  //   leverUp     true = the spring lever points up, false = down.
+  //               through (JumpRing_End center, and inside the Clasp loop).
+  //               The lock is centred between them and laid along the chain.
   //   charmClearance
   //               extra room kept free either side of the lock when charms
   //               are spread along a name bracelet.
   lock: {
     enabled: true,
-    // ?v= busts the 1-year immutable cache when the file changes (simplified 1.6 MB -> 80 KB).
-    path: "/bc-assets/bracelet_models/flat_spring_ring.glb?v=20260911",
-    scale: 0.02,
-    tabAttach: [7.323, 0, -4.79],
-    ringAttach: [7.323, 0, -10.2],
-    leverUp: true,
+    path: "/bc-assets/bracelet_models/Pavitra_lock.glb",
+    scale: 0.08,
+    tabAttach: [-1.630, 0, 0],
+    ringAttach: [1.421, 0, -0.962],
+    alignRotY: -0.3055,
+    flipFacing: true,
+    tilt: 0,
     charmClearance: 0.07,
   },
 };
@@ -360,10 +359,20 @@ const BACK_ANGLE = FRONT_ANGLE + Math.PI;
 function getLockLayout(cfg = NAME_CHAIN_CONFIG) {
   const lock = cfg.lock;
   if (!lock?.enabled) return null;
-  const center = [0, 1, 2].map((i) => (lock.tabAttach[i] + lock.ringAttach[i]) / 2);
-  const halfSpan = (Math.abs(lock.tabAttach[2] - lock.ringAttach[2]) / 2) * lock.scale;
+  const pA = new THREE.Vector3(...lock.tabAttach);
+  const pB = new THREE.Vector3(...lock.ringAttach);
+  const center = new THREE.Vector3().addVectors(pA, pB).multiplyScalar(0.5);
+  const span = pA.distanceTo(pB);
+  const halfSpan = (span / 2) * lock.scale;
   const openLong = Math.max(cfg.linkLength / 2 - cfg.linkTube, 1e-4);
-  return { center, halfSpan, endLinkOffset: halfSpan + openLong };
+  const delta = new THREE.Vector3().subVectors(pB, pA);
+  const alignRotY = lock.alignRotY ?? (delta.x !== 0 || delta.z !== 0 ? -Math.atan2(delta.z, delta.x) : 0);
+  return {
+    center: center.toArray(),
+    halfSpan,
+    endLinkOffset: halfSpan + openLong,
+    alignRotY,
+  };
 }
 
 // Half-angle of the gap the name opens up. `halfWidth` is half the measured
@@ -897,10 +906,7 @@ const ChainLinks = ({ gapHalfAngle, materialProps, cfg = NAME_CHAIN_CONFIG, piec
   );
 };
 
-// ─── Lock (spring-ring clasp) ───────────────────────────────────────────────
-// flat_spring_ring.glb lies flat in its own X/Z plane with the ring and the
-// tab along Z. It is stood upright at the back of the bracelet, facing the
-// front like the name plate, with its ring-to-tab axis along the chain.
+// ─── Lock (bracelet clasp) ──────────────────────────────────────────────────
 // Start fetching the lock right away (the chain waits for it, see NameChainBracelet).
 if (typeof window !== "undefined" && NAME_CHAIN_CONFIG.lock?.enabled) {
   useLoader.preload(GLTFLoader, NAME_CHAIN_CONFIG.lock.path);
@@ -912,37 +918,48 @@ const BraceletLock = ({ materialProps, cfg = NAME_CHAIN_CONFIG }) => {
   const metal = useMetalMaterialProps(materialProps);
   const layout = getLockLayout(cfg);
 
-  const geometries = useMemo(() => {
-    const list = [];
-    gltf.scene.traverse((child) => { if (child.isMesh) list.push(child.geometry); });
-    return list;
-  }, [gltf]);
+  const clonedScene = useMemo(() => {
+    const clone = gltf.scene.clone(true);
+    clone.traverse((child) => {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+        const isTag = child.name === "Tag_PAVITRA" || child.geometry?.attributes?.color != null;
+        child.material = new THREE.MeshPhysicalMaterial({
+          ...metal,
+          vertexColors: Boolean(isTag),
+        });
+      }
+    });
+    return clone;
+  }, [gltf, metal]);
 
-  // Model X -> world up (lever up or down), model Y (thickness) -> world depth,
-  // model Z (ring-to-tab) -> world X, the chain's direction at the back.
-  const quaternion = useMemo(() => {
-    const s = lock.leverUp ? 1 : -1;
-    const basis = new THREE.Matrix4().makeBasis(
-      new THREE.Vector3(0, s, 0),
-      new THREE.Vector3(0, 0, s),
-      new THREE.Vector3(1, 0, 0),
+  const rotation = useMemo(() => {
+    if (lock.leverUp !== undefined && lock.alignRotY === undefined) {
+      const s = lock.leverUp ? 1 : -1;
+      const basis = new THREE.Matrix4().makeBasis(
+        new THREE.Vector3(0, s, 0),
+        new THREE.Vector3(0, 0, s),
+        new THREE.Vector3(1, 0, 0),
+      );
+      return new THREE.Euler().setFromRotationMatrix(basis);
+    }
+    return new THREE.Euler(
+      lock.tilt || 0,
+      (layout?.alignRotY || 0) + (lock.flipFacing ? Math.PI : 0),
+      0
     );
-    return new THREE.Quaternion().setFromRotationMatrix(basis);
-  }, [lock.leverUp]);
+  }, [lock, layout]);
 
   const position = useMemo(() => ringPoint(BACK_ANGLE, cfg).toArray(), [cfg]);
 
   if (!layout) return null;
 
   return (
-    <group position={position} quaternion={quaternion}>
+    <group position={position} rotation={rotation}>
       <group scale={lock.scale}>
         <group position={layout.center.map((v) => -v)}>
-          {geometries.map((geometry, i) => (
-            <mesh key={i} geometry={geometry} castShadow receiveShadow>
-              <meshPhysicalMaterial {...metal} />
-            </mesh>
-          ))}
+          <primitive object={clonedScene} />
         </group>
       </group>
     </group>
