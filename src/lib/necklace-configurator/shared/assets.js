@@ -1,4 +1,5 @@
 import { getGemGlbCharm } from "./glbGemCharms";
+import { isPavitraChainLengthAllowed } from "@/lib/jewelry-shell/pavitraCustomization";
 /**
  * @file This file contains the constant data for bracelets and charms,
  * including their model paths and positioning information.
@@ -159,7 +160,8 @@ export const CHAIN_LENGTH_SUPPORTED_PATHS = [
 export const CHAIN_LENGTH_OPTIONS = [
   { id: '16', label: '16"' },
   { id: '18', label: '18"' },
-];
+  { id: '24', label: '24"' },
+].filter((option) => isPavitraChainLengthAllowed(option.id));
 export const DEFAULT_CHAIN_LENGTH = '16';
 // Object defining the positions and rotations for charms on each specific bracelet.
 // This nested structure allows for precise placement of different charms on different bracelets.

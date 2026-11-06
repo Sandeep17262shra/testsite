@@ -1,3 +1,4 @@
+import { arePricesVisible } from "../jewelry-shell/pavitraCustomization";
 import { DEFAULT_BEAD_SIZE_ID } from "./assets";
 import {
   getBeadedAssetLabel,
@@ -80,6 +81,9 @@ function groupPatternItems(items, getLabel, getPrice) {
   return Array.from(groups.values());
 }
 
+// Store setting (jewelry-shell/pavitraCustomization.js): summary lines drop their "($10)" / "(2 × $10)" amounts.
+const showPrices = arePricesVisible();
+
 const formatMoney = (amount) => `$${(Number(amount) || 0).toLocaleString()}`;
 
 /** "Lotus Charm" -> "Lotus" (the line title already says these are charms). */
@@ -94,7 +98,9 @@ const formatTimes = (count, unitPrice) => `${count} \u00d7 ${formatMoney(unitPri
 /** Spacers / charms: "Lotus ($4)", or "Lotus (2 × $4)" when the same piece repeats. */
 function formatGroupedDetailLines(groups) {
   return groups.map((group) =>
-    `${group.name} (${group.count > 1 ? formatTimes(group.count, group.totalPrice / group.count) : formatMoney(group.totalPrice)})`
+    showPrices
+      ? `${group.name} (${group.count > 1 ? formatTimes(group.count, group.totalPrice / group.count) : formatMoney(group.totalPrice)})`
+      : `${group.name}${group.count > 1 ? ` \u00d7 ${group.count}` : ""}`
   );
 }
 
@@ -123,10 +129,13 @@ function buildSizedDetailLines(items, assetType, fallbackName, getPrice) {
     // No size on the piece: "Heart Chakra ($4)" / "Heart Chakra (2 × $4)".
     if (entries.length === 1 && !entries[0].sizeLabel) {
       const [entry] = entries;
+      if (!showPrices) return `${name}${entry.count > 1 ? ` \u00d7 ${entry.count}` : ""}`;
       return `${name} (${entry.count > 1 ? formatTimes(entry.count, entry.unit) : formatMoney(entry.unit)})`;
     }
     const parts = entries.map((entry) =>
-      `${entry.sizeLabel ? `${entry.sizeLabel} ` : ""}(${formatTimes(entry.count, entry.unit)})`
+      showPrices
+        ? `${entry.sizeLabel ? `${entry.sizeLabel} ` : ""}(${formatTimes(entry.count, entry.unit)})`
+        : `${entry.sizeLabel || ""}${entry.sizeLabel ? " " : ""}(\u00d7 ${entry.count})`
     );
     return `${name}: ${parts.join(", ")}`;
   });

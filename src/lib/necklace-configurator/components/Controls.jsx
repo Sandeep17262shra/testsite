@@ -34,7 +34,7 @@ import { isJewelryShellActive, rememberJewelryCategory, requestJewelryCategory }
 import { getFooterSummaryTaxLabel } from "@/lib/jewelry-shell/summaryTaxLabel";
 import {
     isPavitraMetalAllowed, isPavitraCharmMetalAllowed, isPavitraCharmCategoryAllowed, isNameCustomizationEnabled,
-    getDefaultMetalHex, getDefaultPurityPrice,
+    getDefaultMetalHex, getDefaultPurityPrice, arePricesVisible,
 } from "@/lib/jewelry-shell/pavitraCustomization";
 import { View360Context } from "../contexts/View360Context";
 import { CHAIN_DRAPE_CONFIG, getSeamCharmSlots, getSizedDrapeConfig } from "../necklace/DrapeChain";
@@ -59,6 +59,9 @@ import {
 } from "../data/jewelryProductIds";
 import { renderOptionBoxLabel } from "@/lib/ring-configurator/theme3OptionLabels";
 import OptionPrice, { OptionPriceDelta } from "../shared/OptionPrice";
+
+// Store setting: when false, no price is rendered anywhere in this panel.
+const showPrices = arePricesVisible();
 
 function CardOption({ active, label, image, price, delta, onClick, disabled = false }) {
   return (
@@ -455,7 +458,7 @@ const purityOptions = [
         getNecklaceCatalogLabel(necklaceChainId(bracelet.path), bracelet.name);
     const necklaceLengthLabel = (lengthId) => {
         const option = CHAIN_LENGTH_OPTIONS.find((item) => item.id === lengthId);
-        const productId = String(lengthId) === "18" ? "NCL18" : "NCL16";
+        const productId = { "18": "NCL18", "24": "NCL24" }[String(lengthId)] ?? "NCL16";
         return getNecklaceCatalogLabel(productId, option?.label || "");
     };
     const necklaceFontLabel = (font) =>
@@ -1136,7 +1139,7 @@ const addDiamondCharm = (diamondCharm, replaceActive = true) => {
                                 <path d="M8 0.408978C8 0.299252 7.95549 0.199501 7.86648 0.119701C7.68846 -0.0399003 7.38804 -0.0399003 7.21001 0.119701L4.00556 2.99252L0.789986 0.119701C0.611961 -0.0399003 0.311544 -0.0399003 0.133519 0.119701C-0.0445063 0.279302 -0.0445063 0.548629 0.133519 0.70823L3.67177 3.8803C3.84979 4.0399 4.15021 4.0399 4.32823 3.8803L7.86648 0.70823C7.95549 0.628429 8 0.518703 8 0.418953V0.408978Z" fill="black"/>
                             </svg>
                         </button>
-                        <strong>${totalPrice.toLocaleString()}</strong>
+                        {showPrices && <strong>${totalPrice.toLocaleString()}</strong>}
                     </div>
                 </div>
     );
@@ -1149,13 +1152,15 @@ const addDiamondCharm = (diamondCharm, replaceActive = true) => {
                         <div className="order-summary-section">
                             <div className="order-summary-row">
                                 <span className="order-summary-title theme3-section-heading">{t("summary.chain")}</span>
-                                <span className="order-summary-price theme3-section-heading">${chainSummaryPrice.toLocaleString()}</span>
+                                {showPrices && (
+                                    <span className="order-summary-price theme3-section-heading">${chainSummaryPrice.toLocaleString()}</span>
+                                )}
                             </div>
                             <div className="order-summary-desc">{chainSummaryDesc}</div>
                             {chainLengthLabel && (
                                 <div className="order-summary-desc">
                                     {t("summary.sizePrefix")} {chainLengthLabel}
-                                    {chainLengthPrice > 0 ? ` · $${chainLengthPrice.toLocaleString()}` : ""}
+                                    {showPrices && chainLengthPrice > 0 ? ` · $${chainLengthPrice.toLocaleString()}` : ""}
                                 </div>
                             )}
                         </div>
@@ -1164,14 +1169,14 @@ const addDiamondCharm = (diamondCharm, replaceActive = true) => {
                             <div className="order-summary-section">
                                 <div className="order-summary-row">
                                     <span className="order-summary-title theme3-section-heading">{t("summary.addOns")}</span>
-                                    {summaryAddOnsPrice > 0 && (
+                                    {showPrices && summaryAddOnsPrice > 0 && (
                                         <span className="order-summary-price theme3-section-heading">${summaryAddOnsPrice.toLocaleString()}</span>
                                     )}
                                 </div>
                                 {summaryAddOnLines.map((line) => (
                                     <div key={line.key} className="order-summary-row order-summary-addon">
                                         <span className="order-summary-desc">{line.label}</span>
-                                        {line.price > 0 && (
+                                        {showPrices && line.price > 0 && (
                                             <span className="order-summary-desc">${line.price.toLocaleString()}</span>
                                         )}
                                     </div>
@@ -1333,7 +1338,7 @@ const addDiamondCharm = (diamondCharm, replaceActive = true) => {
                 >
                     <header className="theme3-option-section-header">
                         <span className="theme3-section-heading">{t("section.customize")}</span>
-                        {(customizeType === "text" ? namePendantPrice : charmsPrice) > 0 && (
+                        {showPrices && (customizeType === "text" ? namePendantPrice : charmsPrice) > 0 && (
                             <span className="theme3-section-header-price theme3-section-heading">
                                 ${(customizeType === "text" ? namePendantPrice : charmsPrice).toLocaleString()}
                             </span>
@@ -1770,9 +1775,11 @@ const addDiamondCharm = (diamondCharm, replaceActive = true) => {
                         </button>
 
                         <div className="theme3-summary-price-row">
-                            <strong className="theme3-summary-price theme3-section-heading">
-                                ${totalPrice.toLocaleString()}
-                            </strong>
+                            {showPrices && (
+                                <strong className="theme3-summary-price theme3-section-heading">
+                                    ${totalPrice.toLocaleString()}
+                                </strong>
+                            )}
                             {getFooterSummaryTaxLabel() ? (
                                 <span className="theme3-summary-tax-label theme3-body-text">{getFooterSummaryTaxLabel()}</span>
                             ) : null}

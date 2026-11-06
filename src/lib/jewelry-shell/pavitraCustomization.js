@@ -7,6 +7,7 @@
  * PAVITRA_CUSTOMIZATION_ENABLED to false) is all it takes to widen or undo it.
  *
  * Necklace + bracelet app (src/lib/necklace-configurator)
+ *   - necklace chain 16" / 24"; bracelet size 7.5" only; no prices shown
  *   - chain metal and charm metal: Yellow Gold + Silver only; Silver is the default
  *   - charms: Stone Charms only (no birthstone / diamond / initial / 2D / 3D)
  *   - no name pendant (necklace) and no name plate (bracelet)
@@ -15,7 +16,7 @@
  *   - no Spacers or Charms tabs, and no preset styles that contain spacers
  *     (Style 1 / Style 2) — only Custom and Full Bead remain
  *   - stone beads: 8mm and 10mm only; Green Aventurine onwards (to the end of
- *     the list) plus Green Quartz and Tiger Eye
+ *     the list, minus Amethyst Star) plus Amethyst, Green Quartz and Tiger Eye
  *   - metallic beads stay (they are already 8mm / 10mm only)
  *   - thread colour: Red, Black, Green
  */
@@ -33,6 +34,22 @@ export const PAVITRA_CHARM_METAL_KEYS = ["YG", "SL"];
 /** "attached" is the Stone Charms category. */
 export const PAVITRA_CHARM_CATEGORY_IDS = ["attached"];
 export const PAVITRA_DEFAULT_CHARM_CATEGORY = "attached";
+
+/** false hides every price: option prices, section prices, subtotal and order summary amounts. */
+export const PAVITRA_SHOW_PRICES = false;
+export const arePricesVisible = () => !PAVITRA_CUSTOMIZATION_ENABLED || PAVITRA_SHOW_PRICES;
+
+/** Necklace chain lengths offered, in inches (ids from CHAIN_LENGTH_OPTIONS). */
+export const PAVITRA_CHAIN_LENGTH_IDS = ["16", "24"];
+export const isPavitraChainLengthAllowed = (id) =>
+    !PAVITRA_CUSTOMIZATION_ENABLED || PAVITRA_CHAIN_LENGTH_IDS.includes(String(id));
+
+/** The only bracelet size offered, in inches. */
+export const PAVITRA_BRACELET_SIZES = ["7.5"];
+export const isPavitraBraceletSizeAllowed = (size) =>
+    !PAVITRA_CUSTOMIZATION_ENABLED || PAVITRA_BRACELET_SIZES.includes(String(size));
+export const getDefaultBraceletSize = (fallback) =>
+    PAVITRA_CUSTOMIZATION_ENABLED ? PAVITRA_BRACELET_SIZES[0] : fallback;
 
 /** false hides the Charms / Text toggle and the name editor on necklace and bracelet. */
 export const PAVITRA_NAME_CUSTOMIZATION = false;
@@ -75,7 +92,10 @@ export const PAVITRA_BEAD_SIZE_IDS = ["8mm", "10mm"];
  * (Green Aventurine and everything after it in the BEADS list is kept as a
  * whole — see getPavitraBeads in beeds-configurator/assets.js.)
  */
-export const PAVITRA_EXTRA_BEAD_KEYS = ["green-quartz", "tiger-eye"];
+export const PAVITRA_EXTRA_BEAD_KEYS = ["amethyst", "green-quartz", "tiger-eye"];
+
+/** Beads removed even though they fall inside the kept "to the end" block. */
+export const PAVITRA_EXCLUDED_BEAD_KEYS = ["amethyst-star"];
 
 /** First bead of the kept "to the end" block. */
 export const PAVITRA_BEADS_FROM_KEY = "green-aventurine";

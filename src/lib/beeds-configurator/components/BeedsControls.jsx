@@ -41,6 +41,7 @@ import {
 } from "../assets";
 import { isJewelryShellActive, requestJewelryCategory } from "@/lib/jewelry-shell/jewelryCategoryBus";
 import { getFooterSummaryTaxLabel } from "@/lib/jewelry-shell/summaryTaxLabel";
+import { arePricesVisible } from "@/lib/jewelry-shell/pavitraCustomization";
 import { useBeedsContext } from "../contexts/BeedsContext";
 import { usePreviewFocus } from "../contexts/PreviewFocusContext";
 import { View360Context } from "../contexts/View360Context";
@@ -79,6 +80,8 @@ function serializeBeadsCartItems(items = []) {
 }
 
 const customizeTabsShownInUi = VISIBLE_BEAD_CUSTOMIZE_TABS;
+// Store setting: when false, no price is rendered anywhere in this panel.
+const showPrices = arePricesVisible();
 
 function CardOption({ active, label, image, onClick, disabled = false }) {
   return (
@@ -159,7 +162,12 @@ function BeadPickerCard({
       <span className="beads-grid-card__label theme3-option-box-label">{cardLabel}</span>
       {showPrice && (
         <span className="beads-grid-card__meta theme3-option-box-price">
-          {sizeLabel && !showSizeInLabel ? `${sizeLabel} · ` : ""}${asset.price ?? 8}
+          {[
+            sizeLabel && !showSizeInLabel ? sizeLabel : "",
+            showPrices ? `$${asset.price ?? 8}` : "",
+          ]
+            .filter(Boolean)
+            .join(" · ")}
         </span>
       )}
     </button>
@@ -1271,7 +1279,9 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
                   ? formatCountedLabel(t(summaryQtyKeys[line.key]), line.count)
                   : line.title}
               </span>
-              <span className="order-summary-price theme3-section-heading">${line.price.toLocaleString()}</span>
+              {showPrices && (
+                <span className="order-summary-price theme3-section-heading">${line.price.toLocaleString()}</span>
+              )}
             </div>
             {(line.detailLines || (line.detail ? [line.detail] : [])).map((text, index) => (
               <div key={`${line.key}-${index}`} className="order-summary-desc">{text}</div>
@@ -1777,7 +1787,9 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
             </button>
 
             <div className="theme3-summary-price-row">
-              <strong className="theme3-summary-price theme3-section-heading">${totalPrice.toLocaleString()}</strong>
+              {showPrices && (
+                <strong className="theme3-summary-price theme3-section-heading">${totalPrice.toLocaleString()}</strong>
+              )}
               {footerSummaryTaxLabel ? (
                 <span className="theme3-summary-tax-label theme3-body-text">{footerSummaryTaxLabel}</span>
               ) : null}

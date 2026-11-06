@@ -1,3 +1,5 @@
+import { arePricesVisible } from "@/lib/jewelry-shell/pavitraCustomization";
+
 /**
  * Price line shown inside an option button (style / length / metal / charm cards …),
  * styled like the bead picker's "6mm · $8" meta line. Renders nothing when there is no amount.
@@ -11,6 +13,7 @@ export function formatOptionPrice(amount) {
 }
 
 export default function OptionPrice({ amount, suffix = "" }) {
+  if (!arePricesVisible()) return null;
   const text = formatOptionPrice(amount);
   if (!text) return null;
   return (
@@ -33,6 +36,7 @@ export function formatOptionPriceDelta(delta) {
 }
 
 export function OptionPriceDelta({ delta, active = false }) {
+  if (!arePricesVisible()) return null;
   const text = active ? "" : formatOptionPriceDelta(delta);
   if (!text) return null;
   return <span className="gb-delta-label theme3-option-box-price">{text}</span>;

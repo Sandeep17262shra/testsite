@@ -7,6 +7,7 @@ import {
   PAVITRA_CUSTOMIZATION_ENABLED,
   PAVITRA_BEAD_SIZE_IDS,
   PAVITRA_EXTRA_BEAD_KEYS,
+  PAVITRA_EXCLUDED_BEAD_KEYS,
   PAVITRA_BEADS_FROM_KEY,
   PAVITRA_DEFAULT_BEAD_KEY,
   PAVITRA_THREAD_COLOR_IDS,
@@ -438,7 +439,8 @@ function getPavitraBeads(beads) {
   return beads
     .filter(
       (bead, index) =>
-        (fromIndex !== -1 && index >= fromIndex) || PAVITRA_EXTRA_BEAD_KEYS.includes(bead.key)
+        !PAVITRA_EXCLUDED_BEAD_KEYS.includes(bead.key) &&
+        ((fromIndex !== -1 && index >= fromIndex) || PAVITRA_EXTRA_BEAD_KEYS.includes(bead.key))
     )
     .map((bead) => ({
       ...bead,

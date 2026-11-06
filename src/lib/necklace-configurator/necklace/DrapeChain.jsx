@@ -219,6 +219,7 @@ if (typeof window !== 'undefined') {
 const CHAIN_LENGTH_MULTIPLIERS = {
   '16': 1.0,
   '18': 1.14,
+  // '24' is a label only (Pavitra): it draws exactly like 16", so no entry here.
 };
 
 // Returns a CHAIN_DRAPE_CONFIG-shaped object scaled for the chosen length.

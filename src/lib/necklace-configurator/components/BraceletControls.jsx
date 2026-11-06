@@ -27,7 +27,7 @@ import {
 import { NAME_CHAIN_MAX_CHARMS, NAME_CHAIN_MAX_CHARMS_WITH_NAME, getNameChainCharmAngles, getNameChainConfig } from "../bracelet/NameChain";
 import {
     isPavitraMetalAllowed, isPavitraCharmMetalAllowed, isPavitraCharmCategoryAllowed, isNameCustomizationEnabled,
-    getDefaultMetalHex, getDefaultPurityPrice,
+    getDefaultMetalHex, getDefaultPurityPrice, arePricesVisible, getDefaultBraceletSize, isPavitraBraceletSizeAllowed,
 } from "@/lib/jewelry-shell/pavitraCustomization";
 import {
     getBraceletChainKeyByPath,
@@ -197,6 +197,9 @@ function OptionRow({ title, children, className }) {
     </section>
   );
 }
+
+// Store setting: when false, no price is rendered anywhere in this panel.
+const showPrices = arePricesVisible();
 
 const BRACELET_CHARM_CATEGORIES = [
   {
@@ -407,7 +410,7 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
     );
     const sizeSettings = getBraceletSizeCatalogSettings();
     const braceletSizeStep = sizeSettings?.stepGap ?? BRACELET_SIZE_STEP;
-    const braceletSizeOptions = Array.from(
+    const allBraceletSizeOptions = Array.from(
         { length: Math.floor((BRACELET_SIZE_MAX - BRACELET_SIZE_MIN) / braceletSizeStep + 1e-9) + 1 },
         (_, index) => {
             const size = Number((BRACELET_SIZE_MIN + index * braceletSizeStep).toFixed(2));
@@ -418,6 +421,15 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
             return { size: String(size), price };
         }
     );
+    // Store setting: only the allowed bracelet size(s) are offered (falls back to the
+    // full range if the catalogue grid happens not to contain them).
+    const allowedBraceletSizeOptions = allBraceletSizeOptions.filter((option) =>
+        isPavitraBraceletSizeAllowed(option.size)
+    );
+    const braceletSizeOptions = allowedBraceletSizeOptions.length
+        ? allowedBraceletSizeOptions
+        : allBraceletSizeOptions;
+    const braceletSizeRestricted = braceletSizeOptions.length < allBraceletSizeOptions.length;
     const sizeTierFallback =
         braceletSizeOptions.find((option) => option.size === braceletSize)?.price ?? currentBraceletSizePrice;
     const sizeComponentPrice = getBraceletSizeCatalogPrice(braceletSize, sizeTierFallback);
@@ -449,6 +461,15 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
         const fallback = braceletSizeOptions.find((option) => option.size === braceletSize)?.price ?? 0;
         setCurrentBraceletSizePrice(getBraceletSizeCatalogPrice(braceletSize, fallback));
     }, [braceletSize, braceletPriceConfigVersion]);
+
+    // Store restricts the sizes: move an old shared-link / saved size onto the allowed one.
+    useEffect(() => {
+        if (!braceletSizeRestricted) return;
+        if (!braceletSizeOptions.some((option) => option.size === braceletSize)) {
+            setBraceletSize(braceletSizeOptions[0].size);
+            setCurrentBraceletSizePrice(braceletSizeOptions[0].price);
+        }
+    }, [braceletSize, braceletSizeRestricted]);
 
     // If the current size is not one of the selectable sizes (old shared link, catalogue
     // change), fall back to the first one.
@@ -879,7 +900,7 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
         setBraceletPurity("9K");
         setCurrentMetalPrice(100);
         setCurrentPurityPrice(getDefaultPurityPrice());
-        setBraceletSize(String(BRACELET_SIZE_MIN));
+        setBraceletSize(getDefaultBraceletSize(String(BRACELET_SIZE_MIN)));
         setCurrentBraceletSizePrice(0);
         setCharmMetal(defaultMetalHex);
         setPendantMetalHex(defaultMetalHex);
@@ -1256,7 +1277,7 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
                         <path d="M8 0.408978C8 0.299252 7.95549 0.199501 7.86648 0.119701C7.68846 -0.0399003 7.38804 -0.0399003 7.21001 0.119701L4.00556 2.99252L0.789986 0.119701C0.611961 -0.0399003 0.311544 -0.0399003 0.133519 0.119701C-0.0445063 0.279302 -0.0445063 0.548629 0.133519 0.70823L3.67177 3.8803C3.84979 4.0399 4.15021 4.0399 4.32823 3.8803L7.86648 0.70823C7.95549 0.628429 8 0.518703 8 0.418953V0.408978Z" fill="black"/>
                     </svg>
                 </button>
-                <strong>${finalProductPrice.toLocaleString()}</strong>
+                {showPrices && <strong>${finalProductPrice.toLocaleString()}</strong>}
             </div>
         </div>
     );
@@ -1269,12 +1290,14 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
             <div className="order-summary-section">
                 <div className="order-summary-row">
                     <span className="order-summary-title theme3-section-heading">{t("summary.chain")}</span>
-                    <span className="order-summary-price theme3-section-heading">${braceletTotalPrice.toLocaleString()}</span>
+                    {showPrices && (
+                        <span className="order-summary-price theme3-section-heading">${braceletTotalPrice.toLocaleString()}</span>
+                    )}
                 </div>
                 <div className="order-summary-desc">{braceletSummaryDesc}</div>
                 <div className="order-summary-desc">
                     {t("summary.sizePrefix")} {formatCountedLabel(t("bracelet.length.inches"), braceletSize)}
-                    {sizeComponentPrice > 0 ? ` · $${sizeComponentPrice.toLocaleString()}` : ""}
+                    {showPrices && sizeComponentPrice > 0 ? ` · $${sizeComponentPrice.toLocaleString()}` : ""}
                 </div>
             </div>
 
@@ -1282,14 +1305,14 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
                 <div className="order-summary-section">
                     <div className="order-summary-row">
                         <span className="order-summary-title theme3-section-heading">{t("summary.addOns")}</span>
-                        {summaryAddOnsPrice > 0 && (
+                        {showPrices && summaryAddOnsPrice > 0 && (
                             <span className="order-summary-price theme3-section-heading">${summaryAddOnsPrice.toLocaleString()}</span>
                         )}
                     </div>
                     {summaryAddOnLines.map((line) => (
                         <div key={line.key} className="order-summary-row order-summary-addon">
                             <span className="order-summary-desc">{line.label}</span>
-                            {line.price > 0 && (
+                            {showPrices && line.price > 0 && (
                                 <span className="order-summary-desc">${line.price.toLocaleString()}</span>
                             )}
                         </div>
@@ -1432,7 +1455,7 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
                 >
                     <header className="theme3-option-section-header">
                         <span className="theme3-section-heading">{t("section.customize")}</span>
-                        {(customizeType === "text" ? namePendantTextPrice : charmsPrice) > 0 && (
+                        {showPrices && (customizeType === "text" ? namePendantTextPrice : charmsPrice) > 0 && (
                             <span className="theme3-section-header-price theme3-section-heading">
                                 ${(customizeType === "text" ? namePendantTextPrice : charmsPrice).toLocaleString()}
                             </span>
@@ -1912,9 +1935,11 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
                         </button>
 
                         <div className="theme3-summary-price-row">
-                            <strong className="theme3-summary-price theme3-section-heading">
-                                ${finalProductPrice.toLocaleString()}
-                            </strong>
+                            {showPrices && (
+                                <strong className="theme3-summary-price theme3-section-heading">
+                                    ${finalProductPrice.toLocaleString()}
+                                </strong>
+                            )}
                             {getFooterSummaryTaxLabel() ? (
                                 <span className="theme3-summary-tax-label theme3-body-text">{getFooterSummaryTaxLabel()}</span>
                             ) : null}

@@ -110,7 +110,7 @@ export function getNecklaceNamePendantFontCatalogPrice(fontId, fallbackPrice = 0
 }
 
 export function getNecklaceChainLengthCatalogPrice(lengthId, fallbackPrice = 0) {
-  const map = { 16: "NCL16", 18: "NCL18" };
+  const map = { 16: "NCL16", 18: "NCL18", 24: "NCL24" };
   const productId = map[String(lengthId)];
   return productId ? getNecklaceCatalogPrice(productId, fallbackPrice) : fallbackPrice;
 }
@@ -121,6 +121,7 @@ export function getNecklaceChainLengthTotalPrice(lengthId) {
   const base16 = getNecklaceChainLengthCatalogPrice("16", 0);
   const addon18 = getNecklaceChainLengthCatalogPrice("18", 50);
   if (resolved === "18") return base16 + addon18;
+  if (resolved === "24") return base16 + getNecklaceChainLengthCatalogPrice("24", 100);
   return base16;
 }
 

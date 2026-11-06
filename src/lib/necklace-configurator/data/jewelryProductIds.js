@@ -201,7 +201,7 @@ export function buildJewelryProductIdPayload(cfg = {}) {
   // Chain Length (Necklace)
   if (isNecklace && chainLength) {
     payload.chainLength = String(chainLength);
-    payload.chainLengthProductId = String(chainLength) === "18" ? "NCL18" : "NCL16";
+    payload.chainLengthProductId = { "18": "NCL18", "24": "NCL24" }[String(chainLength)] ?? "NCL16";
   }
 
   // Name pendant / name bracelet

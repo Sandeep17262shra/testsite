@@ -12,7 +12,7 @@ import { CHAIN_DRAPE_CONFIG } from "../necklace/DrapeChain";
 import { getGemGlbCharm, DEFAULT_GEM_GLB_STONE_COLOR } from "../shared/glbGemCharms";
 import { getTempCategoryForParentUrl, getTempInitialParentCategory } from "../shared/tempParentCategory";
 import { JEWELRY_TYPE_SWITCH_MESSAGE } from "@/lib/jewelry-shell/jewelryCategoryBus";
-import { isPavitraCharmCategoryAllowed, getInitialCharmCategory, getDefaultMetalHex } from "@/lib/jewelry-shell/pavitraCustomization";
+import { isPavitraCharmCategoryAllowed, getInitialCharmCategory, getDefaultMetalHex, getDefaultBraceletSize } from "@/lib/jewelry-shell/pavitraCustomization";
 
 export const BraceletContext = createContext({});
 
@@ -207,7 +207,7 @@ export const BraceletProvider = ({ children, initialType }) => {
   const [braceletPurity, setBraceletPurity] = useState(initialPurity);
   const [currentMetalPrice, setCurrentMetalPrice] = useState(config?.currentMetalPrice ?? 100);
   const [currentPurityPrice, setCurrentPurityPrice] = useState(config?.currentPurityPrice ?? defaultPurityPrice);
-  const [braceletSize, setBraceletSize] = useState(config?.braceletSize ?? "6");
+  const [braceletSize, setBraceletSize] = useState(config?.braceletSize ?? getDefaultBraceletSize("6"));
   const [currentBraceletSizePrice, setCurrentBraceletSizePrice] = useState(config?.currentBraceletSizePrice ?? 0);
   // Bracelet-only: GLB load spinner.
   const [loader, setLoader] = useState(true);
