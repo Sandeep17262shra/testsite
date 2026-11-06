@@ -10,6 +10,8 @@ import { RGBELoader } from 'three-stdlib';
 import { RING_METAL, RING_METAL_ENV_URL, RING_TONE_MAPPING_EXPOSURE, JEWELRY_ENV_INTENSITY, ringMetalProps, createRingMetalMaterial, toRingMetalColor } from '../shared/metalMaterial';
 import RingLightRig from '../shared/RingLightRig';
 import { GEM_REFRACTION_PARAMS, useGemEnvTexture } from '../shared/gemMaterial';
+import StoneMaterial, { applyStoneUVs } from '../shared/StoneMaterial';
+import { getStoneType } from '../shared/stoneTypes';
 import { isTwinPeakInitial, getInitialWasherDrop, INITIAL_WASHER_DROP_FACTOR } from '../shared/initialCharmHardware';
 import * as THREE from 'three';
 import { ToastContainer } from 'react-toastify';
@@ -1040,7 +1042,7 @@ function getAnchorOffset(path, obj, anchorMode = 'top') {
   return offset;
 }
 
-const GLBCharmModel = ({ path, position, rotation, scale, onClick, bodyColor, gemstoneColor, modelRotation = [0, 0, 0], anchorMode = 'top', bailConfig = null }) => {
+const GLBCharmModel = ({ path, position, rotation, scale, onClick, bodyColor, gemstoneColor, stoneType = null, modelRotation = [0, 0, 0], anchorMode = 'top', bailConfig = null }) => {
   const [model, setModel]               = useState(null);
   const [currentPath, setCurrentPath]   = useState(null);
   const [anchorOffset, setAnchorOffset] = useState(null);
@@ -1080,6 +1082,8 @@ const GLBCharmModel = ({ path, position, rotation, scale, onClick, bodyColor, ge
             const geometry = child.geometry.clone().toNonIndexed();
             geometry.applyMatrix4(new THREE.Matrix4().multiplyMatrices(rootInverse, child.matrixWorld));
             geometry.computeVertexNormals();
+            // A stone charm set with a gemstone maps that stone's texture onto the cut.
+            if (stoneType) applyStoneUVs(geometry, getStoneType(stoneType)?.uvScale ?? 1);
             foundGemGeometry = geometry;
             gemMeshes.push(child);
             return;
@@ -1102,7 +1106,7 @@ const GLBCharmModel = ({ path, position, rotation, scale, onClick, bodyColor, ge
       .finally(() => { if (!cancelled) setLoader(false); });
 
     return () => { cancelled = true; };
-  }, [path, setLoader, bodyColor, gemstoneColor, anchorMode]);
+  }, [path, setLoader, bodyColor, gemstoneColor, stoneType, anchorMode]);
 
   if (!model || currentPath !== path || !anchorOffset) return null;
 
@@ -1138,14 +1142,16 @@ const GLBCharmModel = ({ path, position, rotation, scale, onClick, bodyColor, ge
 
       {gemGeometry && (
         <mesh
-          key={`gem_${path}_${gemstoneColor}`}
+          key={`gem_${path}_${stoneType || gemstoneColor}`}
           geometry={gemGeometry}
           position={innerPosition}
           rotation={modelRotation}
           scale={scale}
           castShadow
         >
-          {envTexture ? (
+          {stoneType && getStoneType(stoneType) ? (
+            <StoneMaterial stoneType={stoneType} fallbackColor={gemstoneColor} />
+          ) : envTexture ? (
             <MeshRefractionMaterial
               envMap={envTexture}
               color={new THREE.Color(gemstoneColor)}
@@ -1282,6 +1288,7 @@ const HangingCharm = ({ charm, onClick }) => {
           scale={getHangingCharmScale(def.id, 'bracelet')}
           metalColor={metalColor}
           stoneColor={charm.gemstoneColor}
+          stoneType={charm.stoneType}
           bailRadius={INITIAL_BAIL_R}
           bailTube={INITIAL_BAIL_TUBE}
           bailY={INITIAL_BAIL_R}
@@ -1322,6 +1329,7 @@ const GemGlbHangingCharm = ({ charm, onClick }) => {
           bailConfig={def.bail}
           bodyColor={charm.bodyColor}
           gemstoneColor={charm.gemstoneColor}
+          stoneType={charm.stoneType}
           onClick={onClick}
         />
       </group>
@@ -1414,6 +1422,7 @@ function charmSignature(charm) {
     charm?.metalColor ?? '',
     charm?.bodyColor ?? '',
     charm?.gemstoneColor ?? '',
+    charm?.stoneType ?? '',
   ].join('|');
 }
 
@@ -1723,7 +1732,7 @@ const deleteCharm = index => {
           rotation: placement.rotation,
           anchorMode: placement.anchor,
           charmScale: placement.scale,
-          hingeOffset: placement.radiusOffset ?? 0,
+          hingeOffset: placement.hinge ?? placement.radiusOffset ?? 0,
         };
       }
       const pointPlacement = getPointPlacement(i, placedCharms.length, braceletPath, braceletPoints, placeKind, scale);
@@ -1896,6 +1905,7 @@ const deleteCharm = index => {
                       scale={gemScale}
                       bodyColor={charm.bodyColor}
                       gemstoneColor={charm.gemstoneColor}
+                      stoneType={charm.stoneType}
                       modelRotation={[Math.PI / 2, 0, 0]}
                       anchorMode={anchorMode}
                       onClick={e => { e.stopPropagation(); deleteCharm(i); }}
@@ -1958,6 +1968,7 @@ const deleteCharm = index => {
                     bailConfig={glbBailConfig}
                     bodyColor={charm.bodyColor}
                     gemstoneColor={charm.gemstoneColor}
+                    stoneType={charm.stoneType}
                     onClick={e => { e.stopPropagation(); deleteCharm(i); }}
                   />
                 </group>

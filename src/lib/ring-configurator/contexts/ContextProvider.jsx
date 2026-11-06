@@ -10,6 +10,7 @@ import { LoaderProvider } from "./LoaderContext";
 import { RecordingProvider } from "./RecordingContext";
 import { SectionProvider } from "./SectionContext";
 import { SceneStageProvider } from "./SceneStageContext";
+import { GridViewProvider } from "./GridViewContext";
 import { initAppearanceConfig } from "../appearanceApiClient";
 import { applyStorefrontAudioEnabled } from "../hooks/useClickSound";
 import { preloadThemeTypographyFonts } from "../theme3Appearance";
@@ -166,6 +167,7 @@ const ContextProvider = ({ children }) => {
                     <DiamondProvider>
                       <SceneStageProvider>
                         <CameraViewProvider>
+                          <GridViewProvider>
                             <View360Provider>
                                 <CaptureProvider>
                                     <ShareProvider>
@@ -179,6 +181,7 @@ const ContextProvider = ({ children }) => {
                                     </ShareProvider>
                                 </CaptureProvider>
                             </View360Provider>
+                          </GridViewProvider>
                         </CameraViewProvider>
                       </SceneStageProvider>
                     </DiamondProvider>

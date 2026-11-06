@@ -87,11 +87,13 @@ export function resolveCharmProductId(charm, jewelryType = "necklace") {
   }
 
   // ── Diamond charm ──
-  if (charm.type === "diamond") {
-    const productId = isNecklace
-      ? getNecklaceDiamondCharmIdByPath(charm.path)
-      : getBraceletDiamondCharmIdByPath(charm.path);
-    return productId ? { productId, category: "diamondCharm", unit: "diamond" } : null;
+  // Includes Stone Charms (chain stones / hanging / 3-D gem) — they are diamond-charm products.
+  {
+    const productId = charm.path
+      ? (isNecklace ? getNecklaceDiamondCharmIdByPath(charm.path) : getBraceletDiamondCharmIdByPath(charm.path))
+      : undefined;
+    if (productId) return { productId, category: "diamondCharm", unit: "diamond" };
+    if (charm.type === "diamond") return null;
   }
 
   // ── Initial charm ──

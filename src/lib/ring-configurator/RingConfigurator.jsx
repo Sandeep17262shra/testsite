@@ -5,6 +5,8 @@ import SoundToggleButton from "./components/SoundToggleButton";
 import { useState, useEffect, useContext, useMemo, useRef, useCallback } from "react";
 import { LoaderContext } from './contexts/LoaderContext';
 import { CameraViewContext } from "./contexts/CameraViewContext";
+import { GridViewContext } from "./contexts/GridViewContext";
+import RingGridViewOverlay from "./components/RingGridViewOverlay";
 import { View360Context } from "./contexts/View360Context";
 import { ShareContext } from "./contexts/ShareContext";
 import { useStoreContext, useStorefrontControls } from "./contexts/StoreContext";
@@ -224,6 +226,7 @@ function RingConfigurator() {
      const previewPaneRef = useRef(null);
      const isMobileRef = useRef(false);
      const { setCameraView } = useContext(CameraViewContext);
+     const { gridView, setGridView } = useContext(GridViewContext);
      const isModelOnlyPreview = useMemo(() => {
        if (typeof window === "undefined") return false;
        const params = new URLSearchParams(window.location.search);
@@ -507,6 +510,32 @@ function RingConfigurator() {
         </svg>
       </button>
       ) : null}
+      {includeView && (
+        <button
+          type="button"
+          className={`gb-preview-control gb-preview-control--grid ${gridView ? "active" : ""}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            setGridView((current) => !current);
+          }}
+          aria-pressed={gridView}
+          aria-label={gridView ? "Switch to normal view" : "Switch to grid view"}
+          title={gridView ? "Normal view" : "Grid view"}
+        >
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            {gridView ? (
+              <rect x="3" y="3" width="14" height="14" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+            ) : (
+              <>
+                <rect x="2.75" y="2.75" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.5" />
+                <rect x="11.25" y="2.75" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.5" />
+                <rect x="2.75" y="11.25" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.5" />
+                <rect x="11.25" y="11.25" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.5" />
+              </>
+            )}
+          </svg>
+        </button>
+      )}
       {includeView && storefrontControls.cameraView && (
         <button
           type="button"
@@ -613,7 +642,7 @@ function RingConfigurator() {
         <div className="theme3-builder">
           <div className={`theme3-workspace ${sandboxCollapsed ? "sandbox-collapsed" : ""}`}>
             <section
-              className="theme3-preview-pane"
+              className={`theme3-preview-pane${gridView ? " is-grid-view" : ""}`}
               aria-label="Interactive ring preview"
               ref={previewPaneRef}
               onClick={handleSandboxToggle}
@@ -630,6 +659,7 @@ function RingConfigurator() {
                   carry it, is gone on desktop (see RCApp.css). Same confirm popup. */}
               {renderPreviewControls({ includeShare: false })}
               <Scene />
+              {gridView && <RingGridViewOverlay />}
 
               <div className="theme3-ai-assistant-slot" aria-label="AI ring assistant">
                 <RingAiAssistant portalTargetId="theme3-ai-panel-host" />

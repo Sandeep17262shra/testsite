@@ -4376,7 +4376,7 @@ button:focus{
 .beads-customize-picker {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 12px;
   padding-top: 8px;
 }
 
@@ -5317,7 +5317,7 @@ button:focus{
   position: relative;
   display: flex;
   flex-direction: column;
-  padding: 10px 16px 12px;
+  padding: 10px 0px 12px;
   background: #ffffff;
   border-top: 1px solid var(--theme3-line, #e3e3df);
   box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.03);
@@ -5683,7 +5683,7 @@ button:focus{
 /* Thread / Cord Color Selector */
 .beeds-configurator-root.theme3-root .gb-thread-color-row .gb-option-track,
 .gb-thread-color-row .gb-option-track {
-  gap: 10px !important;
+  gap: 12px !important;
   padding: 4px 0 !important;
 }
 
@@ -5696,12 +5696,12 @@ button:focus{
   justify-content: center !important;
   gap: 10px !important;
   padding: 0 16px !important;
-  height: 48px !important;
-  min-height: 48px !important;
-  max-height: 48px !important;
-  border-radius: 8px !important;
+  height: 42px !important;
+  min-height: 42px !important;
+  max-height: 42px !important;
+  border-radius: 5px !important;
   background: #ffffff !important;
-  border: 1.5px solid #dcdcdc !important;
+  border: 1px solid #dcdcdc !important;
   box-shadow: none !important;
   cursor: pointer !important;
   box-sizing: border-box !important;
@@ -5717,22 +5717,22 @@ button:focus{
 .beeds-configurator-root.theme3-root .gb-thread-color-option.active,
 .theme3-root .gb-thread-color-option.active,
 .gb-thread-color-option.active {
-  border: 1.5px solid var(--appearance-primary, #181818) !important;
+  border: 1px solid var(--appearance-primary, #181818) !important;
   border-color: var(--appearance-primary, #181818) !important;
   background: #ffffff !important;
+  background: #f8f8f8;
 }
 
 .beeds-configurator-root.theme3-root .gb-thread-color-dot,
 .theme3-root .gb-thread-color-dot,
 .gb-thread-color-dot {
-  width: 18px !important;
-  height: 18px !important;
-  min-width: 18px !important;
-  min-height: 18px !important;
+  width: 16px !important;
+  height: 16px !important;
+  min-width: 16px !important;
+  min-height: 16px !important;
   border-radius: 50% !important;
   flex-shrink: 0 !important;
   display: inline-block !important;
-  box-shadow: 0 1.5px 3.5px rgba(0, 0, 0, 0.22), 0 0.5px 1.5px rgba(0, 0, 0, 0.12) !important;
 }
 
 .gb-thread-color-label,
@@ -5741,7 +5741,7 @@ button:focus{
 .beeds-configurator-root.theme3-root .gb-thread-color-option span:not(.gb-thread-color-dot),
 .theme3-root .gb-thread-color-option span:not(.gb-thread-color-dot),
 .gb-thread-color-option span:not(.gb-thread-color-dot) {
-  font-size: 14px !important;
+  font-size: 12px !important;
   font-weight: 500 !important;
   line-height: 1 !important;
   color: #1f2937 !important;
@@ -5760,3 +5760,404 @@ button:focus{
 }
 
 
+
+/* Bead Bracelet option rows (Style / Length / String Color / Category):
+   flex + wrap instead of the horizontal-scroll grid track, 100px buttons.
+   Kept last (and scoped to .beeds-configurator-root) so it overrides the
+   shared .gb-option-track grid rules from RCApp.css / NecklaceApp.css and the
+   per-row grid-auto-columns / mobile width rules above. */
+.beeds-configurator-root.theme3-root .gb-option-row .gb-option-track {
+  display: flex;
+  flex-wrap: wrap;
+  grid-auto-flow: initial;
+  grid-auto-columns: initial;
+  grid-template-rows: none;
+  align-items: flex-start;
+  gap: 12px;
+  overflow: visible;
+  cursor: default;
+}
+
+.beeds-configurator-root.theme3-root .gb-option-row .gb-option-track > .gb-text-option,
+.beeds-configurator-root.theme3-root .gb-option-row .gb-option-track > .gb-card-option {
+  box-sizing: border-box;
+  flex: 0 0 100px;
+  width: 100px;
+  min-width: 100px;
+  max-width: 100px;
+}
+
+/* String color pills have 16px side padding + a dot; tighten so labels fit in 100px. */
+.beeds-configurator-root.theme3-root .gb-option-row .gb-option-track > {
+  padding: 0 8px !important;
+  gap: 8px !important;
+}
+
+/* Bead / spacer / charm / metalic-bead picker grid: flex + wrap, 100px cards.
+   Same container serves every Category tab. Placed last to beat the
+   grid-template-columns rules (incl. the <=900px override) above. */
+.beeds-configurator-root.theme3-root .beads-asset-grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  grid-template-columns: none;
+  gap: 12px;
+}
+
+.beeds-configurator-root.theme3-root .beads-asset-grid > .beads-grid-card {
+  box-sizing: border-box;
+  flex: 0 0 100px;
+  width: 100px;
+  min-width: 100px;
+  max-width: 100px;
+}
+
+/* ── Bead picker filters (TYPE / SIZE) redesign ─────────────────────────────
+   Matches the Style / Length / Category rows: stacked groups, heading like
+   .gb-option-title, 44px controls, #e2e2de borders, #303030 + #f8f8f8 active
+   state, 100px buttons with a 12px gap. TYPE select spans exactly two
+   100px columns (100 + 12 + 100) so everything lines up on one grid. */
+.beeds-configurator-root.theme3-root .beads-picker-filters,
+.beeds-configurator-root.theme3-root .beads-picker-filters--metalic {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  padding: 0;
+}
+
+/* Metalic tab has an empty spacer column that is only needed for the old 2-col grid. */
+.beeds-configurator-root.theme3-root .beads-picker-filter--spacer {
+  display: none;
+}
+
+.beeds-configurator-root.theme3-root .beads-picker-filters--metalic .beads-picker-filter--size {
+  grid-column: auto;
+}
+
+.beeds-configurator-root.theme3-root .beads-picker-filter {
+  gap: 12px;
+}
+
+.beeds-configurator-root.theme3-root .beads-picker-filter__label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: normal;
+  text-transform: uppercase;
+  color: #303030;
+}
+
+/* TYPE select */
+.beeds-configurator-root.theme3-root .beads-picker-type-select-wrap {
+  width: 212px;
+  max-width: 100%;
+}
+
+.beeds-configurator-root.theme3-root .beads-picker-type-select {
+  box-sizing: border-box;
+  height: 44px;
+  padding: 0 36px 0 14px;
+  border: 1px solid #e2e2de;
+  border-radius: 6px;
+  background: #fff;
+  color: #303030;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.beeds-configurator-root.theme3-root .beads-picker-type-select:hover {
+  border-color: #b0b0aa;
+}
+
+.beeds-configurator-root.theme3-root .beads-picker-type-select:focus,
+.beeds-configurator-root.theme3-root .beads-picker-type-select:focus-visible {
+  outline: none;
+  border-color: #303030;
+  background: #f8f8f8;
+}
+
+/* SIZE buttons */
+.beeds-configurator-root.theme3-root .beads-picker-size-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.beeds-configurator-root.theme3-root .beads-picker-size-btn {
+  box-sizing: border-box;
+  flex: 0 0 100px;
+  width: 100px;
+  min-width: 100px;
+  height: 44px;
+  border: 1px solid #e2e2de;
+  border-radius: 6px;
+  background: #fff;
+  color: #303030;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.beeds-configurator-root.theme3-root .beads-picker-size-btn:hover:not(.active) {
+  border-color: #b0b0aa;
+}
+
+.beeds-configurator-root.theme3-root .beads-picker-size-btn.active {
+  border-color: #303030;
+  background: #f8f8f8;
+  color: #303030;
+  font-weight: 500;
+}
+
+/* Style cards at 100px: the base .gb-card-option has 12px side padding and a
+   nowrap label, so "Custom Bracelet" overflowed the card. Give the label room,
+   let it wrap, and stretch cards to equal height when one label wraps. */
+.beeds-configurator-root.theme3-root .beads-style-row .gb-option-track {
+  align-items: stretch;
+}
+
+.beeds-configurator-root.theme3-root .beads-style-row .gb-option-track > .beads-style-card {
+  padding: 9px 6px;
+  overflow: hidden;
+}
+
+.beeds-configurator-root.theme3-root .beads-style-row .beads-style-card .theme3-option-box-label {
+  display: block;
+  max-width: 100%;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.25 !important;
+  overflow-wrap: break-word;
+}
+
+/* Jewelry category buttons (Necklace / Bracelet / Bead Bracelet): 100px wide.
+   Scoped to the bead app so the necklace/bracelet configurators keep their 142px buttons.
+   Side padding is reduced and the label may wrap so "Bead Bracelet" fits. */
+.beeds-configurator-root.theme3-root .jewelry-category-row-options {
+  gap: 12px;
+}
+
+.beeds-configurator-root.theme3-root .jewelry-category-row-options > .jewelry-category-btn {
+  box-sizing: border-box;
+  flex: 0 0 100px;
+  width: 100px;
+  min-width: 100px;
+  max-width: 100px;
+  padding: 8px 6px;
+  text-align: center;
+  white-space: normal;
+  line-height: 1.25;
+}
+
+/* String Color buttons: use the exact same border + active state as the other
+   option buttons (Length / Category): 1px #e2e2de, active = #303030 border on
+   #f8f8f8. Previously the active rule forced a white background with
+   !important and used a 1.5px / #181818 border. */
+.beeds-configurator-root.theme3-root .gb-option-row .gb-option-track > .gb-thread-color-option {
+  border: 1px solid #e2e2de !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.beeds-configurator-root.theme3-root .gb-option-row .gb-option-track > .gb-thread-color-option:hover:not(.active):not(:disabled) {
+  border-color: #b0b0aa !important;
+}
+
+.beeds-configurator-root.theme3-root .gb-option-row .gb-option-track > .gb-thread-color-option.active {
+  border: 1px solid #303030 !important;
+  background: #f8f8f8 !important;
+}
+
+/* Footer (View details / price / Choose Beads / Share / Reset): line it up with
+   the option content above. .theme3-panel-scroll uses 40px side padding on
+   desktop (RCApp.css), while the beads footer only had 16px, so everything sat
+   24px further left. Phones (<=640px) already use 16px in both places. */
+@media (min-width: 641px) {
+  .theme3-root--beeds .theme3-panel-footer {
+    padding-left: 40px;
+    padding-right: 40px;
+  }
+
+  /* "View details" popover above the footer: same inset so its text lines up too. */
+  .theme3-root--beeds .theme3-panel-footer > .theme3-footer-build-summary {
+    padding-left: 40px;
+    padding-right: 40px;
+  }
+}
+
+/* Footer row (price block / Add to cart / Share / Reset): same 100px buttons
+   and 12px gap as the option cards above. Desktop only; phones keep their compact layout. */
+@media (min-width: 641px) {
+  .theme3-root--beeds .theme3-footer-main,
+  .theme3-root--beeds .theme3-footer-actions,
+  .theme3-root--beeds .theme3-footer-secondary-actions {
+    gap: 12px;
+  }
+
+  /* Price / "View details" column takes the first 100px slot (grows only if the price is wider). */
+  .theme3-root--beeds .theme3-footer-main .theme3-summary-info {
+    min-width: 100px;
+  }
+
+  .theme3-root--beeds .theme3-footer-actions .theme3-panel-footer-cta,
+  .theme3-root--beeds .theme3-footer-actions .theme3-panel-action-btn.theme3-panel-share-btn,
+  .theme3-root--beeds .theme3-footer-actions .theme3-panel-action-btn.theme3-panel-reset-btn {
+    box-sizing: border-box;
+    flex: 0 0 100px;
+    width: 100px;
+    min-width: 100px;
+    max-width: 100px;
+    padding: 0 6px;
+  }
+}
+
+/* Footer: treat the "View details / price" block as a button-sized cell.
+   - same 42px height as Add to cart / Share / Reset, all vertically centred
+   - no top border on the footer bar (it made the bar look taller than its content)
+   Desktop only; phones keep the stacked layout. The soft shadow stays so the bar
+   still separates from the cards scrolling beneath it. */
+@media (min-width: 641px) {
+  .beeds-configurator-root.theme3-root--beeds .theme3-panel-footer {
+    border-top: 0;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  .theme3-root--beeds .theme3-footer-main {
+    align-items: center;
+  }
+
+  .theme3-root--beeds .theme3-footer-main .theme3-summary-info {
+    box-sizing: border-box;
+    justify-content: center;
+    min-height: 42px;
+  }
+
+  .theme3-root--beeds .theme3-footer-main .theme3-summary-details-toggle {
+    padding-bottom: 0;
+  }
+
+  .theme3-root--beeds .theme3-footer-main .theme3-summary-price-row {
+    margin-top: 2px;
+  }
+}
+
+/* Bead picker cards: equal height per row (a 2-line name like "Green Aventurine"
+   used to make its card taller than its neighbours). Cards stretch to the tallest in the row. */
+.beeds-configurator-root.theme3-root .beads-asset-grid {
+  align-items: stretch;
+}
+
+.beeds-configurator-root.theme3-root .beads-asset-grid > .beads-grid-card {
+  height: auto;
+}
+
+/* Icon cards are all 120px tall (bead / spacer / charm picker cards and the Style cards).
+   Content is top-anchored so the images line up across a row, and the padding / gap are tightened
+   so a two-line name ("Green Aventurine") + price still fits inside 120px. */
+.beeds-configurator-root.theme3-root .beads-asset-grid > .beads-grid-card {
+  box-sizing: border-box;
+  height: 120px;
+  min-height: 120px;
+  max-height: 120px;
+  justify-content: flex-start;
+  gap: 3px;
+  padding: 6px 6px;
+}
+
+.beeds-configurator-root.theme3-root .beads-style-row .gb-option-track > .beads-style-card {
+  box-sizing: border-box;
+  height: 120px;
+  min-height: 120px;
+  max-height: 120px;
+  align-content: start;
+}
+
+/* "View details" link: 12px in every configurator (was 10px in necklace/bracelet/beads, inherited ~20px in ring). */
+.theme3-root.theme3-root--beeds .theme3-panel-footer .theme3-summary-details-toggle span,
+.theme3-root.theme3-root--beeds .theme3-panel-footer .theme3-summary-details-toggle .theme3-link-text {
+  font-size: 12px !important;
+  line-height: 1.2 !important;
+}
+
+/* ── "Demo Only" corner ribbon on metalic bead cards (same look as the ring cards) ── */
+.beeds-configurator-root.theme3-root .beads-grid-card {
+  position: relative;
+}
+
+.beeds-configurator-root.theme3-root .beads-grid-card .demo-only-ribbon {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+  border-top-left-radius: inherit;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Smaller than the ring ribbon: its centre line is 30px from the corner (38px on the ring) so the
+   band stays clear of the round bead image. The band is centred on (15px, 15px), the middle of the
+   visible diagonal, so the whole "Demo Only" text stays inside the 44px corner box. */
+.beeds-configurator-root.theme3-root .beads-grid-card .demo-only-ribbon > span {
+  position: absolute;
+  left: -20px;
+  top: 10px;
+  width: 70px;
+  transform: rotate(-45deg);
+  background: #222222;
+  color: #ffffff !important;
+  font-family: Arial, sans-serif;
+  font-size: 6px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.2px;
+  line-height: 1.7 !important;
+  text-align: center;
+  white-space: nowrap;
+  max-width: none;
+  margin: 0 !important;
+}
+
+.beeds-configurator-root.theme3-root .beads-grid-card.is-disabled .demo-only-ribbon > span {
+  opacity: 0.55;
+}
+
+/* ── Preview selection chips (same as the ring configurator) ─────────────── */
+.theme3-root.theme3-root--beeds .theme3-preview-caption.ring-preview-selection-chips {
+  align-items: flex-start;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 900px) {
+  .theme3-root.theme3-root--beeds .beads-preview-desc-overlay.ring-preview-selection-chips {
+    gap: 6px;
+  }
+
+  .theme3-root.theme3-root--beeds .beads-preview-desc-overlay .ring-preview-selection-chip {
+    padding: 6px;
+    font-size: 10px;
+  }
+}
+
+/* ── Centre the options column ───────────────────────────────────────────────
+   Same as the necklace / bracelet: the widest option row is 548px (5 x 100px
+   buttons + 12px gaps). Cap the sections and the footer content at that width
+   and centre them so the empty space is even on both sides of a wide panel. */
+.theme3-root.theme3-root--beeds {
+  --beeds-options-max-width: 548px;
+}
+
+.theme3-root.theme3-root--beeds .theme3-panel-scroll > .theme3-option-section,
+.theme3-root.theme3-root--beeds .theme3-panel-footer .theme3-footer-main {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--beeds-options-max-width);
+  margin-inline: auto;
+}
+
+/* "View details" popover: same centred column as the rows and footer buttons. */
+.theme3-root.theme3-root--beeds .theme3-panel-footer > .theme3-footer-build-summary > .theme3-build-summary {
+  box-sizing: border-box;
+  max-width: var(--beeds-options-max-width);
+  margin-inline: auto;
+}

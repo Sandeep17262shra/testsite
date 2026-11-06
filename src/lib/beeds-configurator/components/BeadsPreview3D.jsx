@@ -45,6 +45,7 @@ import { playBeadMoveSound, playBeadRemoveSound } from "../beadsSounds";
 import { usePreviewFocusRingRotation } from "../usePreviewFocusRingRotation";
 import { PREVIEW_FOCUS_FRONT_ANGLE_DEG_3D } from "../previewFocus";
 import { resolveCharmDragSnapGap } from "../beadRingDrag";
+import { applyGlassBeadShader } from "../glassBeadShader";
 import {
   BEADS_3D_CAMERA_FOV,
   BEADS_3D_ORBIT_ZOOM_SPEED,
@@ -301,9 +302,9 @@ const RENDER_ORDER_RING_STRIDE = 8;
 const RENDER_ORDER_BEAD_GLASS_SHELL = 5;
 const _depthEuler = new THREE.Euler();
 const _depthScratch = new THREE.Vector3();
-/** One loop — matches the string tone seen through the glass shell (avoids black vs pale mismatch). */
+/** One loop — pale string so it reads as a light streak through the glass beads (a dark cord shows as a dirty band). */
 const BRACELET_CORD_MAT = new THREE.MeshBasicMaterial({
-  color: "#8a8194",
+  color: "#d6d0dc",
   toneMapped: true,
   depthWrite: true,
   depthTest: true,
@@ -1134,23 +1135,23 @@ function GlassBeadMesh({ prototype, diameter }) {
 }
 
 const wrappedBeadMaterialCache = new Map();
-// Values matched to the active controls in `bead-demo/index-4.html`:
-// translucency 75%, colour depth 100%, gloss 100%, texture tiling 1.5×,
-// and light 120%. They apply only to quartz/amethyst, never solid stones.
+// Translucent ("quartz") stones render as real glass beads. three.js `transmission`
+// refracts whatever is *behind* the bead, which on the near-white page makes clear
+// stones look flat white. Instead the bead is an opaque mesh whose shader refracts
+// the *studio environment* through the sphere (see `glassBeadShader.js`), adds
+// crisp Fresnel reflections and shows the string through the bore.
 const QUARTZ_DEMO_SETTINGS = {
-  // Dialled back 25% from the demo's fully translucent setting so the quartz
-  // stays visibly see-through without becoming washed out.
-  transmission: 0.75,
-  attenuationDistance: 0.45,
-  // Soften the studio panels rather than reflecting crisp white rectangles.
-  clearcoat: 0.72,
-  clearcoatRoughness: 0.16,
-  roughness: 0.24,
+  // Mirror-smooth coat so direct lights still add a small sharp highlight dot.
+  clearcoat: 1,
+  clearcoatRoughness: 0.03,
+  roughness: 0.04,
+  specularIntensity: 1,
+  // Slight extra colour vividness so tinted glass doesn't read grey.
+  saturation: 1.18,
   textureTiling: 1.5,
-  envMapIntensity: 0.025,
 };
 
-function getWrappedBeadMaterial(texture, materialType) {
+function getWrappedBeadMaterial(texture, materialType, sphereRadius = 0.5) {
   const isQuartz = materialType === "quartz";
   const cacheKey = `${texture.uuid}:${materialType}`;
   let material = wrappedBeadMaterialCache.get(cacheKey);
@@ -1165,21 +1166,14 @@ function getWrappedBeadMaterial(texture, materialType) {
       clearcoat: isQuartz ? QUARTZ_DEMO_SETTINGS.clearcoat : 0.52,
       clearcoatRoughness: isQuartz ? QUARTZ_DEMO_SETTINGS.clearcoatRoughness : 0.12,
       reflectivity: 0.42,
-      transmission: isQuartz ? QUARTZ_DEMO_SETTINGS.transmission : 0,
-      thickness: isQuartz ? 0.65 : 0,
-      ior: 1.45,
-      attenuationColor: isQuartz
-        ? (texture.userData.averageColor ?? new THREE.Color("#ffffff"))
-            .clone()
-            .lerp(new THREE.Color("#ffffff"), 0.45)
-        : new THREE.Color("#ffffff"),
-      attenuationDistance: isQuartz ? QUARTZ_DEMO_SETTINGS.attenuationDistance : 1,
-      // A closed bead only needs the front faces. Rendering both faces for a
-      // transmissive mesh makes its back wall compete with neighbouring beads
-      // during depth sorting, which is the source of the blinking specks.
+      specularIntensity: isQuartz ? QUARTZ_DEMO_SETTINGS.specularIntensity : 1,
+      // Glass is faked in the shader (opaque pass): no scene-backdrop transmission,
+      // so no transmissive-pass cost and no depth-sorting flicker between beads.
+      transmission: 0,
+      // A closed bead only needs the front faces.
       side: isQuartz ? THREE.FrontSide : THREE.DoubleSide,
       depthWrite: true,
-      envMapIntensity: isQuartz ? QUARTZ_DEMO_SETTINGS.envMapIntensity : 0.1,
+      envMapIntensity: 0.1,
     });
     // The photographed maps are intentionally darker/richer than the studio
     // preview. Apply this before PBR lighting so the bead keeps the source
@@ -1189,11 +1183,18 @@ function getWrappedBeadMaterial(texture, materialType) {
         "#include <map_fragment>",
         `#include <map_fragment>
           float beadTextureLuma = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
-          diffuseColor.rgb = mix(vec3(beadTextureLuma), diffuseColor.rgb, ${isQuartz ? "1.08" : "1.16"});
+          diffuseColor.rgb = mix(vec3(beadTextureLuma), diffuseColor.rgb, ${isQuartz ? QUARTZ_DEMO_SETTINGS.saturation.toFixed(2) : "1.16"});
           diffuseColor.rgb = pow(max(diffuseColor.rgb, vec3(0.0)), vec3(${isQuartz ? "0.86" : "1.18"}));`
       );
+      if (isQuartz) {
+        const avg = texture.userData.averageColor;
+        applyGlassBeadShader(shader, {
+          sphereRadius,
+          avgColor: avg ? [avg.r, avg.g, avg.b] : null,
+        });
+      }
     };
-    material.customProgramCacheKey = () => `wrapped-bead-${materialType}-v1`;
+    material.customProgramCacheKey = () => `wrapped-bead-${materialType}-v3`;
     material.needsUpdate = true;
     wrappedBeadMaterialCache.set(cacheKey, material);
   }
@@ -1208,8 +1209,8 @@ function WrappedBeadMesh({ prototype, diameter, textureUrl, materialType }) {
     texture.needsUpdate = true;
   }, [texture, isQuartz]);
   const material = useMemo(
-    () => getWrappedBeadMaterial(texture, materialType),
-    [texture, materialType]
+    () => getWrappedBeadMaterial(texture, materialType, prototype.maxDim * 0.5),
+    [texture, materialType, prototype.maxDim]
   );
   return <BeadMeshShell prototype={prototype} diameter={diameter} material={material} />;
 }
@@ -1498,16 +1499,17 @@ function BraceletCordLayer({
 function SpacerGlbLoadFallback({ width, assetKey }) {
   const radius = getSpacer3DTargetSize(width, assetKey) * 0.5;
   const metalEnv = useSpacerMetalEnvTexture();
+  const catalogSilver = isCatalogSpacerSku(assetKey);
   return (
     <mesh renderOrder={5}>
       <circleGeometry args={[radius, 24]} />
       <meshPhysicalMaterial
         {...RING_METAL}
-        color={new THREE.Color(SPACER_FALLBACK_METAL)}
+        color={new THREE.Color(catalogSilver ? RING_METAL_COLORS.white : SPACER_FALLBACK_METAL)}
         roughness={0.04}
         envMap={metalEnv ?? null}
         envMapIntensity={metalEnv ? SPACER_RING_METAL_ENV_INTENSITY : SPACER_METAL_ENV_INTENSITY}
-        emissive={spacerMetalEmissiveForFinish("yellowGold")}
+        emissive={spacerMetalEmissiveForFinish(catalogSilver ? "silver" : "yellowGold")}
         emissiveIntensity={0.045}
         toneMapped={false}
       />
@@ -2348,7 +2350,7 @@ function SpacerGlbMeshCore({
   const plainWheelColoredCrystal =
     coloredCrystalSpacer && isPlainWheel && !glassWheelFacetedCrystal;
   const stoneWheelLuxury = isStoneWheelSpacerSku(assetKey);
-  // The new spacer collection is yellow gold throughout. Override every mesh,
+  // The new spacer collection (Metalic Beads) is silver throughout. Override every mesh,
   // including pavé/gem-marked meshes in source GLBs, so no dark authored
   // materials show through on designs such as S6 and S7.
   const forceOpaqueMetal = isCatalogSpacerSku(assetKey);

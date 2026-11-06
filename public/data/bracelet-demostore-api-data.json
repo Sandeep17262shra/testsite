@@ -62,7 +62,7 @@
     { "product_type": "charm3d", "product_id": "B3D06", "name": "Silken Tassel", "price": 100, "currency": "USD", "status": "active" },
     { "product_type": "charm3d", "product_id": "B3D07", "name": "Classic Heart", "price": 110, "currency": "USD", "status": "active" },
     { "product_type": "charm3d", "product_id": "B3D08", "name": "Gladiator Helmet", "price": 120, "currency": "USD", "status": "active" },
-    { "product_type": "bracelet_size", "product_id": "BSR1", "name": "Default size (inches)", "price": 5, "currency": "USD", "status": "active" },
+    { "product_type": "bracelet_size", "product_id": "BSR1", "name": "Default size (inches)", "price": 6, "currency": "USD", "status": "active" },
     { "product_type": "bracelet_size", "product_id": "BSR2", "name": "Step gap (inches)", "price": 0.25, "currency": "USD", "status": "active" },
     { "product_type": "bracelet_size", "product_id": "BSR3", "name": "Add-on per step (USD)", "price": 10, "currency": "USD", "status": "active" }
   ]

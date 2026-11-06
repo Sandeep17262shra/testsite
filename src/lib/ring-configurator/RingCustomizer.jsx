@@ -1152,6 +1152,40 @@ const RingCustomizer = forwardRef(({
   const theme3SectionRefs = useRef({});
   const theme3HeaderRef = useRef(null);
   const theme3FooterRef = useRef(null);
+
+  // Option buttons are 100px wide with a 12px gap, so a row always holds a whole
+  // number of columns. Work out how many fit the panel and publish that width as
+  // --ring-grid-w; the section headers (and their prices), engraving field, etc.
+  // use it as max-width so their right edges line up with the button grid
+  // (ring-layout.css also centres that block, so both sides of the panel match).
+  useEffect(() => {
+    const panel = theme3PanelScrollRef.current;
+    if (!panel) return undefined;
+    const BUTTON = 100;
+    const GAP = 12;
+    const update = () => {
+      const cs = window.getComputedStyle(panel);
+      const inner =
+        panel.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+      if (!(inner > 0)) return;
+      const columns = Math.max(1, Math.floor((inner + GAP) / (BUTTON + GAP)));
+      const width = `${columns * BUTTON + (columns - 1) * GAP}px`;
+      // Published on the shared parent (not just the scroll panel) so the footer,
+      // a sibling of the panel, can centre itself on the same grid width.
+      const target = panel.parentElement || panel;
+      if (target.style.getPropertyValue("--ring-grid-w") !== width) {
+        target.style.setProperty("--ring-grid-w", width);
+      }
+    };
+    update();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", update);
+      return () => window.removeEventListener("resize", update);
+    }
+    const observer = new ResizeObserver(update);
+    observer.observe(panel);
+    return () => observer.disconnect();
+  }, []);
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
   const engravingInputRef = useRef(null);
   const engravingBlockRef = useRef(null);

@@ -1,4 +1,6 @@
-import { getGemGlbCharm, DEFAULT_GEM_GLB_STONE_COLOR } from "../shared/glbGemCharms";
+import { getGemGlbCharm } from "../shared/glbGemCharms";
+import { STONE_TYPES, DEFAULT_STONE_TYPE_ID, isStoneCharm, stoneFieldsFor, getStoneTypeLabel, getStoneTypesForCharm, resolveStoneTypeFor } from "../shared/stoneTypes";
+import { preloadStoneTextures } from "../shared/StoneMaterial";
 import React, { useContext, useState, useEffect, useRef, useImperativeHandle, forwardRef } from "react";
 import { BraceletContext } from "../contexts/BraceletContext";
 import * as THREE from 'three';
@@ -10,8 +12,8 @@ import {
     NAME_PENDANT_MAX_LENGTH, DEFAULT_NAME_PENDANT, sanitizePendantText,
 } from '../shared/assets';
 import { Base64 } from "js-base64";
-import { buildCharmAddOnLines } from "../shared/orderSummary";
-import { ATTACHED_CHARMS, HANGING_CHARMS, getAttachedCharm, getHangingCharm, getAttachedCharmIcon, getHangingCharmIcon } from "../shared/attachedCharms";
+import { buildCharmAddOnLines, perCharSuffix } from "../shared/orderSummary";
+import { ATTACHED_CHARMS, HANGING_CHARMS, getAttachedCharm, getHangingCharm, getAttachedCharmIcon, getHangingCharmIcon, charmButtonLabel } from "../shared/attachedCharms";
 import { playBeadAddSound, playBeadRemoveSound, unlockBeadsAudio } from "../../beeds-configurator/beadsSounds";
 import { useClickSound } from "../hooks/useClickSound";
 import { useSectionScrollSpy } from "../shared/useSectionScrollSpy";
@@ -23,6 +25,10 @@ import {
   CHARM_CATEGORY_KEYS,
 } from "@/lib/ring-configurator/jewelryUiTranslations";
 import { NAME_CHAIN_MAX_CHARMS, NAME_CHAIN_MAX_CHARMS_WITH_NAME, getNameChainCharmAngles, getNameChainConfig } from "../bracelet/NameChain";
+import {
+    isPavitraMetalAllowed, isPavitraCharmMetalAllowed, isPavitraCharmCategoryAllowed, isNameCustomizationEnabled,
+    getDefaultMetalHex, getDefaultPurityPrice,
+} from "@/lib/jewelry-shell/pavitraCustomization";
 import {
     getBraceletChainKeyByPath,
     getBraceletMetalId,
@@ -43,6 +49,8 @@ import { getFooterSummaryTaxLabel } from "@/lib/jewelry-shell/summaryTaxLabel";
 import { View360Context } from "../contexts/View360Context";
 import {
   getBraceletChainCatalogPrice,
+  getBraceletCatalogPrice,
+  getBraceletNamePendantFontCatalogPrice,
   getBraceletCharmCatalogPrice,
   getBraceletMetalCatalogPrice,
   getBraceletSizeCatalogPrice,
@@ -53,6 +61,7 @@ import {
   isBraceletCatalogProductActive,
 } from "../braceletPriceConfig";
 import { renderOptionBoxLabel } from "@/lib/ring-configurator/theme3OptionLabels";
+import OptionPrice, { OptionPriceDelta } from "../shared/OptionPrice";
 
 // Match the gem picker used by the ring configurator. These stay separate
 // from the month-based birthstone artwork used in the Birthstones collection.
@@ -66,7 +75,7 @@ const RING_GEMSTONE_SWATCHES = [
     { key: "yellow-sapphire", label: "Yellow Sapphire",  hex: "#FFA94D", image: "/gem-stones/yellow-sapphire.webp" },
 ];
 
-function CardOption({ active, label, image, onClick, disabled = false }) {
+function CardOption({ active, label, image, price, delta, onClick, disabled = false }) {
   return (
     <button
       type="button"
@@ -76,11 +85,12 @@ function CardOption({ active, label, image, onClick, disabled = false }) {
     >
       {image && <img src={image} alt={label || ""} />}
       {label && <span className="theme3-option-box-label">{label}</span>}
+      {delta !== undefined ? <OptionPriceDelta delta={delta} active={active} /> : (price != null && <OptionPrice amount={price} />)}
     </button>
   );
 }
 
-function TextOption({ active, label, onClick, disabled = false, children }) {
+function TextOption({ active, label, price, delta, onClick, disabled = false, children }) {
   const content = children != null ? children : label;
   return (
     <button
@@ -92,6 +102,7 @@ function TextOption({ active, label, onClick, disabled = false, children }) {
       {typeof content === "string" || typeof content === "number"
         ? renderOptionBoxLabel(content)
         : content}
+      {delta !== undefined ? <OptionPriceDelta delta={delta} active={active} /> : (price != null && <OptionPrice amount={price} />)}
     </button>
   );
 }
@@ -187,10 +198,54 @@ function OptionRow({ title, children, className }) {
   );
 }
 
-// Client: only Stone Charms category shown; all others hidden
 const BRACELET_CHARM_CATEGORIES = [
   {
+    id: "birthstones",
+    label: "Birthstones",
+    icon: (active) => (
+      <svg width="22" height="22" viewBox="0 0 30 30" fill="none">
+        <path d="M11.5 8H18.5L22 11.5V18.5L18.5 22H11.5L8 18.5V11.5L11.5 8Z" stroke={active ? "white" : "#171717"} strokeWidth="1.5" strokeLinejoin="round" />
+        <path d="M8 11.5H22" stroke={active ? "white" : "#171717"} strokeWidth="1.2" />
+        <path d="M8 18.5H22" stroke={active ? "white" : "#171717"} strokeWidth="1.2" />
+      </svg>
+    ),
+  },
+  {
+    id: "diamonds",
+    label: "Diamond",
+    icon: (active) => (
+      <svg width="22" height="22" viewBox="0 0 30 30" fill="none">
+        <path d="M9 10H21L24 13.5L15 23.5L6 13.5L9 10Z" stroke={active ? "white" : "#171717"} strokeLinejoin="round" strokeWidth="1.3"/>
+        <path d="M9 10L11.5 13.5M21 10L18.5 13.5M6 13.5H24M11.5 13.5L15 23.5L18.5 13.5" stroke={active ? "white" : "#171717"} strokeLinejoin="round" strokeWidth="1"/>
+      </svg>
+    ),
+  },
+  {
+    id: "initial",
+    label: "Initial",
+    icon: (active) => (
+      <svg width="22" height="22" viewBox="0 0 30 30" fill="none">
+        <circle cx="15" cy="15" r="11" stroke={active ? "white" : "#171717"} strokeWidth="1.4" />
+        <text x="15" y="19" textAnchor="middle" fill={active ? "white" : "#171717"} fontSize="12" fontWeight="bold" fontFamily="Arial">A</text>
+      </svg>
+    ),
+  },
+  {
+    id: "2d",
+    label: "2D Charms",
+    icon: (active) => (
+      <img
+        src="/images/2d-charm.svg"
+        alt="2D Charms"
+        width={22}
+        height={22}
+        style={{ filter: active ? "invert(1) brightness(2)" : "none" }}
+      />
+    ),
+  },
+  {
     // Stone charms sit IN the chain (the chain runs out of their link rings).
+    // Same icon button as the Diamond one; the name shows beside the row when selected.
     id: "attached",
     label: "Stone Charms",
     icon: (active) => (
@@ -200,12 +255,19 @@ const BRACELET_CHARM_CATEGORIES = [
       </svg>
     ),
   },
-  // Hidden for this client: birthstones, diamonds, initial, 2d, 3d
-  // { id: "birthstones", label: "Birthstones", ... },
-  // { id: "diamonds", label: "Diamond", ... },
-  // { id: "initial", label: "Initial", ... },
-  // { id: "2d", label: "2D Charms", ... },
-  // { id: "3d", label: "3D Charms", ... },
+  {
+    id: "3d",
+    label: "3D Charms",
+    icon: (active) => (
+      <img
+        src="/images/3d-charm.svg"
+        alt="3D Charms"
+        width={22}
+        height={22}
+        style={{ filter: active ? "invert(1) brightness(2)" : "none" }}
+      />
+    ),
+  },
 ];
 
 const BraceletControls = forwardRef(function BraceletControls({ activeSection = "bracelet", onSectionChange }, ref) {
@@ -250,6 +312,9 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
 
     const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
     const [charmGemstoneColor, setCharmGemstoneColor] = useState("#4AE2A1"); // default ring emerald green
+    // The stone the next stone charm is set with (the picker under "Stone Charms").
+    const [charmStoneType, setCharmStoneType] = useState(DEFAULT_STONE_TYPE_ID);
+    useEffect(() => { preloadStoneTextures(STONE_TYPES); }, []);
     const [dragState, setDragState] = useState(null); // { pointerId, fromIndex, currentIndex, startX, offsetX }
     const [showCopied, setShowCopied] = useState(false);
     const [addedToCart, setAddedToCart] = useState(false);
@@ -273,14 +338,15 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
     });
 
     const metalOptions = [
-        // Client: only Silver and Yellow Gold are shown
+        // `color` = swatch colour, same as the ring's GOLD_COLORS (Silver has no ring equivalent).
         { code: "SL", alt: "Silver 925",  hex: "#B8B8B8", color: "#CFCFCF", price: 100 },
         { code: "YG", alt: "Yellow Gold", hex: "#FFD280", color: "#FFD280", price: 100 },
-        // Hidden for this client:
-        // { code: "RG", alt: "Rose Gold",   hex: "#FFBAA3", color: "#E6B08F", price: 100 },
-        // { code: "PL", alt: "Platinum",    hex: "#e5e4e2", color: "#E5E4E2", price: 200 },
-        // { code: "WG", alt: "White Gold",  hex: "#DBDBDB", color: "#F1F1EF", price: 100 },
+        { code: "RG", alt: "Rose Gold",   hex: "#FFBAA3", color: "#E6B08F", price: 100 },
+        { code: "PL", alt: "Platinum",    hex: "#e5e4e2", color: "#E5E4E2", price: 200 },
+        { code: "WG", alt: "White Gold",  hex: "#DBDBDB", color: "#F1F1EF", price: 100 },
     ];
+    // Metals the store actually offers; metalOptions stays complete for lookups.
+    const selectableMetalOptions = metalOptions.filter((metal) => isPavitraMetalAllowed(metal.code));
 
     const purityOptions = [
         { label: "9K", value: "9K", price: 100 },
@@ -288,31 +354,19 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
         { label: "18K", value: "18K", price: 300 },
     ];
 
-    const bSizes = [
-        { size: "4", price: 0 },
-        { size: "4.25", price: 10 },
-        { size: "4.5", price: 20 },
-        { size: "4.75", price: 20 },
-        { size: "5", price: 30 },
-        { size: "5.25", price: 30 },
-        { size: "5.5", price: 40 },
-        { size: "5.75", price: 40 },
-        { size: "6", price: 50 },
-        { size: "6.25", price: 50 },
-        { size: "6.5", price: 60 },
-        { size: "6.75", price: 60 },
-        { size: "7", price: 70 },
-        { size: "7.25", price: 70 },
-        { size: "7.5", price: 80 },
-        { size: "7.75", price: 80 },
-        { size: "8", price: 90 },
-        { size: "8.25", price: 90 },
-    ];
+    // Selectable bracelet lengths: 6" to 9" in 0.25" steps (the step follows the
+    // store catalogue's BSR2 when it is loaded).
+    const BRACELET_SIZE_MIN = 6;
+    const BRACELET_SIZE_MAX = 9;
+    const BRACELET_SIZE_STEP = 0.25;
 
     // Only the generated name chain can open up around a name plate.
     const supportsNamePendant = BRACELET_NAME_CHAIN_PATHS.includes(braceletPath);
+    // Store setting: hide the name plate editor but keep the chain capability
+    // (stone charms below still key off supportsNamePendant).
+    const showNameCustomization = supportsNamePendant && isNameCustomizationEnabled();
     const namePendantText = sanitizePendantText(namePendant?.text || "");
-    const hasNamePendant = false; // Hidden for this client (name bracelet disabled)
+    const hasNamePendant = supportsNamePendant && Boolean(namePendant?.enabled) && namePendantText.length > 0;
     // Stone charms sit IN the chain, which only the generated chains can do.
     const supportsAttachedCharm = supportsNamePendant;
     // 5 charms on a plain chain; 4 with a name (2 each side, between the name
@@ -333,10 +387,10 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
         setNamePendant((prev) => ({ ...(prev || DEFAULT_NAME_PENDANT), ...updates }));
 
     useEffect(() => {
-        if (customizeType !== "charms") {
+        if (!showNameCustomization && customizeType === "text") {
             setCustomizeType("charms");
         }
-    }, [customizeType]);
+    }, [showNameCustomization, customizeType]);
 
     const isPlatinum = String(braceletMetal || "").toLowerCase() === "#e5e4e2";
     const isSilver = String(braceletMetal || "").toLowerCase() === "#b8b8b8" || String(braceletMetal || "").toLowerCase() === "#c0c0c0";
@@ -352,12 +406,18 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
         metalFallback
     );
     const sizeSettings = getBraceletSizeCatalogSettings();
-    const braceletSizeOptions = sizeSettings
-        ? Array.from({ length: Math.max(1, Math.floor((8.25 - sizeSettings.baseInches) / sizeSettings.stepGap) + 1) }, (_, index) => {
-            const size = Number((sizeSettings.baseInches + index * sizeSettings.stepGap).toFixed(2));
-            return { size: String(size), price: index * sizeSettings.stepPrice };
-        })
-        : bSizes;
+    const braceletSizeStep = sizeSettings?.stepGap ?? BRACELET_SIZE_STEP;
+    const braceletSizeOptions = Array.from(
+        { length: Math.floor((BRACELET_SIZE_MAX - BRACELET_SIZE_MIN) / braceletSizeStep + 1e-9) + 1 },
+        (_, index) => {
+            const size = Number((BRACELET_SIZE_MIN + index * braceletSizeStep).toFixed(2));
+            // Same formula as getBraceletSizeCatalogPrice: steps above the catalogue's base size.
+            const price = sizeSettings
+                ? Math.max(0, Math.round((size - sizeSettings.baseInches) / sizeSettings.stepGap)) * sizeSettings.stepPrice
+                : index * 10;
+            return { size: String(size), price };
+        }
+    );
     const sizeTierFallback =
         braceletSizeOptions.find((option) => option.size === braceletSize)?.price ?? currentBraceletSizePrice;
     const sizeComponentPrice = getBraceletSizeCatalogPrice(braceletSize, sizeTierFallback);
@@ -390,12 +450,12 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
         setCurrentBraceletSizePrice(getBraceletSizeCatalogPrice(braceletSize, fallback));
     }, [braceletSize, braceletPriceConfigVersion]);
 
-    // BSR1 is the merchant's first and default selectable bracelet size.
+    // If the current size is not one of the selectable sizes (old shared link, catalogue
+    // change), fall back to the first one.
     useEffect(() => {
         if (!sizeSettings) return;
-        const defaultSize = String(sizeSettings.baseInches);
-        if (!braceletSizeOptions.some((option) => option.size === braceletSize) || braceletSize === "5") {
-            setBraceletSize(defaultSize);
+        if (!braceletSizeOptions.some((option) => option.size === braceletSize)) {
+            setBraceletSize(braceletSizeOptions[0].size);
         }
     }, [braceletPriceConfigVersion]);
 
@@ -536,9 +596,7 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
 
     const addMetalVariantCharm = (charm, forceNew = false) => {
         const number = getCharmNumberFromPath(charm.path);
-        const selectedMetal = BRACELET_CHARM_METAL_SWATCHES.find((m) => m.hex === charmMetal)
-            ?? BRACELET_CHARM_METAL_SWATCHES.find((m) => m.key === "WG")
-            ?? BRACELET_CHARM_METAL_SWATCHES[0];
+        const selectedMetal = BRACELET_CHARM_METAL_SWATCHES.find((m) => m.hex === charmMetal) ?? BRACELET_CHARM_METAL_SWATCHES.find((m) => m.key === "WG");
         const variant = {
             path: getImageCharmPath(number, selectedMetal.key),
             imageCharmNumber: number,
@@ -578,7 +636,7 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
             ...(glbPreview ? { preview: glbPreview } : {}),
             // New gem charms default to silver; their metal can still be
             // changed later from the shared Charm Metal control.
-            ...(isGemCharm ? { bodyColor: getGemGlbCharm(charmPath) ? charmMetal : "#C0C0C0", gemstoneColor: getGemGlbCharm(charmPath) ? DEFAULT_GEM_GLB_STONE_COLOR : charmGemstoneColor } : {}),
+            ...(isGemCharm ? { bodyColor: getGemGlbCharm(charmPath) ? charmMetal : "#C0C0C0", ...(getGemGlbCharm(charmPath) ? stoneFieldsFor(resolveStoneTypeFor((!forceNew && isStoneCharm(charms[activeCharmSlot]) && charms[activeCharmSlot].stoneType) || charmStoneType, null)) : { gemstoneColor: charmGemstoneColor }) } : {}),
         };
         if (!forceNew && activeCharmSlot !== null && charms[activeCharmSlot]) {
             const updated = [...charms];
@@ -617,7 +675,7 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
             path: def.path,
             name: `${def.name} Charm`,
             bodyColor: charmMetal,
-            gemstoneColor: "#F4F8FF",
+            ...stoneFieldsFor(resolveStoneTypeFor((replaceActive && isStoneCharm(charms[activeCharmSlot]) && charms[activeCharmSlot].stoneType) || charmStoneType, `hanging:${def.id}`)),
         };
         const placed = charms.filter(Boolean);
         const replacing = replaceActive && activeCharmSlot !== null && charms[activeCharmSlot];
@@ -639,7 +697,7 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
             path: def.path,
             name: `${def.name} Stone Charm`,
             bodyColor: charmMetal,
-            gemstoneColor: "#F4F8FF",
+            ...stoneFieldsFor(resolveStoneTypeFor((replaceActive && isStoneCharm(charms[activeCharmSlot]) && charms[activeCharmSlot].stoneType) || charmStoneType, `attached:${def.id}`)),
         };
         const placed = charms.filter(Boolean);
         const replacing = replaceActive && activeCharmSlot !== null && charms[activeCharmSlot];
@@ -684,6 +742,16 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
     const selectInitialLetter = (letter) => {
         setInitialLetter(letter);
         addCustomCharm({ type: "initial", letter, fontStyle: initialFont, metalColor: charmMetal });
+    };
+
+    // Pick the stone for the stone charm in the active slot (and for the next one added).
+    const selectCharmStone = (stone) => {
+        playClick();
+        setCharmStoneType(stone.id);
+        const active = activeCharmSlot !== null ? charms[activeCharmSlot] : null;
+        if (!isStoneCharm(active)) return;
+        const fields = stoneFieldsFor(stone.id);
+        setCharms(charms.map((c, i) => (i === activeCharmSlot ? { ...c, ...fields } : c)));
     };
 
     const setActiveCharmMetal = (metal) => {
@@ -803,17 +871,18 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
         setBraceletPath(BRACELET_STYLES[0].path);
         setCharms([]);
         setActiveCharmSlot(0);
-        applyMaterialBracelet('#FFD280', '/textures/silver.jpg');
-        applyMaterial('#FFD280', '/textures/silver.jpg');
+        const defaultMetalHex = getDefaultMetalHex("bracelet", "#FFD280");
+        applyMaterialBracelet(defaultMetalHex, '/textures/silver.jpg');
+        applyMaterial(defaultMetalHex, '/textures/silver.jpg');
         setTexture(null);
-        setBraceletMetal("#FFD280");
+        setBraceletMetal(defaultMetalHex);
         setBraceletPurity("9K");
         setCurrentMetalPrice(100);
-        setCurrentPurityPrice(100);
-        setBraceletSize("5");
-        setCurrentBraceletSizePrice(30);
-        setCharmMetal("#FFD280");
-        setPendantMetalHex("#FFD280");
+        setCurrentPurityPrice(getDefaultPurityPrice());
+        setBraceletSize(String(BRACELET_SIZE_MIN));
+        setCurrentBraceletSizePrice(0);
+        setCharmMetal(defaultMetalHex);
+        setPendantMetalHex(defaultMetalHex);
         // Reset gives a plain chain: no name on the bracelet.
         setNamePendant({ ...DEFAULT_NAME_PENDANT, text: "", enabled: false });
         setResetObj({
@@ -903,7 +972,7 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
             if (charm.type === "initial") return `Initial "${charm.letter || 'A'}"`;
             if (charm.type === "birthstone") return BRACELET_STONE_COLOR_SWATCHES.find((s) => s.hex === charm.gemstoneColor)?.label || "Birthstone";
             if (charm.type === "diamond") return charm.name || "Diamond Charm";
-            return getCharmData(charm)?.name || "Charm";
+            return [getCharmData(charm)?.name || "Charm", isStoneCharm(charm) ? getStoneTypeLabel(charm.stoneType) : null].filter(Boolean).join(" ");
         }).join(", ");
 
         const selectedStyle = BRACELET_STYLES[selectedBracelet];
@@ -983,14 +1052,8 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
     const nextStepCopy = "Add your bracelet to cart";
 
     const charms2D = BRACELET_CHARMS.slice(12, 27);
-    // Client: only Camel, Elephant, Princess, and Peacock Feather (patel) 3D charms
-    const CLIENT_3D_CHARM_PATHS = new Set([
-        "/bc-assets/bracelet_models/camel.glb",
-        "/bc-assets/bracelet_models/elephant.glb",
-        "/bc-assets/bracelet_models/princess.glb",
-        "/bc-assets/bracelet_models/patel.glb",
-    ]);
-    const charms3D = BRACELET_CHARMS.slice(0, 12).filter((c) => CLIENT_3D_CHARM_PATHS.has(c.path));
+    // The 4 gem charms live under Stone Charms, not here.
+    const charms3D = BRACELET_CHARMS.slice(0, 12).filter((c) => !getGemGlbCharm(c.path));
     const braceletChainId = (path) => {
         const key = getBraceletChainKeyByPath(path);
         return key ? BRACELET_CHAIN_IDS[key]?.id : undefined;
@@ -999,6 +1062,17 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
     const braceletFontId = (font) => NAME_BRACELET_FONT_IDS[font.id]?.id;
     const braceletMetalLabel = (metal) =>
         getBraceletMetalCatalogLabels(braceletMetalId(metal), metal.alt).metal;
+    // The metal part of the total if this metal were selected at the current purity
+    // (Platinum / Silver have no purity). Same formula as `metalComponentPrice`:
+    // the metal's own base price plus the purity price, unless the catalogue has a price.
+    const braceletMetalPrice = (metal) => {
+        const noPurity = metal.alt === "Platinum" || metal.alt === "Silver 925";
+        const purityPrice = noPurity ? 0 : (purityOptions.find((option) => option.value === braceletPurity)?.price ?? 0);
+        return getBraceletMetalCatalogPrice(metal.hex, braceletPurity, (metal.price ?? 0) + purityPrice);
+    };
+    // The metal part of the total if this purity were selected on the current metal.
+    const braceletPurityComponentPrice = (option) =>
+        getBraceletMetalCatalogPrice(braceletMetal, option.value, currentMetalPrice + option.price);
     const braceletPurityOptionLabel = (option) =>
         getBraceletMetalCatalogLabels(getBraceletMetalId(braceletMetal, option.value), "", option.label).purity;
     const braceletStyleLabel = (bracelet) =>
@@ -1010,6 +1084,7 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
         return key ? t(key) : category.label;
     };
     const availableCharmCategories = BRACELET_CHARM_CATEGORIES.filter((cat) => {
+        if (!isPavitraCharmCategoryAllowed(cat.id)) return false;
         if (cat.id === "birthstones") {
             return BRACELET_STONE_COLOR_SWATCHES.some((stone) =>
                 isBraceletCatalogProductActive(getBraceletBirthstoneIdByHex(stone.hex))
@@ -1021,7 +1096,13 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
             );
         }
         if (cat.id === "initial") return isBraceletCatalogProductActive("BIC1");
-        if (cat.id === "attached") return true;
+        if (cat.id === "attached") {
+            return [
+                ...ATTACHED_CHARMS.map((d) => ({ path: d.path })),
+                ...BRACELET_CHARMS.filter((c) => getGemGlbCharm(c.path)).map((c) => ({ path: c.path })),
+                ...HANGING_CHARMS.map((d) => ({ path: d.path })),
+            ].some((c) => isBraceletCatalogProductActive(getBraceletDiamondCharmIdByPath(c.path)));
+        }
         if (cat.id === "2d") {
             return charms2D.some((charm) =>
                 isBraceletCatalogProductActive(getBracelet2DCharmIdByNumber(getCharmNumberFromPath(charm.path)))
@@ -1048,7 +1129,7 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
 
     useEffect(() => {
         if (!hasPurity) return;
-        const validMetals = metalOptions.filter((metal) => isBraceletCatalogProductActive(braceletMetalId(metal)));
+        const validMetals = selectableMetalOptions.filter((metal) => isBraceletCatalogProductActive(braceletMetalId(metal)));
         if (validMetals.length && !validMetals.some((metal) => metal.hex === braceletMetal)) {
             setBraceletMetal(validMetals[0].hex);
         }
@@ -1122,12 +1203,12 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
         ...buildCharmAddOnLines(placedCharms, {
             getPrice: getSummaryCharmPrice,
             getBirthstoneLabel: (charm) => BRACELET_STONE_COLOR_SWATCHES.find((s) => s.hex?.toLowerCase() === charm.gemstoneColor?.toLowerCase())?.label,
-            getName: (charm) => charm.name || getCharmData(charm)?.name || t("label.charm"),
+            getName: (charm) => [charm.name || getCharmData(charm)?.name || t("label.charm"), isStoneCharm(charm) ? getStoneTypeLabel(charm.stoneType) : null].filter(Boolean).join(" \u00b7 "),
         }),
         ...(hasNamePendant
             ? [{
                 key: "text",
-                label: `${t("summary.textPrefix")} \u201c${namePendantText}\u201d \u00b7 ${braceletFontLabel(pendantFont || NAME_PENDANT_FONTS[0])}`,
+                label: `${t("summary.textPrefix")} \u201c${namePendantText}\u201d${perCharSuffix(namePendantTextPrice, namePendantText)} \u00b7 ${braceletFontLabel(pendantFont || NAME_PENDANT_FONTS[0])}`,
                 price: namePendantTextPrice,
             }]
             : []),
@@ -1244,7 +1325,6 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
                         aria-label={t("nav.jewelryAria")}
                     >
                         <div className="jewelry-category-row-options">
-                        {/* CLIENT CUSTOMIZATION: necklace button hidden */}
                         {isCategoryAllowed(parent || resolveParentUrl(), "necklace") && (
                             <button
                                 type="button"
@@ -1290,6 +1370,7 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
                                     active={selectedBracelet === index}
                                     image={withChainIconVersion(BRACELET_CHAIN_CARD_IMAGE_BY_PATH[bracelet.path])}
                                     label={braceletStyleLabel(bracelet)}
+                                    delta={getBraceletChainCatalogPrice(bracelet.path, bracelet.price ?? 0) - chainBasePrice}
                                     onClick={() => {
                                         playClick();
                                         setSelectedBracelet(index);
@@ -1307,13 +1388,14 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
                                 key={opt.size}
                                 active={braceletSize === opt.size}
                                 label={formatCountedLabel(t("bracelet.length.inches"), opt.size)}
+                                price={opt.price}
                                 onClick={() => handleBraceletSize(opt)}
                             />
                         ))}
                     </OptionRow>
 
                     <OptionRow title={t("option.metal")}>
-                        {metalOptions.filter((metal) => isBraceletCatalogProductActive(braceletMetalId(metal))).map((metal) => (
+                        {selectableMetalOptions.filter((metal) => isBraceletCatalogProductActive(braceletMetalId(metal))).map((metal) => (
                             <button
                                 key={metal.alt}
                                 type="button"
@@ -1323,6 +1405,7 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
                                 style={{ backgroundColor: metal.color || metal.hex }}
                             >
                                 <small className="theme3-option-box-label">{braceletMetalLabel(metal)}</small>
+                                <OptionPriceDelta delta={braceletMetalPrice(metal) - metalComponentPrice} active={braceletMetal === metal.hex} />
                             </button>
                         ))}
                     </OptionRow>
@@ -1334,6 +1417,7 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
                                     key={option.value}
                                     active={braceletPurity === option.value}
                                     label={braceletPurityOptionLabel(option)}
+                                    delta={braceletPurityComponentPrice(option) - metalComponentPrice}
                                     onClick={() => handlePurityClick(option)}
                                 />
                             ))}
@@ -1348,9 +1432,9 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
                 >
                     <header className="theme3-option-section-header">
                         <span className="theme3-section-heading">{t("section.customize")}</span>
-                        {charmsPrice > 0 && (
+                        {(customizeType === "text" ? namePendantTextPrice : charmsPrice) > 0 && (
                             <span className="theme3-section-header-price theme3-section-heading">
-                                ${charmsPrice.toLocaleString()}
+                                ${(customizeType === "text" ? namePendantTextPrice : charmsPrice).toLocaleString()}
                             </span>
                         )}
                     </header>
@@ -1481,8 +1565,7 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
                         )}
                     </div>
 
-                    {/* Hidden for this client: name bracelet */}
-                    {/* {supportsNamePendant && (
+                    {showNameCustomization && (
                         <OptionRow title={t("option.category")}>
                             <TextOption
                                 active={customizeType === "charms"}
@@ -1495,9 +1578,9 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
                                 onClick={() => { playClick(); setCustomizeType("text"); }}
                             />
                         </OptionRow>
-                    )} */}
+                    )}
 
-                    {false && customizeType === "text" && supportsNamePendant ? (
+                    {customizeType === "text" && showNameCustomization ? (
                         <>
                             <div className="theme3-engraving-controls">
                                 <label>
@@ -1553,6 +1636,7 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
                                     >
                                         <span style={{ fontSize: "16px", fontWeight: "bold" }}>{font.sample}</span>
                                         <span>{braceletFontLabel(font)}</span>
+                                        <OptionPrice amount={getBraceletNamePendantFontCatalogPrice(font.id, 20) || null} suffix="/char" />
                                     </TextOption>
                                 ))}
                             </OptionRow>
@@ -1609,7 +1693,7 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
                     </section>
 
                     <OptionRow title={t("option.metal")}>
-                        {BRACELET_CHARM_METAL_SWATCHES.map((metal) => (
+                        {BRACELET_CHARM_METAL_SWATCHES.filter((metal) => isPavitraCharmMetalAllowed(metal.key)).map((metal) => (
                             <button
                                 key={`charm-metal-${metal.label}`}
                                 type="button"
@@ -1635,6 +1719,7 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
                                 >
                                     <img src={stone.image} alt={stone.label} />
                                     <span className="theme3-option-box-label">{getBraceletCatalogLabel(getBraceletBirthstoneIdByHex(stone.hex), stone.label)}</span>
+                                    <OptionPrice amount={getBraceletCatalogPrice(getBraceletBirthstoneIdByHex(stone.hex), 50)} />
                                 </button>
                             ))}
                         </OptionRow>
@@ -1647,7 +1732,8 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
                                     key={charm.path}
                                     active={activeCharmObj?.type === 'diamond' && activeCharmObj.path === charm.path}
                                     image={charm.preview}
-                                    label={getBraceletCatalogLabel(getBraceletDiamondCharmIdByPath(charm.path), charm.name)}
+                                    label={charmButtonLabel(getBraceletCatalogLabel(getBraceletDiamondCharmIdByPath(charm.path), charm.name))}
+                                    price={getBraceletCatalogPrice(getBraceletDiamondCharmIdByPath(charm.path), charm.price ?? 50)}
                                     onClick={() => addDiamondCharm(charm)}
                                 />
                             ))}
@@ -1656,33 +1742,56 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
 
                     {activeCharmCategory === "attached" && (
                         <OptionRow title="Stone Charms" className="gb-option-row--two-line theme3-initial-grid">
-                            {supportsAttachedCharm && ATTACHED_CHARMS.map((def) => (
+                            {supportsAttachedCharm && ATTACHED_CHARMS.filter((def) => isBraceletCatalogProductActive(getBraceletDiamondCharmIdByPath(def.path))).map((def) => (
                                 <CardOption
                                     key={def.id}
                                     image={getAttachedCharmIcon(def.id)}
                                     active={activeCharmObj?.type === "attached" && activeCharmObj.attachedId === def.id}
-                                    label={def.name}
+                                    label={charmButtonLabel(def.name)}
+                                    price={getBraceletCatalogPrice(getBraceletDiamondCharmIdByPath(def.path), def.price ?? 150)}
                                     onClick={() => addAttachedCharm(def)}
                                 />
                             ))}
-                            {BRACELET_CHARMS.filter((c) => getGemGlbCharm(c.path)).map((charm) => (
+                            {BRACELET_CHARMS.filter((c) => getGemGlbCharm(c.path) && isBraceletCatalogProductActive(getBraceletDiamondCharmIdByPath(c.path))).map((charm) => (
                                 <CardOption
                                     key={charm.path}
                                     image={getGemGlbCharm(charm.path)?.icon}
                                     active={activeCharmObj?.path === charm.path}
-                                    label={charm.name.replace(" Charm", "")}
+                                    label={charmButtonLabel(charm.name.replace(" Charm", ""))}
+                                    price={getBraceletCatalogPrice(getBraceletDiamondCharmIdByPath(charm.path), charm.price ?? 130)}
                                     onClick={() => addCharm(charm.path)}
                                 />
                             ))}
-                            {HANGING_CHARMS.map((def) => (
+                            {HANGING_CHARMS.filter((def) => isBraceletCatalogProductActive(getBraceletDiamondCharmIdByPath(def.path))).map((def) => (
                                 <CardOption
                                     key={def.id}
                                     image={getHangingCharmIcon(def.id)}
                                     active={activeCharmObj?.type === "hanging" && activeCharmObj.hangingId === def.id}
-                                    label={def.name}
+                                    label={charmButtonLabel(def.name)}
+                                    price={getBraceletCatalogPrice(getBraceletDiamondCharmIdByPath(def.path), def.price ?? 150)}
                                     onClick={() => addHangingCharm(def)}
                                 />
                             ))}
+                        </OptionRow>
+                    )}
+
+                    {activeCharmCategory === "attached" && (
+                        <OptionRow title="Stone Type" className="gb-option-row--two-line theme3-initial-grid">
+                            {getStoneTypesForCharm(isStoneCharm(activeCharmObj) ? activeCharmObj : null).map((stone) => {
+                                const activeStone = isStoneCharm(activeCharmObj) ? activeCharmObj.stoneType : charmStoneType;
+                                return (
+                                    <button
+                                        key={stone.id}
+                                        type="button"
+                                        className={`gb-stone-card-option ${activeStone === stone.id ? "active" : ""}`}
+                                        title={stone.label}
+                                        onClick={() => selectCharmStone(stone)}
+                                    >
+                                        <img src={stone.texture} alt={stone.label} />
+                                        <span className="theme3-option-box-label">{stone.label}</span>
+                                    </button>
+                                );
+                            })}
                         </OptionRow>
                     )}
 
@@ -1699,6 +1808,7 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
                                     <span style={{ fontSize: "64px", fontWeight: "700", color: "#171717", lineHeight: 1 }}>
                                         {letter}
                                     </span>
+                                    <OptionPrice amount={getBraceletCharmCatalogPrice({ type: "initial" }, 40)} />
                                 </button>
                             ))}
                         </OptionRow>
@@ -1714,7 +1824,8 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
                                         active={isImageCharmNumber(activeCharmObj?.imageCharmNumber ?? getCharmNumberFromPath(activeCharmObj?.path))
                                             && getCharmNumberFromPath(activeCharmObj?.path) === charmNumber}
                                         image={getImageCharmIconPath(charmNumber)}
-                                        label={getBraceletCatalogLabel(getBracelet2DCharmIdByNumber(charmNumber), charm.name)}
+                                        label={charmButtonLabel(getBraceletCatalogLabel(getBracelet2DCharmIdByNumber(charmNumber), charm.name))}
+                                        price={getBraceletCatalogPrice(getBracelet2DCharmIdByNumber(charmNumber), charm.price ?? 50)}
                                         onClick={() => addMetalVariantCharm(charm)}
                                     />
                                 );
@@ -1730,7 +1841,8 @@ const BraceletControls = forwardRef(function BraceletControls({ activeSection = 
                                         key={charm.path}
                                         active={activeCharmObj?.path === charm.path}
                                         image={charm.preview || `/bc-assets/images/charms/charm${BRACELET_CHARMS.indexOf(charm) + 1}.webp`}
-                                        label={getBraceletCatalogLabel(getBracelet3DCharmIdByPath(charm.path), charm.name)}
+                                        label={charmButtonLabel(getBraceletCatalogLabel(getBracelet3DCharmIdByPath(charm.path), charm.name))}
+                                        price={getBraceletCatalogPrice(getBracelet3DCharmIdByPath(charm.path), charm.price ?? 50)}
                                         onClick={() => addCharm(charm.path)}
                                     />
                                 );

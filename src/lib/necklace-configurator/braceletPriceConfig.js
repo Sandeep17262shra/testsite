@@ -126,10 +126,11 @@ export function getBraceletCharmCatalogPrice(charm, fallbackPrice = 0) {
     }
   }
 
-  if (charm.type === "diamond" && charm.path) {
+  if (charm.path) {
     const id = getBraceletDiamondCharmIdByPath(charm.path);
     if (id) return getBraceletCatalogPrice(id, fallbackPrice);
   }
+
 
   if (charm.type === "initial") {
     return getBraceletCatalogPrice(BRACELET_INITIAL_CHARM_ID.initial.id, fallbackPrice);

@@ -1,8 +1,10 @@
 import React, { useContext, useEffect, useState, useRef, useCallback, useMemo } from "react";
+import { usePanelScrollPassthrough } from "../jewelry-shell/usePanelScrollPassthrough";
 import NecklaceScene from "./necklace/Necklace";
 import BraceletScene from "./bracelet/Bracelet";
 import './necklace/NecklaceApp.css';
 import './bracelet/BraceletApp.css';
+import './jewelry-layout.css';
 import Controls from "./components/Controls";
 import BraceletControls from "./components/BraceletControls";
 import { View360Context } from "./contexts/View360Context";
@@ -49,10 +51,7 @@ function NecklaceConfigurator() {
   const isFirstJewelryMountRef = useRef(true);
   const [isSwitchingJewelryType, setIsSwitchingJewelryType] = useState(false);
   const controlsRef = useRef(null);
-  const theme3PanelScrollRef = useRef(null);
   const isMobileRef = useRef(false);
-  const wasAtPanelBottomRef = useRef(false);
-  const wasAtPanelTopRef = useRef(false);
 
   const isBracelet = jewelryType === "bracelet";
   const views = useMemo(() => {
@@ -143,100 +142,8 @@ function NecklaceConfigurator() {
     return () => clearTimeout(timer);
   }, [jewelryType]);
 
-  // --- Scroll passthrough: find the scroll container on mount ---
-  useEffect(() => {
-    const panelScroll = document.querySelector(".theme3-root .theme3-panel-scroll");
-    if (panelScroll) theme3PanelScrollRef.current = panelScroll;
-  }, []);
-
-  // --- Track scroll position (top/bottom boundaries) for passthrough ---
-  useEffect(() => {
-    const panelScroll = theme3PanelScrollRef.current;
-    if (!panelScroll) return undefined;
-
-    const isEmbedded = typeof window !== "undefined" && window.self !== window.top;
-    if (!isEmbedded) return undefined;
-
-    const updateScrollPosition = () => {
-      const atBottom = panelScroll.scrollTop + panelScroll.clientHeight >= panelScroll.scrollHeight - 5;
-      const atTop = panelScroll.scrollTop <= 5;
-      wasAtPanelBottomRef.current = atBottom;
-      wasAtPanelTopRef.current = atTop;
-    };
-
-    panelScroll.addEventListener("scroll", updateScrollPosition, { passive: true });
-    updateScrollPosition();
-
-    return () => {
-      panelScroll.removeEventListener("scroll", updateScrollPosition);
-      wasAtPanelBottomRef.current = false;
-      wasAtPanelTopRef.current = false;
-    };
-  }, []);
-
-  // --- Forward scroll past panel boundaries to parent page ---
-  useEffect(() => {
-    const panelScroll = theme3PanelScrollRef.current;
-    if (!panelScroll) return undefined;
-
-    const isEmbedded = typeof window !== "undefined" && window.self !== window.top;
-    if (!isEmbedded) return undefined;
-
-    // The Text/Charms toggle can change scrollHeight without emitting a scroll
-    // event. Read the dimensions at input time so a stale "at bottom" value
-    // cannot swallow the first downward scroll after that layout change.
-    const getPanelBounds = () => ({
-      atBottom: panelScroll.scrollTop + panelScroll.clientHeight >= panelScroll.scrollHeight - 5,
-      atTop: panelScroll.scrollTop <= 5,
-    });
-
-    const handleWheel = (e) => {
-      const { atBottom, atTop } = getPanelBounds();
-      if (atBottom && e.deltaY > 0) {
-        e.preventDefault();
-        try { window.parent.postMessage({ type: "necklace-configurator:scroll", deltaY: e.deltaY }, "*"); } catch {}
-      } else if (atTop && e.deltaY < 0) {
-        e.preventDefault();
-        try { window.parent.postMessage({ type: "necklace-configurator:scroll", deltaY: e.deltaY }, "*"); } catch {}
-      }
-    };
-
-    let lastTouchY = null;
-    const handleTouchStart = (e) => {
-      const { atBottom, atTop } = getPanelBounds();
-      if (!atBottom && !atTop) { lastTouchY = null; return; }
-      lastTouchY = e.touches[0]?.clientY ?? null;
-    };
-    const handleTouchMove = (e) => {
-      const { atBottom, atTop } = getPanelBounds();
-      if ((!atBottom && !atTop) || lastTouchY === null) return;
-      const currentY = e.touches[0]?.clientY;
-      if (currentY == null) return;
-      const delta = lastTouchY - currentY;
-      if (atBottom && delta > 0) {
-        e.preventDefault();
-        lastTouchY = currentY;
-        try { window.parent.postMessage({ type: "necklace-configurator:scroll", deltaY: delta }, "*"); } catch {}
-      } else if (atTop && delta < 0) {
-        e.preventDefault();
-        lastTouchY = currentY;
-        try { window.parent.postMessage({ type: "necklace-configurator:scroll", deltaY: delta }, "*"); } catch {}
-      }
-    };
-    const handleTouchEnd = () => { lastTouchY = null; };
-
-    panelScroll.addEventListener("wheel", handleWheel, { passive: false });
-    panelScroll.addEventListener("touchstart", handleTouchStart, { passive: true });
-    panelScroll.addEventListener("touchmove", handleTouchMove, { passive: false });
-    panelScroll.addEventListener("touchend", handleTouchEnd, { passive: true });
-
-    return () => {
-      panelScroll.removeEventListener("wheel", handleWheel);
-      panelScroll.removeEventListener("touchstart", handleTouchStart);
-      panelScroll.removeEventListener("touchmove", handleTouchMove);
-      panelScroll.removeEventListener("touchend", handleTouchEnd);
-    };
-  }, []);
+  // Forward scroll past the panel's top/bottom to the embedding page.
+  usePanelScrollPassthrough("necklace-configurator:scroll");
 
   const handleSandboxToggle = useCallback(() => {
     if (isMobileRef.current) setSandboxCollapsed(false);
@@ -299,6 +206,30 @@ function NecklaceConfigurator() {
         const details = [lengthName, charmsName].filter(Boolean).join(", ");
         return [purityName, chainName, metalName, pendantName, details ? `(${details})` : ""].filter(Boolean).join(" ") + " Necklace";
       })();
+
+  // One chip per selection in the 3D preview (same look as the ring configurator).
+  const previewChips = (() => {
+    const hasNoPurity = metalName === "Platinum" || metalName === "Silver 925";
+    const purityName = hasNoPurity ? "" : (braceletPurity || "");
+    const metalChip = [purityName, metalName].filter(Boolean).join(" ");
+    if (isBracelet) {
+      const namePendantText = sanitizePendantText(namePendant?.text || "");
+      const nameLabel =
+        BRACELET_NAME_CHAIN_PATHS.includes(braceletPath) && namePendant?.enabled && namePendantText
+          ? `"${namePendantText}"`
+          : "";
+      return [metalChip, chainName, nameLabel, `Size ${braceletSize}`, charmsName].filter(Boolean);
+    }
+    const pendantName =
+      namePendant.enabled && namePendant.text.trim() ? `${namePendant.text} Pendant` : "";
+    return [
+      metalChip,
+      chainName,
+      pendantName,
+      chainLength ? `${chainLength}"` : "",
+      charmsName,
+    ].filter(Boolean);
+  })();
 
   const renderPreviewControls = ({ includeReset = false, includeShare = false } = {}) => (
     <div className="gb-preview-controls" aria-label="Preview controls">
@@ -401,8 +332,16 @@ function NecklaceConfigurator() {
             {isBracelet ? <BraceletScene /> : <NecklaceScene />}
             <div className={`theme3-model-loading ${isSwitchingJewelryType ? "is-visible" : ""}`} aria-hidden="true" />
 
-            <div className="theme3-preview-caption">
-              <strong>{previewLabel}</strong>
+            <div
+              className="theme3-preview-caption ring-preview-selection-chips"
+              aria-label={previewLabel}
+              aria-live="polite"
+            >
+              {previewChips.map((chip, index) => (
+                <span className="ring-preview-selection-chip" key={`${chip}-${index}`}>
+                  {chip}
+                </span>
+              ))}
             </div>
             {!isRemoveLogo && (
               <img

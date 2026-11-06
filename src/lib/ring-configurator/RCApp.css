@@ -3415,12 +3415,12 @@ img.rotate-minus-90{
 .theme3-builder {
   position: relative;
   width: min(1560px, 100%);
-  height: calc(100vh );
-  height: calc(100dvh );
+  height: 85vh;
+  height: 85vh;
   min-height: 0;
   display: grid;
   margin: 0 auto;
-  border: 1px solid var(--theme3-line);
+  border: none;
   border-radius: 8px;
   overflow: hidden;
   background: #ffffff;
@@ -3467,7 +3467,7 @@ img.rotate-minus-90{
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border-right: 1px solid var(--theme3-line);
+  border-right: none;
   background: #f8f8f8;
   display: flex;
   flex-direction: column;
@@ -4254,21 +4254,19 @@ img.rotate-minus-90{
 
 .theme3-panel-scroll {
   min-height: 0;
-  padding: 0 16px 40px;
+  padding: 0 40px 40px;
   overflow-y: auto;
   overscroll-behavior: contain;
   scroll-padding-block: 24px 120px;
-  scrollbar-color: #b8b8b3 transparent;
-  scrollbar-width: thin;
+  /* Scrolling still works (wheel / touch / keys); only the bar is hidden. */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
 .theme3-panel-scroll::-webkit-scrollbar {
-  width: 5px;
-}
-
-.theme3-panel-scroll::-webkit-scrollbar-thumb {
-  border-radius: 5px;
-  background: #b8b8b3;
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .theme3-preview-note {
@@ -4806,8 +4804,8 @@ img.rotate-minus-90{
 /* Client-supplied Moval artwork is intentionally a narrow portrait icon,
    unlike the 83×70 sprite cells used by the legacy shapes. */
 .theme3-root .gb-card-option img.moval-shape-icon {
-  width: 40px;
-  height: 60px;
+  width: 50px !important;
+  height: 50px !important;
   opacity: 1;
 }
 

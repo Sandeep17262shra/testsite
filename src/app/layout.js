@@ -1,5 +1,7 @@
 import "./globals.css";
 import "../lib/ring-configurator/RCApp.css";
+import "../lib/ring-configurator/ring-layout.css";
+import "../lib/ring-configurator/ring-grid-view.css";
 import "../lib/bracelet-configurator/BraceletApp.css";
 
 const storeContextBootstrap = `

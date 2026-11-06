@@ -94,7 +94,7 @@ export function getNecklaceCharmCatalogPrice(charm, fallbackPrice = 0) {
       if (id) return getNecklaceCatalogPrice(id, fallbackPrice);
     }
   }
-  if (charm.type === "diamond" && charm.path) {
+  if (charm.path) {
     const id = getNecklaceDiamondCharmIdByPath(charm.path);
     if (id) return getNecklaceCatalogPrice(id, fallbackPrice);
   }

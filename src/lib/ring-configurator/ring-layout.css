@@ -1,0 +1,252 @@
+/* Ring configurator (.theme3-root--ring) — same button sizing as the
+   necklace / bracelet / bead-bracelet configurators:
+   - option rows: flex + wrap (no horizontal-scroll grid), 100px buttons, 12px gap
+   - consistent button heights (text/metal 52px min, image cards 120px min)
+   - footer: 100px buttons, 12px gap, aligned with the options above,
+     button-sized price block, no top border.
+   Imported right after RCApp.css (app/layout.js) and scoped to the ring root. */
+
+/* ── Option rows ─────────────────────────────────────────────────────────── */
+.theme3-root.theme3-root--ring .gb-option-row .gb-option-slider .gb-option-track,
+.theme3-root.theme3-root--ring .theme3-shape-grid .gb-option-slider .gb-option-track,
+.theme3-root.theme3-root--ring .theme3-shape-grid.gb-option-row--two-line .gb-option-slider .gb-option-track,
+.theme3-root.theme3-root--ring .gb-option-row .gb-option-slider .gb-option-track:has(.gb-text-option),
+.theme3-root.theme3-root--ring .gb-option-row .gb-option-slider .gb-option-track:has(.gb-metal-option),
+.theme3-root.theme3-root--ring .gb-option-row .gb-option-slider .gb-option-track:has(.theme3-image-option) {
+  display: flex;
+  flex-wrap: wrap;
+  grid-auto-flow: initial;
+  grid-auto-columns: initial;
+  grid-template-rows: none;
+  align-items: stretch;
+  gap: 12px;
+  row-gap: 12px;
+  padding: 0;
+  overflow: visible;
+  cursor: default;
+}
+
+.theme3-root.theme3-root--ring .gb-option-row .gb-option-track > .gb-text-option,
+.theme3-root.theme3-root--ring .gb-option-row .gb-option-track > .gb-card-option,
+.theme3-root.theme3-root--ring .gb-option-row .gb-option-track > .gb-metal-option,
+.theme3-root.theme3-root--ring .theme3-category-options .gb-text-option,
+.theme3-root.theme3-root--ring .theme3-quality-options .gb-text-option {
+  box-sizing: border-box;
+  flex: 0 0 100px;
+  width: 100px;
+  min-width: 100px;
+  max-width: 100px;
+}
+
+/* Text + metal buttons share one height. */
+.theme3-root.theme3-root--ring .gb-option-row .gb-option-track > .gb-text-option,
+.theme3-root.theme3-root--ring .gb-option-row .gb-option-track > .gb-metal-option,
+.theme3-root.theme3-root--ring .theme3-category-options .gb-text-option,
+.theme3-root.theme3-root--ring .theme3-quality-options .gb-text-option {
+  min-height: 52px;
+  padding: 6px;
+  gap: 3px;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.25;
+}
+
+/* Cards: 100px wide, 120px tall (like the bead cards); long labels wrap. */
+.theme3-root.theme3-root--ring .gb-option-row .gb-option-track > .gb-card-option {
+  min-height: 120px;
+  padding: 8px 6px;
+  overflow: hidden;
+}
+
+.theme3-root.theme3-root--ring .gb-option-row .gb-option-track > .gb-card-option span {
+  max-width: 100%;
+  white-space: normal;
+  text-align: center;
+  overflow-wrap: break-word;
+}
+
+/* Image cards: smaller picture so image + name + price fit in 100px. */
+.theme3-root.theme3-root--ring .gb-option-row .gb-option-track > .theme3-image-option {
+  grid-template-rows: 70px auto 12px;
+  gap: 3px;
+}
+
+.theme3-root.theme3-root--ring .gb-option-row .gb-option-track > .theme3-image-option img {
+  width: 70px;
+  height: 70px;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+/* Cards that carry band-width choices. */
+.theme3-root.theme3-root--ring .gb-option-row .gb-option-track > .gb-card-option--with-band-width {
+  grid-template-rows: 58px auto 24px;
+}
+
+.theme3-root.theme3-root--ring .gb-option-row .gb-option-track > .gb-card-option--with-band-width img {
+  width: 58px;
+  height: 58px;
+}
+
+.theme3-root.theme3-root--ring .gb-card-band-widths {
+  gap: 3px;
+}
+
+/* ── Footer (desktop layout, >900px) ─────────────────────────────────────── */
+@media (min-width: 901px) {
+  .theme3-root.theme3-root--ring .theme3-panel-footer {
+    border-top: 0;
+    padding: 12px 40px;
+  }
+
+  .theme3-root.theme3-root--ring .theme3-panel-footer > .theme3-footer-build-summary {
+    padding-left: 40px;
+    padding-right: 40px;
+  }
+
+  .theme3-root.theme3-root--ring .theme3-footer-main,
+  .theme3-root.theme3-root--ring .theme3-footer-actions,
+  .theme3-root.theme3-root--ring .theme3-footer-secondary-actions,
+  .theme3-root.theme3-root--ring .theme3-panel-action-wrapper {
+    gap: 12px;
+  }
+
+  .theme3-root.theme3-root--ring .theme3-footer-main {
+    align-items: center;
+  }
+
+  .theme3-root.theme3-root--ring .theme3-footer-main .theme3-summary-info {
+    box-sizing: border-box;
+    justify-content: center;
+    min-width: 100px;
+    min-height: 42px;
+  }
+
+  .theme3-root.theme3-root--ring .theme3-footer-main .theme3-summary-details-toggle {
+    padding-bottom: 0;
+  }
+
+  .theme3-root.theme3-root--ring .theme3-footer-main .theme3-summary-price-row {
+    margin-top: 2px;
+  }
+
+  .theme3-root.theme3-root--ring .theme3-footer-actions .theme3-panel-footer-cta,
+  .theme3-root.theme3-root--ring .theme3-footer-actions .theme3-panel-action-btn.theme3-panel-share-btn,
+  .theme3-root.theme3-root--ring .theme3-footer-actions .theme3-panel-action-btn.theme3-panel-reset-btn {
+    box-sizing: border-box;
+    flex: 0 0 100px;
+    width: 100px;
+    min-width: 100px;
+    max-width: 100px;
+    padding: 0 6px;
+  }
+}
+
+/* ── Matching band: "None" matches the height of the image cards beside it ──
+   RCApp.css sets `height: 100%` on it, which cannot resolve inside the
+   auto-height flex row and so blocks align-items: stretch. */
+.theme3-root.theme3-root--ring .gb-option-row .gb-option-track > .theme3-matching-band-none {
+  height: auto;
+  align-self: stretch;
+}
+
+/* ── Stone swatches (colored diamond, intensity, gemstone, side-stone color) ──
+   They are plain buttons (.theme3-stone-swatch), so the 100px rules above did
+   not reach them: 100px wide, same 120px height as the other icon cards. */
+.theme3-root.theme3-root--ring .gb-option-row .gb-option-track > .theme3-stone-swatch {
+  box-sizing: border-box;
+  flex: 0 0 100px;
+  width: 100px;
+  min-width: 100px;
+  max-width: 100px;
+  min-height: 120px;
+  padding: 8px 6px;
+  align-content: center;
+  overflow: hidden;
+}
+
+.theme3-root.theme3-root--ring .gb-option-row .gb-option-track > .theme3-stone-swatch > span:last-child {
+  max-width: 100%;
+}
+
+/* ── "Demo Only" ribbon ──────────────────────────────────────────────────────
+   The card-label rule above (max-width:100%, white-space:normal) also matched
+   the ribbon's inner span, so the diagonal text wrapped inside the 58px corner
+   box and "Demo" was cut off. Restore the ribbon's own nowrap/100px sizing. */
+.theme3-root.theme3-root--ring .gb-option-row .gb-option-track > .gb-card-option .demo-only-ribbon > span {
+  max-width: none;
+  width: 100px;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  text-align: center;
+}
+
+/* ── Icon size: as large as the 100 × 120 card allows ────────────────────────
+   120px card − 12px padding − 6px gaps − 12px label − 12px price row = 78px of
+   height, 88px of width. Images keep their aspect ratio (object-fit: contain). */
+.theme3-root.theme3-root--ring .gb-option-row .gb-option-track > .gb-card-option {
+  padding: 6px;
+  gap: 3px;
+  grid-template-rows: 78px auto 12px;
+}
+
+.theme3-root.theme3-root--ring .gb-option-row .gb-option-track > .gb-card-option img {
+  width: 100px;
+  height: 80px;
+  max-width: 100%;
+  object-fit: contain;
+  margin: 0 auto;
+}
+.moval-shape-icon{
+   width: 70px;
+  height: 50px;
+  max-width: 100%;
+  object-fit: contain;
+  margin: 0 auto; 
+}
+/* Cards that show band-width choices give 12px of the image to that row. */
+.theme3-root.theme3-root--ring .gb-option-row .gb-option-track > .gb-card-option.gb-card-option--with-band-width {
+  grid-template-rows: 66px auto 24px;
+}
+
+.theme3-root.theme3-root--ring .gb-option-row .gb-option-track > .gb-card-option.gb-card-option--with-band-width img {
+  width: 88px;
+  height: 66px;
+}
+
+/* ── Snap section width to the button grid ───────────────────────────────────
+   RingCustomizer measures the panel and sets --ring-grid-w to
+   columns × 100px + (columns − 1) × 12px. Capping each section to it makes the
+   section price (e.g. "$420") and the engraving field end exactly where the
+   last button column ends, however many columns fit. */
+.theme3-root.theme3-root--ring .theme3-panel-scroll > [data-theme3-section] {
+  max-width: var(--ring-grid-w, none);
+}
+
+/* "View details" link: 12px in every configurator (was 10px in necklace/bracelet/beads, inherited ~20px in ring). */
+.theme3-root.theme3-root--ring .theme3-panel-footer .theme3-summary-details-toggle span,
+.theme3-root.theme3-root--ring .theme3-panel-footer .theme3-summary-details-toggle .theme3-link-text {
+  font-size: 12px !important;
+  line-height: 1.2 !important;
+}
+
+/* ── Centre the options column ───────────────────────────────────────────────
+   The sections are already snapped to the button grid (--ring-grid-w), but they
+   sat against the left padding, leaving a much bigger gap on the right of a
+   wide panel. Centre that grid-width block, and give the type header row, the
+   footer row and the "View details" popover the same width, so the space is
+   even on both sides and everything lines up. Desktop two-column layout only
+   (the same breakpoint as the footer rules above); phones keep their layout.
+   --ring-grid-w is published by RingCustomizer on the panel's parent. */
+@media (min-width: 901px) {
+  .theme3-root.theme3-root--ring .theme3-panel-scroll > [data-theme3-section],
+  .theme3-root.theme3-root--ring .theme3-panel-scroll > .theme3-ring-type-header-row,
+  .theme3-root.theme3-root--ring .theme3-panel-scroll > .theme3-preview-note,
+  .theme3-root.theme3-root--ring .theme3-panel-footer .theme3-footer-main,
+  .theme3-root.theme3-root--ring .theme3-panel-footer > .theme3-footer-build-summary > .theme3-build-summary {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: var(--ring-grid-w, none);
+    margin-inline: auto;
+  }
+}

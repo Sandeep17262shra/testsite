@@ -9,7 +9,7 @@ import { BeadsSoundToggleButton } from "./components/BeadsSoundToggleButton";
 import { useBeedsContext } from "./contexts/BeedsContext";
 import { View360Context } from "./contexts/View360Context";
 import { BEAD_CHARMS, BEADS, SEPARATORS, getBeadStyleLabel } from "./assets";
-import { buildBeadPreviewLabel } from "./pricing";
+import { buildBeadPreviewChips, buildBeadPreviewLabel } from "./pricing";
 import { preloadBeadsConfiguratorAssets } from "./beadAssetPreload";
 import { unlockBeadsAudio } from "./beadsSounds";
 import { useMomentaryPreviewControlActive } from "./useMomentaryPreviewControlActive";
@@ -223,7 +223,7 @@ function BeedsConfigurator() {
   );
 
   const styleLabel = styleId === "empty" ? t("beaded.style.custom") : getBeadStyleLabel(styleId);
-  const previewLabel = buildBeadPreviewLabel(pattern, {
+  const previewLabelOptions = {
     styleLabel,
     displayLengthLabel,
     pieceLabels: {
@@ -234,7 +234,9 @@ function BeedsConfigurator() {
       charm: t("beaded.preview.charm"),
       charms: t("beaded.tab.charms"),
     },
-  });
+  };
+  const previewLabel = buildBeadPreviewLabel(pattern, previewLabelOptions);
+  const previewChips = buildBeadPreviewChips(pattern, previewLabelOptions);
 
   const { theme3RootClassName, themeRootDataAttrs, appearanceStyle } = useTheme3Appearance(
     "theme3-root--beeds",
@@ -268,10 +270,18 @@ function BeedsConfigurator() {
             }}
           >
             {renderPreviewControls()}
-            <BeadsPreviewMorph previewLabel={previewLabel} />
+            <BeadsPreviewMorph previewLabel={previewLabel} previewChips={previewChips} />
 
-            <div className="theme3-preview-caption">
-              <strong>{previewLabel}</strong>
+            <div
+              className="theme3-preview-caption ring-preview-selection-chips"
+              aria-label={previewLabel}
+              aria-live="polite"
+            >
+              {previewChips.map((chip, index) => (
+                <span className="ring-preview-selection-chip" key={`${chip}-${index}`}>
+                  {chip}
+                </span>
+              ))}
             </div>
             {!isRemoveLogo && (
               <img

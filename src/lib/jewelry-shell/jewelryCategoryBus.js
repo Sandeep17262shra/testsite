@@ -44,7 +44,7 @@ export const JEWELRY_FRAME_PATHS = {
 export const jewelryAppForCategory = (category) =>
     normalizeJewelryCategory(category) === "bead-bracelet" ? "beads" : "necklace";
 
-export function normalizeJewelryCategory(value, fallback = "bead-bracelet") {
+export function normalizeJewelryCategory(value, fallback = "necklace") {
     const lower = String(value || "").toLowerCase();
     return JEWELRY_CATEGORIES.includes(lower) ? lower : fallback;
 }
@@ -120,7 +120,7 @@ export const storeJewelryCategory = (category) => {
  * menu can still deep-link), else the last pick in this tab, else necklace.
  */
 export const readStoredJewelryCategory = () => {
-    if (typeof window === "undefined") return "bead-bracelet";
+    if (typeof window === "undefined") return "necklace";
 
     let fromQuery = "";
     try {
@@ -135,7 +135,7 @@ export const readStoredJewelryCategory = () => {
             window.sessionStorage.getItem(JEWELRY_CATEGORY_STORAGE_KEY)
         );
     } catch (error) {
-        return "bead-bracelet";
+        return "necklace";
     }
 };
 

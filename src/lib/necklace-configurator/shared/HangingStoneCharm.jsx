@@ -18,6 +18,7 @@ const HangingStoneCharm = ({
   scale,              // scene units per model unit
   metalColor,
   stoneColor,
+  stoneType,
   bailRadius,
   bailTube,
   bailY = 0,          // bail centre, in the charm's frame (loop centre = 0)
@@ -27,13 +28,15 @@ const HangingStoneCharm = ({
   const metal = materialProps || ringMetalProps(metalColor);
   return (
     <group>
+      {/* The bail ring sits in the same Suspense boundary as the model, so the
+          ring and the charm appear together once the model has loaded. */}
       <Suspense fallback={null}>
-        <AttachedStoneCharm charm={charm} scale={scale} metalColor={metalColor} stoneColor={stoneColor} />
+        <AttachedStoneCharm charm={charm} scale={scale} metalColor={metalColor} stoneColor={stoneColor} stoneType={stoneType} />
+        <mesh position={[0, bailY, bailZ]} rotation={[0, Math.PI / 2, 0]} castShadow>
+          <torusGeometry args={[bailRadius, bailTube, 16, 48]} />
+          <meshPhysicalMaterial {...metal} />
+        </mesh>
       </Suspense>
-      <mesh position={[0, bailY, bailZ]} rotation={[0, Math.PI / 2, 0]} castShadow>
-        <torusGeometry args={[bailRadius, bailTube, 16, 48]} />
-        <meshPhysicalMaterial {...metal} />
-      </mesh>
     </group>
   );
 };

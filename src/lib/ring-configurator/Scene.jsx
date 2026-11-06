@@ -3,6 +3,8 @@ import { useRef, useEffect, useState, useContext, useMemo } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, useProgress, SoftShadows } from '@react-three/drei'; // Added SoftShadows
 import { Capture } from './utility/Capture';
+import { GridSnapshotter } from './utility/GridSnapshotter';
+import { GridViewContext } from './contexts/GridViewContext';
 import { CameraController } from './utility/CameraController';
 import Diamond from './objects/Diamond';
 import Ring from './objects/Ring';
@@ -175,6 +177,7 @@ function Scene() {
   const { cameraView, setCameraView } = useContext(CameraViewContext);
   const { view360, setView360 } = useContext(View360Context);
   const { capture } = useContext(CaptureContext);
+  const { gridView, setSnapshots } = useContext(GridViewContext);
   const { share, setShare, setShareUrl, parent } = useContext(ShareContext);
   const { parentUrl: storeParentUrl } = useStoreContext();
   const { recording, setRecording } = useContext(RecordingContext);
@@ -261,7 +264,14 @@ function Scene() {
   const isModelOnlyPreview =
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("preview") === "model-only";
-  
+
+  // Everything that changes how the ring looks. Grid view re-takes its still images when this changes.
+  const gridSnapshotKey = JSON.stringify([
+    displayed,
+    metal, ringColor, headColor, bandColor, biMetal, engraving, engravingFont, ringWidth, bandWidth,
+    styleShape, colorType, gemstone, fancyDiamond, fancyDiamondIntensity, diamondColor, selectedQuality,
+  ]);
+
   const resolveShareBaseUrl = () => {
     const resolvedParentUrl =
       parent ||
@@ -923,12 +933,21 @@ useEffect(() => {
           autoRotateSpeed={4}
           enabled={!recording && !engravingFocus}
 		  enableZoom={!engravingFocus}
-          minDistance={engravingFocus ? ENGRAVING_ORBIT_MIN_DISTANCE : cameraMinDistance}
+          // The shopper may zoom in closer than the default framing (cameraMinDistance is still the
+          // opening / reset distance). Grid view's viewer is a quarter of the pane, so it gets a bit more.
+          minDistance={engravingFocus ? ENGRAVING_ORBIT_MIN_DISTANCE : cameraMinDistance * (gridView ? 0.5 : 0.6)}
           maxDistance={10}
 		  enablePan={false}
         />
         <CameraController view={cameraView} setView={setCameraView} engravingTargetY={engravingTargetY} sideSetting={displayed.ringSideSetting} shank={displayed.ringShank} />
         {capture && <Capture targetGroup={groupRef} />}
+        <GridSnapshotter
+          enabled={gridView && !engravingFocus && !recording && !isModelOnlyPreview}
+          ready={!isPending && !loader}
+          snapshotKey={gridSnapshotKey}
+          distance={Math.max(cameraMinDistance * 0.85, 4)}
+          onSnapshots={setSnapshots}
+        />
       
       </Canvas>
     </div>

@@ -25,7 +25,7 @@
 import { getGemGlbCharm } from "../shared/glbGemCharms";
 import React, { useEffect, useMemo, useRef, useState, useLayoutEffect, Suspense } from "react";
 import { useFrame, useLoader } from "@react-three/fiber";
-import { RGBELoader, GLTFLoader } from "three-stdlib";
+import { RGBELoader, GLTFLoader, DRACOLoader } from "three-stdlib";
 import KernedText3D from "../shared/KernedText3D";
 import * as THREE from "three";
 import {
@@ -125,41 +125,47 @@ export const NAME_CHAIN_CONFIG = {
   // and 0.05 is about half a link. Any style in NAME_CHAIN_LINK_STYLES can
   // override individual categories - heavier links want hanging charms pushed
   // a little further out.
+  //   hinge          height of the pivot a hanging charm tilts about when it falls
+  //                  into place (HangFromChain). It is kept apart from radiusOffset
+  //                  on purpose: radiusOffset now only moves the charm OUT along
+  //                  the ring, it no longer also lifts/lowers it. Leave it alone
+  //                  unless the fall-into-place pivot itself needs tuning.
   charmPlacement: {
-    birthstone: { anchor: "center", radiusOffset: 0.01,     yOffset: 0, rotationOffset: 0, scale: 1 },
-    diamond:    { anchor: "center", radiusOffset: 0.01,     yOffset: 0, rotationOffset: 0, scale: 1 },
+    birthstone: { anchor: "center", radiusOffset: 0.01,     yOffset: 0, rotationOffset: 0, scale: 1, hinge: 0.01 },
+    diamond:    { anchor: "center", radiusOffset: 0.01,     yOffset: 0, rotationOffset: 0, scale: 1, hinge: 0.01 },
     // Princess-cut diamonds need a small lift; other diamond cuts keep the
     // standard diamond placement above.
-    princessDiamond: { anchor: "center", radiusOffset: 0.01, yOffset: 0.01, rotationOffset: 0, scale: 1 },
-    gemstone:   { anchor: "center", radiusOffset: 0,     yOffset: 0, rotationOffset: 0, scale: 1 },
-    initial:    { anchor: "top",    radiusOffset: 0.20, yOffset: 0.02, rotationOffset: 0, scale: 1 },
-    image:      { anchor: "top",    radiusOffset: 0.17, yOffset: 0, rotationOffset: 0, scale: 1 },
+    princessDiamond: { anchor: "center", radiusOffset: 0.01, yOffset: 0.01, rotationOffset: 0, scale: 1, hinge: 0.01 },
+    gemstone:   { anchor: "center", radiusOffset: 0,     yOffset: 0, rotationOffset: 0, scale: 1, hinge: 0 },
+    initial:    { anchor: "top",    radiusOffset: 0.22, yOffset: 0.02, rotationOffset: 0, scale: 1, hinge: 0.2 },
+    image:      { anchor: "top",    radiusOffset: 0.19, yOffset: 0, rotationOffset: 0, scale: 1, hinge: 0.17 },
     // 3D charms are authored much larger than the 2D ones and have no
     // per-bracelet scale entry to fall back on, so they need reining in here.
-    glb:        { anchor: "top",    radiusOffset: 0.00, yOffset: 0.01, rotationOffset: 0, scale: 0.8 },
+    glb:        { anchor: "top",    radiusOffset: 0.02, yOffset: 0.01, rotationOffset: 0, scale: 0.8, hinge: 0.0 },
   },
 
-  // ── Clasp: lock at the BACK, opposite the name plate ──────────────────────
+  // ── Clasp: spring-ring lock at the BACK, opposite the name plate ──────────
   // The chain is split at the back and its two end links hook into the lock:
-  // one through JumpRing_End, the other through the Clasp.
-  //   scale       size of Pavitra_lock.glb in the bracelet (model units
-  //               -> world units). 0.08 = clasp height ~0.09 across, matching link size.
+  // one through the tab's hole, the other through the spring ring.
+  //   scale       size of flat_spring_ring.glb in the bracelet (model units
+  //               -> world units). 0.02 = ring about 0.12 across.
   //   tabAttach / ringAttach
   //               points in the MODEL's own units where the end links pass
-  //               through (JumpRing_End center, and inside the Clasp loop).
-  //               The lock is centred between them and laid along the chain.
+  //               through (the tab's hole, and just inside the bottom of the
+  //               spring ring). The lock is centred between them and laid
+  //               along the chain.
+  //   leverUp     true = the spring lever points up, false = down.
   //   charmClearance
   //               extra room kept free either side of the lock when charms
   //               are spread along a name bracelet.
   lock: {
     enabled: true,
-    path: "/bc-assets/bracelet_models/Pavitra_lock.glb",
-    scale: 0.08,
-    tabAttach: [-1.630, 0, 0],
-    ringAttach: [1.421, 0, -0.962],
-    alignRotY: -0.3055,
-    flipFacing: true,
-    tilt: 0,
+    // ?v= busts the 1-year immutable cache when the file changes (simplified 1.6 MB -> 80 KB).
+    path: "/bc-assets/bracelet_models/flat_spring_ring.glb?v=20260911",
+    scale: 0.02,
+    tabAttach: [7.323, 0, -4.79],
+    ringAttach: [7.323, 0, -10.2],
+    leverUp: true,
     charmClearance: 0.07,
   },
 };
@@ -359,20 +365,10 @@ const BACK_ANGLE = FRONT_ANGLE + Math.PI;
 function getLockLayout(cfg = NAME_CHAIN_CONFIG) {
   const lock = cfg.lock;
   if (!lock?.enabled) return null;
-  const pA = new THREE.Vector3(...lock.tabAttach);
-  const pB = new THREE.Vector3(...lock.ringAttach);
-  const center = new THREE.Vector3().addVectors(pA, pB).multiplyScalar(0.5);
-  const span = pA.distanceTo(pB);
-  const halfSpan = (span / 2) * lock.scale;
+  const center = [0, 1, 2].map((i) => (lock.tabAttach[i] + lock.ringAttach[i]) / 2);
+  const halfSpan = (Math.abs(lock.tabAttach[2] - lock.ringAttach[2]) / 2) * lock.scale;
   const openLong = Math.max(cfg.linkLength / 2 - cfg.linkTube, 1e-4);
-  const delta = new THREE.Vector3().subVectors(pB, pA);
-  const alignRotY = lock.alignRotY ?? (delta.x !== 0 || delta.z !== 0 ? -Math.atan2(delta.z, delta.x) : 0);
-  return {
-    center: center.toArray(),
-    halfSpan,
-    endLinkOffset: halfSpan + openLong,
-    alignRotY,
-  };
+  return { center, halfSpan, endLinkOffset: halfSpan + openLong };
 }
 
 // Half-angle of the gap the name opens up. `halfWidth` is half the measured
@@ -475,6 +471,7 @@ export function getNameChainCharmPlacement(index, total, gapHalfAngle = 0, cfg =
 
   return {
     angle,
+    hinge: placement.hinge ?? placement.radiusOffset,
     position: [x, cfg.centerY + placement.yOffset, z],
     // Same convention as getOrbitCharmTransform: the Y-flip baked into this
     // Euler triple reverses the Z rotation, so the angle has to be mirrored
@@ -906,60 +903,62 @@ const ChainLinks = ({ gapHalfAngle, materialProps, cfg = NAME_CHAIN_CONFIG, piec
   );
 };
 
-// ─── Lock (bracelet clasp) ──────────────────────────────────────────────────
+// Models may be Draco-compressed; a bare GLTFLoader cannot read those.
+let _sharedDraco = null;
+const withDraco = (loader) => {
+  if (!_sharedDraco) {
+    _sharedDraco = new DRACOLoader();
+    _sharedDraco.setDecoderPath("/draco/gltf/");
+  }
+  loader.setDRACOLoader(_sharedDraco);
+};
+
+// ─── Lock (spring-ring clasp) ───────────────────────────────────────────────
+// flat_spring_ring.glb lies flat in its own X/Z plane with the ring and the
+// tab along Z. It is stood upright at the back of the bracelet, facing the
+// front like the name plate, with its ring-to-tab axis along the chain.
 // Start fetching the lock right away (the chain waits for it, see NameChainBracelet).
 if (typeof window !== "undefined" && NAME_CHAIN_CONFIG.lock?.enabled) {
-  useLoader.preload(GLTFLoader, NAME_CHAIN_CONFIG.lock.path);
+  useLoader.preload(GLTFLoader, NAME_CHAIN_CONFIG.lock.path, withDraco);
 }
 
 const BraceletLock = ({ materialProps, cfg = NAME_CHAIN_CONFIG }) => {
   const lock = cfg.lock;
-  const gltf = useLoader(GLTFLoader, lock.path);
+  const gltf = useLoader(GLTFLoader, lock.path, withDraco);
   const metal = useMetalMaterialProps(materialProps);
   const layout = getLockLayout(cfg);
 
-  const clonedScene = useMemo(() => {
-    const clone = gltf.scene.clone(true);
-    clone.traverse((child) => {
-      if (child.isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-        const isTag = child.name === "Tag_PAVITRA" || child.geometry?.attributes?.color != null;
-        child.material = new THREE.MeshPhysicalMaterial({
-          ...metal,
-          vertexColors: Boolean(isTag),
-        });
-      }
-    });
-    return clone;
-  }, [gltf, metal]);
+  const geometries = useMemo(() => {
+    const list = [];
+    gltf.scene.traverse((child) => { if (child.isMesh) list.push(child.geometry); });
+    return list;
+  }, [gltf]);
 
-  const rotation = useMemo(() => {
-    if (lock.leverUp !== undefined && lock.alignRotY === undefined) {
-      const s = lock.leverUp ? 1 : -1;
-      const basis = new THREE.Matrix4().makeBasis(
-        new THREE.Vector3(0, s, 0),
-        new THREE.Vector3(0, 0, s),
-        new THREE.Vector3(1, 0, 0),
-      );
-      return new THREE.Euler().setFromRotationMatrix(basis);
-    }
-    return new THREE.Euler(
-      lock.tilt || 0,
-      (layout?.alignRotY || 0) + (lock.flipFacing ? Math.PI : 0),
-      0
+  // Model X -> world up (lever up or down), model Y (thickness) -> world depth,
+  // model Z (ring-to-tab) -> world X, the chain's direction at the back.
+  const quaternion = useMemo(() => {
+    const s = lock.leverUp ? 1 : -1;
+    const basis = new THREE.Matrix4().makeBasis(
+      new THREE.Vector3(0, s, 0),
+      new THREE.Vector3(0, 0, s),
+      new THREE.Vector3(1, 0, 0),
     );
-  }, [lock, layout]);
+    return new THREE.Quaternion().setFromRotationMatrix(basis);
+  }, [lock.leverUp]);
 
   const position = useMemo(() => ringPoint(BACK_ANGLE, cfg).toArray(), [cfg]);
 
   if (!layout) return null;
 
   return (
-    <group position={position} rotation={rotation}>
+    <group position={position} quaternion={quaternion}>
       <group scale={lock.scale}>
         <group position={layout.center.map((v) => -v)}>
-          <primitive object={clonedScene} />
+          {geometries.map((geometry, i) => (
+            <mesh key={i} geometry={geometry} castShadow receiveShadow>
+              <meshPhysicalMaterial {...metal} />
+            </mesh>
+          ))}
         </group>
       </group>
     </group>
@@ -1165,20 +1164,25 @@ const NameChainBracelet = ({ namePendant, inlineCharms = [], materialProps, pend
         {cfg.lock?.enabled && (
           <BraceletLock materialProps={materialProps} cfg={cfg} />
         )}
-        {pieces.map(({ piece, angle, charm }, i) => {
-          const pose = getAttachedPiecePose(piece, angle);
-          return (
-            <group key={charm.id ?? i} position={pose.position} rotation={[0, pose.rotationY, 0]}>
+      </Suspense>
+      {/* Each stone loads in its own boundary: a model still downloading must
+          never hide the chain. */}
+      {pieces.map(({ piece, angle, charm }, i) => {
+        const pose = getAttachedPiecePose(piece, angle);
+        return (
+          <group key={charm.id ?? i} position={pose.position} rotation={[0, pose.rotationY, 0]}>
+            <Suspense fallback={null}>
               <AttachedStoneCharm
                 charm={piece.def}
                 scale={piece.scale}
                 metalColor={charm.bodyColor}
                 stoneColor={charm.gemstoneColor}
+                stoneType={charm.stoneType}
               />
-            </group>
-          );
-        })}
-      </Suspense>
+            </Suspense>
+          </group>
+        );
+      })}
 
       {hasName && (
         // Positioned so the plate's vertical mid-line - the line the washers sit

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { PAVITRA_CUSTOMIZATION_ENABLED } from "../jewelry-shell/pavitraCustomization";
 
 /**
  * First-load order for the bead bracelet (each step starts after the previous
@@ -19,8 +20,10 @@ import { useEffect, useState } from "react";
 export const GLASS_BEAD_GLB = "/bc-assets/bead_models/glass-bead.glb?v4";
 export const BEADS_SPACER_METAL_ENV_URL = "/bc-assets/env_metal_studio.hdr";
 export const BEADS_STUDIO_ENV_URL = "/bc-assets/env_studio.hdr";
-/** Texture of DEFAULT_BEAD_KEY ("amethyst") — keep in sync with assets.js. */
-export const DEFAULT_BEAD_TEXTURE_URL = "/beeds-assets/bead-textures/amethyst.webp";
+/** Texture of DEFAULT_BEAD_KEY ("green-aventurine" for Pavitra, else "amethyst") — keep in sync with assets.js. */
+export const DEFAULT_BEAD_TEXTURE_URL = PAVITRA_CUSTOMIZATION_ENABLED
+  ? "/beeds-assets/bead-textures/Green_Aventurine_1.webp"
+  : "/beeds-assets/bead-textures/amethyst.webp";
 export const STYLE_ICON_URLS = [
   "/beeds-assets/styles/full-bead.svg",
   "/beeds-assets/styles/style-1.svg",

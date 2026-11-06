@@ -87,6 +87,29 @@ export const BRACELET_DIAMOND_CHARM_IDS = {
   oval:     { id: "BDC3", rawLabel: "Oval Diamond",     path: "/bc-assets/gemstone/D3.glb",        preview: "/bc-assets/images/diamonds/oval.webp"     },
   princess: { id: "BDC4", rawLabel: "Princess Diamond", path: "/bc-assets/gemstone/princess.glb", preview: "/bc-assets/images/diamonds/princess.webp" },
   cushion:  { id: "BDC5", rawLabel: "Cushion Diamond",  path: "/bc-assets/gemstone/cushion.glb",  preview: "/bc-assets/images/diamonds/cushion.webp"  },
+  // Shown together under 'Stone Charms' in the frontend; still diamond-charm products.
+  attachedOval: { id: "BDC6", rawLabel: "Oval (in chain)", path: "/bc-assets/attached_charm/Oval.glb" },
+  attachedRound: { id: "BDC7", rawLabel: "Round (in chain)", path: "/bc-assets/attached_charm/Round.glb" },
+  attachedSquare: { id: "BDC8", rawLabel: "Square (in chain)", path: "/bc-assets/attached_charm/Square.glb" },
+  hangingBaguette: { id: "BDC9", rawLabel: "Baguette", path: "/bc-assets/hanging_charm/baguette-gem-charm.glb" },
+  hangingEmerald: { id: "BDC10", rawLabel: "Emerald", path: "/bc-assets/hanging_charm/emerald-gem-charm.glb" },
+  hangingEmeraldFlat: { id: "BDC11", rawLabel: "Emerald Flat", path: "/bc-assets/hanging_charm/emerald-gem-flat-charm.glb" },
+  hangingHeart: { id: "BDC12", rawLabel: "Heart", path: "/bc-assets/hanging_charm/heart-gem-charm.glb" },
+  hangingOvalDrop: { id: "BDC13", rawLabel: "Oval Drop", path: "/bc-assets/hanging_charm/oval-gem-charm.glb" },
+  hangingOvalFlat: { id: "BDC14", rawLabel: "Oval Flat", path: "/bc-assets/hanging_charm/oval-gem-flat-charm.glb" },
+  hangingPear: { id: "BDC15", rawLabel: "Pear", path: "/bc-assets/hanging_charm/pear-gem-charm.glb" },
+  hangingRoundDrop: { id: "BDC16", rawLabel: "Round Drop", path: "/bc-assets/hanging_charm/round-gem-charm.glb" },
+  hangingPearl: { id: "BDC17", rawLabel: "Pearl", path: "/bc-assets/hanging_charm/spherical-pearl-charm.glb" },
+  hangingCrystal: { id: "BDC18", rawLabel: "Crystal", path: "/bc-assets/hanging_charm/crystal-charm.glb" },
+  gemPrincess: { id: "BDC19", rawLabel: "Princess Charm", path: "/bc-assets/bracelet_models/princess.glb" },
+  gemPearPetal: { id: "BDC20", rawLabel: "Pear Petal Charm", path: "/bc-assets/bracelet_models/patel.glb" },
+  gemElephant: { id: "BDC21", rawLabel: "Elephant Charm", path: "/bc-assets/bracelet_models/elephant.glb" },
+  gemCamel: { id: "BDC22", rawLabel: "Camel Charm", path: "/bc-assets/bracelet_models/camel.glb" },
+  hangingRough1: { id: "BDC23", rawLabel: "Rough 1", path: "/bc-assets/hanging_charm/rough-1-charm.glb" },
+  hangingRough2: { id: "BDC24", rawLabel: "Rough 2", path: "/bc-assets/hanging_charm/rough-2-charm.glb" },
+  hangingBullet: { id: "BDC25", rawLabel: "Bullet", path: "/bc-assets/hanging_charm/bullet-charm.glb" },
+  hangingLongDrop: { id: "BDC26", rawLabel: "Long Drop", path: "/bc-assets/hanging_charm/long-drop-charm.glb" },
+  hangingGanesh: { id: "BDC27", rawLabel: "Ganesh", path: "/bc-assets/hanging_charm/ganesh-charm.glb" },
 };
 
 // ── Initial & Charms unit (Unified unit for Bracelets) ─────────────────────────
@@ -283,6 +306,7 @@ export function getBraceletDiamondCharmIdByPath(path) {
   const entry = Object.values(BRACELET_DIAMOND_CHARM_IDS).find((v) => v.path === path);
   return entry?.id;
 }
+
 
 /**
  * Resolve a 3-D charm's product ID from its GLB path.

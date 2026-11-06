@@ -1,4 +1,5 @@
 import React, { useContext, useEffect, useState, useRef, useCallback } from "react";
+import { usePanelScrollPassthrough } from "../jewelry-shell/usePanelScrollPassthrough";
 import Bracelet from "./Bracelet";
 import './BraceletApp.css';
 import '../necklace-configurator/necklace/NecklaceApp.css';
@@ -38,10 +39,7 @@ function BraceletConfigurator() {
   const [activeStep, setActiveStep] = useState("bracelet");
   const [sandboxCollapsed, setSandboxCollapsed] = useState(false);
   const controlsRef = useRef(null);
-  const theme3PanelScrollRef = useRef(null);
   const isMobileRef = useRef(false);
-  const wasAtPanelBottomRef = useRef(false);
-  const wasAtPanelTopRef = useRef(false);
 
   const { theme3RootClassName, themeRootDataAttrs, appearanceStyle } = useTheme3Appearance(
     "theme3-root--jewelry"
@@ -113,95 +111,8 @@ function BraceletConfigurator() {
     } catch {}
   }, []);
 
-  // --- Scroll passthrough: find the scroll container on mount ---
-  useEffect(() => {
-    const panelScroll = document.querySelector(".theme3-root .theme3-panel-scroll");
-    if (panelScroll) theme3PanelScrollRef.current = panelScroll;
-  }, []);
-
-  // --- Track scroll position (top/bottom boundaries) for passthrough ---
-  useEffect(() => {
-    const panelScroll = theme3PanelScrollRef.current;
-    if (!panelScroll) return undefined;
-
-    const isEmbedded = typeof window !== "undefined" && window.self !== window.top;
-    if (!isEmbedded) return undefined;
-
-    const updateScrollPosition = () => {
-      const atBottom = panelScroll.scrollTop + panelScroll.clientHeight >= panelScroll.scrollHeight - 5;
-      const atTop = panelScroll.scrollTop <= 5;
-      wasAtPanelBottomRef.current = atBottom;
-      wasAtPanelTopRef.current = atTop;
-    };
-
-    panelScroll.addEventListener("scroll", updateScrollPosition, { passive: true });
-    updateScrollPosition();
-
-    return () => {
-      panelScroll.removeEventListener("scroll", updateScrollPosition);
-      wasAtPanelBottomRef.current = false;
-      wasAtPanelTopRef.current = false;
-    };
-  }, []);
-
-  // --- Forward scroll past panel boundaries to parent page ---
-  useEffect(() => {
-    const panelScroll = theme3PanelScrollRef.current;
-    if (!panelScroll) return undefined;
-
-    const isEmbedded = typeof window !== "undefined" && window.self !== window.top;
-    if (!isEmbedded) return undefined;
-
-    const handleWheel = (e) => {
-      const atBottom = wasAtPanelBottomRef.current;
-      const atTop = wasAtPanelTopRef.current;
-      if (atBottom && e.deltaY > 0) {
-        e.preventDefault();
-        try { window.parent.postMessage({ type: "bracelet-configurator:scroll", deltaY: e.deltaY }, "*"); } catch {}
-      } else if (atTop && e.deltaY < 0) {
-        e.preventDefault();
-        try { window.parent.postMessage({ type: "bracelet-configurator:scroll", deltaY: e.deltaY }, "*"); } catch {}
-      }
-    };
-
-    let lastTouchY = null;
-    const handleTouchStart = (e) => {
-      const atBottom = wasAtPanelBottomRef.current;
-      const atTop = wasAtPanelTopRef.current;
-      if (!atBottom && !atTop) { lastTouchY = null; return; }
-      lastTouchY = e.touches[0]?.clientY ?? null;
-    };
-    const handleTouchMove = (e) => {
-      const atBottom = wasAtPanelBottomRef.current;
-      const atTop = wasAtPanelTopRef.current;
-      if ((!atBottom && !atTop) || lastTouchY === null) return;
-      const currentY = e.touches[0]?.clientY;
-      if (currentY == null) return;
-      const delta = lastTouchY - currentY;
-      if (atBottom && delta > 0) {
-        e.preventDefault();
-        lastTouchY = currentY;
-        try { window.parent.postMessage({ type: "bracelet-configurator:scroll", deltaY: delta }, "*"); } catch {}
-      } else if (atTop && delta < 0) {
-        e.preventDefault();
-        lastTouchY = currentY;
-        try { window.parent.postMessage({ type: "bracelet-configurator:scroll", deltaY: delta }, "*"); } catch {}
-      }
-    };
-    const handleTouchEnd = () => { lastTouchY = null; };
-
-    panelScroll.addEventListener("wheel", handleWheel, { passive: false });
-    panelScroll.addEventListener("touchstart", handleTouchStart, { passive: true });
-    panelScroll.addEventListener("touchmove", handleTouchMove, { passive: false });
-    panelScroll.addEventListener("touchend", handleTouchEnd, { passive: true });
-
-    return () => {
-      panelScroll.removeEventListener("wheel", handleWheel);
-      panelScroll.removeEventListener("touchstart", handleTouchStart);
-      panelScroll.removeEventListener("touchmove", handleTouchMove);
-      panelScroll.removeEventListener("touchend", handleTouchEnd);
-    };
-  }, []);
+  // Forward scroll past the panel's top/bottom to the embedding page.
+  usePanelScrollPassthrough("bracelet-configurator:scroll");
 
   const handleSandboxToggle = useCallback(() => {
     if (isMobileRef.current) setSandboxCollapsed(false);

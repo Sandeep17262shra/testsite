@@ -82,6 +82,29 @@ export const NECKLACE_DIAMOND_CHARM_IDS = {
   oval:     { id: "NDC3", rawLabel: "Oval Diamond",     path: "/bc-assets/gemstone/D3.glb",        preview: "/bc-assets/images/diamonds/oval.webp?v2"     },
   princess: { id: "NDC4", rawLabel: "Princess Diamond", path: "/bc-assets/gemstone/princess.glb", preview: "/bc-assets/images/diamonds/princess.webp?v2" },
   cushion:  { id: "NDC5", rawLabel: "Cushion Diamond",  path: "/bc-assets/gemstone/cushion.glb",  preview: "/bc-assets/images/diamonds/cushion.webp?v2"  },
+  // Shown together under 'Stone Charms' in the frontend; still diamond-charm products.
+  attachedOval: { id: "NDC6", rawLabel: "Oval (in chain)", path: "/bc-assets/attached_charm/Oval.glb" },
+  attachedRound: { id: "NDC7", rawLabel: "Round (in chain)", path: "/bc-assets/attached_charm/Round.glb" },
+  attachedSquare: { id: "NDC8", rawLabel: "Square (in chain)", path: "/bc-assets/attached_charm/Square.glb" },
+  hangingBaguette: { id: "NDC9", rawLabel: "Baguette", path: "/bc-assets/hanging_charm/baguette-gem-charm.glb" },
+  hangingEmerald: { id: "NDC10", rawLabel: "Emerald", path: "/bc-assets/hanging_charm/emerald-gem-charm.glb" },
+  hangingEmeraldFlat: { id: "NDC11", rawLabel: "Emerald Flat", path: "/bc-assets/hanging_charm/emerald-gem-flat-charm.glb" },
+  hangingHeart: { id: "NDC12", rawLabel: "Heart", path: "/bc-assets/hanging_charm/heart-gem-charm.glb" },
+  hangingOvalDrop: { id: "NDC13", rawLabel: "Oval Drop", path: "/bc-assets/hanging_charm/oval-gem-charm.glb" },
+  hangingOvalFlat: { id: "NDC14", rawLabel: "Oval Flat", path: "/bc-assets/hanging_charm/oval-gem-flat-charm.glb" },
+  hangingPear: { id: "NDC15", rawLabel: "Pear", path: "/bc-assets/hanging_charm/pear-gem-charm.glb" },
+  hangingRoundDrop: { id: "NDC16", rawLabel: "Round Drop", path: "/bc-assets/hanging_charm/round-gem-charm.glb" },
+  hangingPearl: { id: "NDC17", rawLabel: "Pearl", path: "/bc-assets/hanging_charm/spherical-pearl-charm.glb" },
+  hangingCrystal: { id: "NDC18", rawLabel: "Crystal", path: "/bc-assets/hanging_charm/crystal-charm.glb" },
+  gemPrincess: { id: "NDC19", rawLabel: "Princess Charm", path: "/bc-assets/bracelet_models/princess.glb" },
+  gemPearPetal: { id: "NDC20", rawLabel: "Pear Petal Charm", path: "/bc-assets/bracelet_models/patel.glb" },
+  gemElephant: { id: "NDC21", rawLabel: "Elephant Charm", path: "/bc-assets/bracelet_models/elephant.glb" },
+  gemCamel: { id: "NDC22", rawLabel: "Camel Charm", path: "/bc-assets/bracelet_models/camel.glb" },
+  hangingRough1: { id: "NDC23", rawLabel: "Rough 1", path: "/bc-assets/hanging_charm/rough-1-charm.glb" },
+  hangingRough2: { id: "NDC24", rawLabel: "Rough 2", path: "/bc-assets/hanging_charm/rough-2-charm.glb" },
+  hangingBullet: { id: "NDC25", rawLabel: "Bullet", path: "/bc-assets/hanging_charm/bullet-charm.glb" },
+  hangingLongDrop: { id: "NDC26", rawLabel: "Long Drop", path: "/bc-assets/hanging_charm/long-drop-charm.glb" },
+  hangingGanesh: { id: "NDC27", rawLabel: "Ganesh", path: "/bc-assets/hanging_charm/ganesh-charm.glb" },
 };
 
 // ── Initial Charm ────────────────────────────────────────────────────────────
@@ -232,5 +255,6 @@ export function getNecklaceDiamondCharmIdByPath(path) {
   const entry = Object.values(NECKLACE_DIAMOND_CHARM_IDS).find((v) => v.path === path);
   return entry?.id;
 }
+
 
 export default NECKLACE_PRODUCT_IDS;

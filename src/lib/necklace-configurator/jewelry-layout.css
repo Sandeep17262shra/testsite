@@ -1,0 +1,273 @@
+/* Necklace + Bracelet configurators (both render under .theme3-root--jewelry).
+   Same layout as the Bead Bracelet configurator:
+   - option rows: flex + wrap (no horizontal-scroll grid), 100px buttons, 12px gap
+   - Jewelry category buttons: 100px
+   - footer: 100px buttons, 12px gap, content aligned with the options above,
+     button-sized price block, no top border.
+   Imported last in NecklaceConfigurator.jsx and scoped to .theme3-root--jewelry,
+   so it does not touch the ring or bead configurators. */
+
+/* ── Option rows ─────────────────────────────────────────────────────────── */
+.theme3-root.theme3-root--jewelry .gb-option-row .gb-option-track {
+  display: flex;
+  flex-wrap: wrap;
+  grid-auto-flow: initial;
+  grid-auto-columns: initial;
+  grid-template-rows: none;
+  align-items: stretch;
+  gap: 12px;
+  overflow: visible;
+  cursor: default;
+}
+
+.theme3-root.theme3-root--jewelry .gb-option-row .gb-option-track > .gb-text-option,
+.theme3-root.theme3-root--jewelry .gb-option-row .gb-option-track > .gb-card-option,
+.theme3-root.theme3-root--jewelry .gb-option-row .gb-option-track > .gb-metal-option {
+  box-sizing: border-box;
+  flex: 0 0 100px;
+  width: 100px;
+  min-width: 100px;
+  max-width: 100px;
+}
+
+/* Card labels (e.g. "Custom Bracelet") must fit a 100px card: tighter side padding, allow wrapping. */
+.theme3-root.theme3-root--jewelry .gb-option-row .gb-option-track > .gb-card-option {
+  padding: 9px 6px;
+  overflow: hidden;
+}
+
+.theme3-root.theme3-root--jewelry .gb-option-row .gb-option-track > .gb-card-option span {
+  display: block;
+  max-width: 100%;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.25 !important;
+  overflow-wrap: break-word;
+}
+
+/* ── Jewelry category buttons (Necklace / Bracelet / Bead Bracelet) ──────── */
+.theme3-root.theme3-root--jewelry .jewelry-category-row-options {
+  gap: 12px;
+}
+
+.theme3-root.theme3-root--jewelry .jewelry-category-row-options > .jewelry-category-btn {
+  box-sizing: border-box;
+  flex: 0 0 100px;
+  width: 100px;
+  min-width: 100px;
+  max-width: 100px;
+  padding: 8px 6px;
+  text-align: center;
+  white-space: normal;
+  line-height: 1.25;
+}
+
+/* ── Footer (desktop layout, >900px) ─────────────────────────────────────── */
+@media (min-width: 901px) {
+  /* Line up with the options above (.theme3-panel-scroll uses 40px side padding); no top border. */
+  .theme3-root.theme3-root--jewelry .theme3-panel-footer {
+    border-top: 0;
+    padding: 12px 40px;
+  }
+
+  .theme3-root.theme3-root--jewelry .theme3-panel-footer > .theme3-footer-build-summary {
+    padding-left: 40px;
+    padding-right: 40px;
+  }
+
+  .theme3-root.theme3-root--jewelry .theme3-footer-main,
+  .theme3-root.theme3-root--jewelry .theme3-footer-actions,
+  .theme3-root.theme3-root--jewelry .theme3-panel-action-wrapper {
+    gap: 12px;
+  }
+
+  .theme3-root.theme3-root--jewelry .theme3-footer-main {
+    align-items: center;
+  }
+
+  /* Price block = first 100px slot, same 42px height as the buttons. */
+  .theme3-root.theme3-root--jewelry .theme3-footer-main .theme3-summary-info {
+    box-sizing: border-box;
+    justify-content: center;
+    min-width: 100px;
+    min-height: 42px;
+  }
+
+  .theme3-root.theme3-root--jewelry .theme3-footer-main .theme3-summary-details-toggle {
+    padding-bottom: 0;
+  }
+
+  .theme3-root.theme3-root--jewelry .theme3-footer-main .theme3-summary-price-row {
+    margin-top: 2px;
+  }
+
+  .theme3-root.theme3-root--jewelry .theme3-footer-actions .theme3-panel-footer-cta,
+  .theme3-root.theme3-root--jewelry .theme3-footer-actions .theme3-panel-action-btn.theme3-panel-share-btn,
+  .theme3-root.theme3-root--jewelry .theme3-footer-actions .theme3-panel-action-btn.theme3-panel-reset-btn {
+    box-sizing: border-box;
+    flex: 0 0 100px;
+    width: 100px;
+    min-width: 100px;
+    max-width: 100px;
+    padding: 0 6px;
+  }
+}
+
+/* ── Birthstone cards (.gb-stone-card-option) ────────────────────────────────
+   Separate class from .gb-card-option, so the 100px rules above missed them
+   (they were stretching to ~190px with a 120px image). */
+.theme3-root.theme3-root--jewelry .gb-option-row .gb-option-track > .gb-stone-card-option {
+  box-sizing: border-box;
+  flex: 0 0 100px;
+  width: 100px;
+  min-width: 100px;
+  max-width: 100px;
+  padding: 9px 6px;
+  overflow: hidden;
+}
+
+.theme3-root.theme3-root--jewelry .gb-option-row .gb-option-track > .gb-stone-card-option img {
+  width: 70px;
+  height: 70px;
+  max-width: 100%;
+}
+
+.theme3-root.theme3-root--jewelry .gb-option-row .gb-option-track > .gb-stone-card-option span {
+  display: block;
+  max-width: 100%;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.25;
+  overflow-wrap: break-word;
+}
+
+/* ── Price line inside option buttons (style, length, metal, purity, charms, stones …) ──
+   Muted, small and centred under the label, like the bead picker's "6mm · $8" line.
+   Selectors are deliberately specific: RCApp.css pins .theme3-option-box-price with !important. */
+.theme3-root.theme3-root--jewelry .gb-option-row .gb-option-track > .gb-card-option .theme3-option-box-price,
+.theme3-root.theme3-root--jewelry .gb-option-row .gb-option-track > .gb-text-option .theme3-option-box-price,
+.theme3-root.theme3-root--jewelry .gb-option-row .gb-option-track > .gb-stone-card-option .theme3-option-box-price,
+.theme3-root.theme3-root--jewelry .gb-option-row .gb-option-track > .gb-metal-option .theme3-option-box-price {
+  display: block;
+  min-height: 0;
+  margin: 0 !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
+  line-height: 1.2 !important;
+  text-align: center;
+  white-space: nowrap;
+  color: #6b6b6b !important;
+}
+
+/* Metal buttons sit on a coloured swatch: use the same ink as their label. */
+.theme3-root.theme3-root--jewelry .gb-option-row .gb-option-track > .gb-metal-option .theme3-option-box-price {
+  color: #303030 !important;
+  opacity: 0.8;
+}
+
+/* ── Icon cards: all 120px tall (Style cards, charm cards, birthstones, initials) ──
+   Fixed height, top-anchored content. Budget for a two-line name + price:
+   4 + 64 (image) + 2 + 30 (name) + 2 + 13 (price) + 4 = 119px. */
+.theme3-root.theme3-root--jewelry .gb-option-row .gb-option-track > .gb-card-option,
+.theme3-root.theme3-root--jewelry .gb-option-row .gb-option-track > .gb-stone-card-option {
+  box-sizing: border-box;
+  height: 120px;
+  min-height: 120px;
+  max-height: 120px;
+  grid-template-rows: 64px auto auto;
+  align-content: start;
+  gap: 2px;
+  padding: 4px 6px;
+}
+
+.theme3-root.theme3-root--jewelry .gb-option-row .gb-option-track > .gb-card-option img,
+.theme3-root.theme3-root--jewelry .gb-option-row .gb-option-track > .gb-stone-card-option img {
+  width: auto;
+  height: 64px;
+  max-width: 100%;
+  max-height: 64px;
+  object-fit: contain;
+}
+
+/* Stone swatches are full-bleed circles, so at 64px they look bigger than the charm icons
+   (which have transparent padding). Draw them smaller, centred in the same 64px image row. */
+.theme3-root.theme3-root--jewelry .gb-option-row .gb-option-track > .gb-stone-card-option img {
+  width: 50px;
+  height: 50px;
+  max-height: 50px;
+  align-self: center;
+  justify-self: center;
+}
+
+/* Initial-letter cards: smaller letter (was 64–80px) with the price stacked underneath. */
+.theme3-root.theme3-root--jewelry .gb-option-row .gb-option-track > .initial-charm-block {
+  flex-direction: column;
+  gap: 3px;
+}
+
+.theme3-root.theme3-root--jewelry .gb-option-row .gb-option-track > .initial-charm-block > span:first-child {
+  font-size: 60px !important;
+  line-height: 64px !important;
+  height: 64px;
+}
+
+/* ── Metal swatches + text buttons (Length / Purity / Category …): one compact height ──
+   Metal buttons were ~78px (60px min + roomy grid gap) while text buttons with a price line were ~62px.
+   Both are now 52px with the same tight padding / gap, so label + price sit the same way in each. */
+.theme3-root.theme3-root--jewelry .gb-option-row .gb-option-track > .gb-metal-option {
+  box-sizing: border-box;
+  height: 52px;
+  min-height: 52px;
+  max-height: 52px;
+  padding: 6px;
+  gap: 3px;
+  align-content: center;
+}
+
+.theme3-root.theme3-root--jewelry .gb-option-row .gb-option-track > .gb-text-option {
+  box-sizing: border-box;
+  min-height: 52px;
+  padding: 6px;
+  gap: 3px;
+  justify-content: center;
+}
+
+/* "View details" link: 12px in every configurator (was 10px in necklace/bracelet/beads, inherited ~20px in ring). */
+.theme3-root.theme3-root--jewelry .theme3-panel-footer .theme3-summary-details-toggle span,
+.theme3-root.theme3-root--jewelry .theme3-panel-footer .theme3-summary-details-toggle .theme3-link-text {
+  font-size: 12px !important;
+  line-height: 1.2 !important;
+}
+
+/* ── Preview selection chips (same as the ring configurator) ─────────────── */
+.theme3-root.theme3-root--jewelry .theme3-preview-caption.ring-preview-selection-chips {
+  align-items: flex-start;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ── Centre the options column ───────────────────────────────────────────────
+   Option rows are 100px buttons with a 12px gap, so the widest row (5 buttons)
+   is 548px. On a wide panel the rows hugged the left padding and left a much
+   bigger gap on the right. Cap the sections and the footer content at that
+   width and centre them, so the space is even on both sides. Narrower panels
+   are unaffected (the cap only applies when there is room to spare). */
+.theme3-root.theme3-root--jewelry {
+  --jewelry-options-max-width: 548px;
+}
+
+.theme3-root.theme3-root--jewelry .theme3-panel-scroll > .theme3-option-section,
+.theme3-root.theme3-root--jewelry .theme3-panel-footer .theme3-footer-main {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--jewelry-options-max-width);
+  margin-inline: auto;
+}
+
+/* "View details" popover: same centred column as the rows and footer buttons. */
+.theme3-root.theme3-root--jewelry .theme3-panel-footer > .theme3-footer-build-summary > .theme3-build-summary {
+  box-sizing: border-box;
+  max-width: var(--jewelry-options-max-width);
+  margin-inline: auto;
+}

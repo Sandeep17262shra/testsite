@@ -19,6 +19,8 @@ import {
   useCharmAddWobble, WasherBail,
 } from '../shared/necklaceShared';
 import { GEM_REFRACTION_PARAMS, useGemEnvTexture } from '../shared/gemMaterial';
+import StoneMaterial, { applyStoneUVs } from '../shared/StoneMaterial';
+import { getStoneType } from '../shared/stoneTypes';
 import HangingStoneCharm from '../shared/HangingStoneCharm';
 import { getGemGlbCharm, NECKLACE_GLB_CHARM_SCALE } from '../shared/glbGemCharms';
 import { getHangingCharm, getHangingCharmScale, getCharmNudge } from '../shared/attachedCharms';
@@ -706,6 +708,7 @@ const NecklaceHangingCharm = ({ charm, index, total, seamSide = null, seamRank =
               scale={getHangingCharmScale(def.id, 'necklace')}
               metalColor={charm.bodyColor}
               stoneColor={charm.gemstoneColor}
+              stoneType={charm.stoneType}
               materialProps={material}
               bailRadius={NECKLACE_INITIAL_HW.bailR}
               bailTube={NECKLACE_INITIAL_HW.bailTube}
@@ -738,7 +741,7 @@ const NecklaceGlbCharm = ({ charm, index, total, seamSide = null, seamRank = nul
     }),
     [index, total, namePendant, braceletPath, chainOffsetX, drapeCfg, seamSide, seamRank],
   );
-  const wobbleRef = useCharmAddWobble(0, 1, `${charm.path}-${charm.gemstoneColor}`, Boolean(model));
+  const wobbleRef = useCharmAddWobble(0, 1, `${charm.path}-${charm.stoneType || charm.gemstoneColor}`, Boolean(model));
   const dropOffsetY = useChainCharmDropOffset(placement.t, dropKey, Boolean(drapeCfg), animateDrop);
 
   useEffect(() => {
@@ -758,6 +761,8 @@ const NecklaceGlbCharm = ({ charm, index, total, seamSide = null, seamRank = nul
           const geo = child.geometry.clone().toNonIndexed();
           geo.applyMatrix4(new THREE.Matrix4().multiplyMatrices(rootInverse, child.matrixWorld));
           geo.computeVertexNormals();
+          // Set with a gemstone: map that stone's texture onto the cut.
+          if (charm.stoneType) applyStoneUVs(geo, getStoneType(charm.stoneType)?.uvScale ?? 1);
           foundGem = geo;
           gemMeshes.push(child);
           return;
@@ -773,9 +778,9 @@ const NecklaceGlbCharm = ({ charm, index, total, seamSide = null, seamRank = nul
       setModel(obj);
     }).catch((err) => console.error(`Failed to load ${charm.path}`, err));
     return () => { cancelled = true; };
-  }, [charm.path, charm.bodyColor, charm.gemstoneColor]);
+  }, [charm.path, charm.bodyColor, charm.gemstoneColor, charm.stoneType]);
 
-  const ready = Boolean(model) && Boolean(anchor) && Boolean(def) && (Boolean(envTexture) || !gemGeometry);
+  const ready = Boolean(model) && Boolean(anchor) && Boolean(def) && (Boolean(envTexture) || !gemGeometry || Boolean(charm.stoneType));
   useReportCharmReady(ready, charmKey, onReady);
 
   const material = ringMetalProps(charm.bodyColor || '#C0C0C0', { side: THREE.DoubleSide });
@@ -854,14 +859,16 @@ const NecklaceGlbCharm = ({ charm, index, total, seamSide = null, seamRank = nul
             <primitive object={model} position={innerPosition} rotation={def.rotation} scale={scale} />
             {gemGeometry && (
               <mesh
-                key={`gem_${charm.path}_${charm.gemstoneColor}`}
+                key={`gem_${charm.path}_${charm.stoneType || charm.gemstoneColor}`}
                 geometry={gemGeometry}
                 position={innerPosition}
                 rotation={def.rotation}
                 scale={scale}
                 castShadow
               >
-                {envTexture ? (
+                {charm.stoneType && getStoneType(charm.stoneType) ? (
+                  <StoneMaterial stoneType={charm.stoneType} fallbackColor={charm.gemstoneColor} />
+                ) : envTexture ? (
                   <MeshRefractionMaterial
                     envMap={envTexture}
                     color={new THREE.Color(charm.gemstoneColor)}

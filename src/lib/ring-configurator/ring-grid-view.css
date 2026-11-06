@@ -1,0 +1,155 @@
+/* Ring configurator — grid view (.is-grid-view on the preview pane).
+   2 x 2 layout:  top view | live 3D viewer
+                  front view | perspective view
+   The Scene's canvas wrapper (.ring-field) is moved into the top-right cell; the other three cells
+   are still images drawn by RingGridViewOverlay. Normal view is untouched. */
+
+.theme3-root.theme3-root--ring .theme3-preview-pane .ring-grid-view {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  pointer-events: none;
+}
+
+.theme3-root.theme3-root--ring .theme3-preview-pane.is-grid-view .ring-field {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 50%;
+  height: 50%;
+  flex: none;
+  z-index: 2;
+}
+
+/* Cells */
+.theme3-root.theme3-root--ring .ring-grid-view__cell {
+  position: relative;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-right: 1px solid #e5e5e5;
+  border-bottom: 1px solid #e5e5e5;
+  background: transparent;
+  overflow: hidden;
+  font: inherit;
+}
+
+.theme3-root.theme3-root--ring .ring-grid-view__cell--live {
+  /* The live 3D viewer sits underneath; clicks go through to it. */
+  border-right: 0;
+  pointer-events: none;
+}
+
+.theme3-root.theme3-root--ring .ring-grid-view__cell--still {
+  pointer-events: auto;
+  cursor: pointer;
+  background: #f8f8f8;
+}
+
+.theme3-root.theme3-root--ring .ring-grid-view__cell:nth-child(n + 3) {
+  border-bottom: 0;
+}
+
+.theme3-root.theme3-root--ring .ring-grid-view__cell:nth-child(2n) {
+  border-right: 0;
+}
+
+.theme3-root.theme3-root--ring .ring-grid-view__cell--still img {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  /* Leaves a strip for the corner label so it never covers the ring. */
+  padding-top: 12px;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.theme3-root.theme3-root--ring .ring-grid-view__placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #b0b0aa;
+  font-size: 18px;
+}
+
+/* Corner labels (TOP VIEW, FRONT VIEW, …) */
+.theme3-root.theme3-root--ring .ring-grid-view__label {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  z-index: 2;
+  padding: 3px 7px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #656565;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  line-height: 1;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+/* The 3D cell's label sits bottom-right ("3D"); its hint sits at the top-left, like the other cells' labels. */
+.theme3-root.theme3-root--ring .ring-grid-view__cell--live .ring-grid-view__label {
+  top: auto;
+  left: auto;
+  right: 18px;
+  bottom: 18px;
+  font-size: 12px;
+}
+
+.theme3-root.theme3-root--ring .ring-grid-view__hint {
+  position: absolute;
+  left: 12px;
+  top: 8px;
+  z-index: 2;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #656565;
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* The corner chips and the orbit hint don't fit a quarter-size viewer. */
+.theme3-root.theme3-root--ring .theme3-preview-pane.is-grid-view .theme3-preview-caption {
+  display: none;
+}
+
+/* Active state of the grid toggle matches the other preview controls. */
+.theme3-root.theme3-root--ring .gb-preview-control--grid svg {
+  display: block;
+}
+
+@media (max-width: 900px) {
+  .theme3-root.theme3-root--ring .ring-grid-view__label {
+    top: 8px;
+    left: 8px;
+    padding: 3px 6px;
+    font-size: 10px;
+  }
+
+  .theme3-root.theme3-root--ring .ring-grid-view__cell--live .ring-grid-view__label {
+    top: auto;
+    left: auto;
+    right: 8px;
+    bottom: 8px;
+  }
+
+  .theme3-root.theme3-root--ring .ring-grid-view__hint {
+    display: none;
+  }
+}

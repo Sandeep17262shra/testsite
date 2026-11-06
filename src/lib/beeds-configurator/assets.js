@@ -3,6 +3,17 @@
  * including their model paths and positioning information.
  */
 
+import {
+  PAVITRA_CUSTOMIZATION_ENABLED,
+  PAVITRA_BEAD_SIZE_IDS,
+  PAVITRA_EXTRA_BEAD_KEYS,
+  PAVITRA_BEADS_FROM_KEY,
+  PAVITRA_DEFAULT_BEAD_KEY,
+  PAVITRA_THREAD_COLOR_IDS,
+  PAVITRA_HIDDEN_BEAD_TAB_IDS,
+  PAVITRA_HIDDEN_BEAD_STYLE_IDS,
+} from "../jewelry-shell/pavitraCustomization";
+
 const beadAssetKeyFromFilename = (filename) =>
   filename.replace(/\.(webp|svg)$/i, "");
 
@@ -111,7 +122,7 @@ const NEW_SPACER_MODEL_KEYS = Array.from({ length: 19 }, (_, index) => `s${index
 // first ten at the front of the new-spacer picker; s14 follows them.
 const SUPPLIED_SPACER_ICONS = [
   { key: "s1", name: "Lotus" },
-  { key: "s19", name: "Sacred Geometry", extension: "png" },
+  { key: "s19", name: "Sacred Geometry" },
   { key: "s2", name: "Lotus Bloom" },
   { key: "s3", name: "Om" },
   { key: "s4", name: "Spacer S4" },
@@ -137,10 +148,10 @@ const SUPPLIED_SPACER_ICON_BY_KEY = Object.fromEntries(
 );
 // S16 and S17 duplicate other catalogue pieces, so retain their files only
 // for existing saved designs and omit them from the shopper-facing picker.
-// s4, s8, s9, s12, s15, s18 have been restored to the Metalic Beads picker.
-// Icons for these beads are pending — they will fall back to the default
-// top-view placeholder until dedicated icon files are supplied.
-export const HIDDEN_NEW_SPACER_KEYS = [];
+// All metalic bead icons (s1–s18) are the silver artwork in spacer-icons/.
+// S18 duplicates S3 (Om), so it is hidden from the Metalic Beads picker but
+// kept registered so existing saved designs that use it still load.
+export const HIDDEN_NEW_SPACER_KEYS = ["s18"];
 const NEW_SPACER_KEYS = [
   ...TOP_NEW_SPACER_KEYS,
   ...NEW_SPACER_MODEL_KEYS.filter(
@@ -204,11 +215,8 @@ export const BASE_BEADS = BEAD_IMAGE_FILES.map((filename) => {
   else if (key === "pyrite") collection = "pyrite";
   else if (key.includes("quartz") || key === "moonstone" || key === "white-marble") collection = "quartz";
 
-  const isLimitedSizeBead = key === "green-quartz" || key === "green_quartz" || key === "tiger-eye";
-
   return {
     key,
-    aliases: key === "green-quartz" ? ["green_quartz", "green-quartz"] : undefined,
     name: formatBeedsAssetLabel(filename),
     // `image` remains as a compatibility alias for UI paths that render an
     // asset image, but deliberately points at the material texture rather
@@ -219,7 +227,7 @@ export const BASE_BEADS = BEAD_IMAGE_FILES.map((filename) => {
     // preview; all other photographed stones remain solid/opaque.
     materialType:  key.includes("quartz") ? "quartz" : "solid",
     collection,
-    sizes: isLimitedSizeBead ? LIMITED_BEAD_SIZES_8_10 : BEAD_SIZES,
+    sizes: BEAD_SIZES,
     price: 8,
   };
 });
@@ -411,22 +419,34 @@ export const GLB_BEADS = [
   },
 ];
 
-// Client-specific bead whitelist: only the beads shown in the client's picker.
-const CLIENT_BEAD_KEYS = new Set([
-  // From BASE_BEADS (original set)
-  "tiger-eye", "green-quartz", "green_quartz",
-  // From NEW_BEADS (extended set)
-  "green-aventurine", "ruby", "tsp-moti", "agate", "apatite",
-  "black-onyx", "citrine", "lapis", "malachite", "pink-tiger-eye", "sun-stone",
-  // From GLB_BEADS
-  "rudraksh", "pearl-star", "firosha", "amethyst-star",
-]);
-
-export const BEADS = [
-  ...BASE_BEADS.filter((b) => CLIENT_BEAD_KEYS.has(b.key)),
-  ...NEW_BEADS.filter((b) => CLIENT_BEAD_KEYS.has(b.key)),
-  ...GLB_BEADS.filter((b) => CLIENT_BEAD_KEYS.has(b.key)),
+const ALL_BEADS = [
+  ...BASE_BEADS,
+  ...NEW_BEADS,
+  ...GLB_BEADS,
 ];
+
+/**
+ * Store restriction (see jewelry-shell/pavitraCustomization.js): keep the beads
+ * from Green Aventurine to the end of the list, plus the extra keys (Green
+ * Quartz, Tiger Eye), and offer them in 8mm / 10mm only. List order is kept.
+ */
+function getPavitraBeads(beads) {
+  if (!PAVITRA_CUSTOMIZATION_ENABLED) {
+    return beads;
+  }
+  const fromIndex = beads.findIndex((bead) => bead.key === PAVITRA_BEADS_FROM_KEY);
+  return beads
+    .filter(
+      (bead, index) =>
+        (fromIndex !== -1 && index >= fromIndex) || PAVITRA_EXTRA_BEAD_KEYS.includes(bead.key)
+    )
+    .map((bead) => ({
+      ...bead,
+      sizes: (bead.sizes || BEAD_SIZES).filter((size) => PAVITRA_BEAD_SIZE_IDS.includes(size.id)),
+    }));
+}
+
+export const BEADS = getPavitraBeads(ALL_BEADS);
 
 export function isBeadSizeSupported(assetKey, sizeId) {
   if (!assetKey || !sizeId) return true;
@@ -665,10 +685,10 @@ export function isDiamondSpacerSku(assetKey) {
   return (sku >= 1 && sku <= 6) || (sku >= 10 && sku <= 14);
 }
 
-/** Every new catalog spacer uses the yellow-gold finish in the 3D preview. */
+/** Every new catalog spacer (Metalic Beads) uses the silver finish in the 3D preview. */
 export function getSpacerMetalFinish(assetKey) {
   if (isCatalogSpacerSku(assetKey)) {
-    return "yellowGold";
+    return "silver";
   }
   const sku = getSpacerSku(assetKey);
   if (sku === null) {
@@ -965,7 +985,10 @@ export const BEAD_COLLECTIONS = [
   { id: "quartz", label: "Quartz" },
   { id: "amethyst", label: "Amethyst" },
   { id: "pyrite", label: "Pyrite" },
-];
+].filter(
+  (collection) =>
+    collection.id === "all" || BEADS.some((bead) => bead.collection === collection.id)
+);
 
 export const BEAD_GRID_SIZE_FILTERS = [
   { id: "all", label: "All" },
@@ -973,14 +996,19 @@ export const BEAD_GRID_SIZE_FILTERS = [
   { id: "8", label: "8" },
   { id: "10", label: "10" },
   { id: "12", label: "12" },
-];
+].filter(
+  (filter) =>
+    !PAVITRA_CUSTOMIZATION_ENABLED ||
+    filter.id === "all" ||
+    PAVITRA_BEAD_SIZE_IDS.includes(`${filter.id}mm`)
+);
 
 const BEAD_PICKER_SIZE_OPTIONS = [
   { id: "6mm", label: "6mm" },
   { id: "8mm", label: "8mm" },
   { id: "10mm", label: "10mm" },
   { id: "12mm", label: "12mm" },
-];
+].filter((size) => !PAVITRA_CUSTOMIZATION_ENABLED || PAVITRA_BEAD_SIZE_IDS.includes(size.id));
 
 /** Bead picker rows: every size per stone when filter is "all", else one row per bead. */
 export function getBeadPickerGridItems(beads, gridSizeFilter) {
@@ -1030,15 +1058,17 @@ export function getBeadPickerGridItems(beads, gridSizeFilter) {
 
 export const BEAD_CUSTOMIZE_TABS = [
   { id: "beads", label: "Beads" },
-  // "charms" and "spacers" tabs are hidden for this client
-  // { id: "charms", label: "Charms" },
-  // { id: "spacers", label: "Spacers" },
+  { id: "charms", label: "Charms" },
+  { id: "spacers", label: "Spacers" },
   { id: "metalic-beads", label: "Metalic Beads" },
 ];
 
 /** Hidden from UI for now — underlying style/charm data unchanged. */
-export const UI_HIDDEN_BEAD_STYLE_IDS = ["style-3"];
-export const UI_HIDDEN_CUSTOMIZE_TAB_IDS = [];
+export const UI_HIDDEN_BEAD_STYLE_IDS = [
+  "style-3",
+  ...(PAVITRA_CUSTOMIZATION_ENABLED ? PAVITRA_HIDDEN_BEAD_STYLE_IDS : []),
+];
+export const UI_HIDDEN_CUSTOMIZE_TAB_IDS = PAVITRA_CUSTOMIZATION_ENABLED ? PAVITRA_HIDDEN_BEAD_TAB_IDS : [];
 
 export const VISIBLE_BEAD_STYLES = [
   EMPTY_BEAD_STYLE,
@@ -1049,7 +1079,8 @@ export const VISIBLE_BEAD_CUSTOMIZE_TABS = BEAD_CUSTOMIZE_TABS.filter(
   (tab) => !UI_HIDDEN_CUSTOMIZE_TAB_IDS.includes(tab.id)
 );
 
-export const DEFAULT_BEAD_KEY = "amethyst";
+/** Pavitra drops Amethyst, so a fresh session opens on the first kept bead instead. */
+export const DEFAULT_BEAD_KEY = PAVITRA_CUSTOMIZATION_ENABLED ? PAVITRA_DEFAULT_BEAD_KEY : "amethyst";
 export const DEFAULT_SEPARATOR_KEY = "s1";
 export const DEFAULT_CHARM_KEY = "heart";
 export const DEFAULT_BEAD_SIZE_ID = "10mm";
@@ -1063,7 +1094,7 @@ export const THREAD_COLORS = [
   { id: "yellow", label: "Yellow", color: "#eab308", preview3d: "#ca8a04", stroke2d: "#ca8a04" },
   { id: "green", label: "Green", color: "#16a34a", preview3d: "#15803d", stroke2d: "#16a34a" },
   { id: "white", label: "White", color: "#ffffff", preview3d: "#f8fafc", stroke2d: "#cbd5e1" },
-];
+].filter((color) => !PAVITRA_CUSTOMIZATION_ENABLED || PAVITRA_THREAD_COLOR_IDS.includes(color.id));
 export const DEFAULT_THREAD_COLOR_ID = "black";
 export const RESET_THREAD_COLOR_ID = "black";
 /** Reset — start manual building on an empty 4" string. */

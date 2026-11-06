@@ -8,9 +8,8 @@ import { getGemGlbCharm } from "./glbGemCharms";
 export const BRACELETS = [
      { path: "/pc-assets/pendant_models//BRACELET15.glb", name: "Plain", price: 3600 },
      { path: "/pc-assets/pendant_models//BRACELET16.glb", name: "Clip", price: 3200 },
-     // Hidden for this client:
-     // { path: "/pc-assets/pendant_models//BRACELET17.glb", name: "Milgrain", price: 3600 },
-     // { path: "/pc-assets/pendant_models//BRACELET18.glb", name: "Link", price: 3600 },
+     { path: "/pc-assets/pendant_models//BRACELET17.glb", name: "Milgrain", price: 3600 },
+     { path: "/pc-assets/pendant_models//BRACELET18.glb", name: "Link", price: 3600 },
      // Removed: GLB chain models (BRACELET13/14) are no longer used.
      // { path: "/pc-assets/pendant_models//BRACELET13.glb", name: "Knot Link", price: 3200 },
      // { path: "/pc-assets/pendant_models//BRACELET14.glb", name: "Box Link", price: 3600 },
@@ -126,10 +125,9 @@ export const withModelVersion = (path) =>
 export const CHARM_METAL_SWATCHES = [
   { key: 'SL', label: 'Silver 925', hex: '#C0C0C0', color: '#DADADA', image: 'white.png' },
   { key: 'YG', label: 'Yellow Gold', hex: '#ECC875', color: '#FFD280', image: 'yellow.png' },
-  // Hidden for this client:
-  // { key: 'RG', label: 'Rose Gold', hex: '#FFBAA3', color: '#E6B08F', image: 'rose.png' },
-  // { key: 'PL', label: 'Platinum', hex: '#A8A8A6', color: '#E5E4E2', image: 'platinum.png' },
-  // { key: 'WG', label: 'White Gold', hex: '#C8C8C8', color: '#F1F1EF', image: 'white.png' },
+  { key: 'RG', label: 'Rose Gold', hex: '#FFBAA3', color: '#E6B08F', image: 'rose.png' },
+  { key: 'PL', label: 'Platinum', hex: '#A8A8A6', color: '#E5E4E2', image: 'platinum.png' },
+  { key: 'WG', label: 'White Gold', hex: '#C8C8C8', color: '#F1F1EF', image: 'white.png' },
 ];
 export const getImageCharmPath = (number, metalKey = 'WG') =>
   `/bc-assets/image_charm/${metalKey === 'YG' ? 'YG' : metalKey === 'RG' ? 'RG' : 'WG'}/CHARMS${number}.png`;
@@ -502,12 +500,11 @@ export const BRACELET_STYLES = [
     // { path: "/bc-assets/bracelet_models/BRACELET9.glb", name: "Textured Loop", price: 2600 },
     // { path: "/bc-assets/bracelet_models/BRACELET10.glb", name: "Cut-Out Band", price: 2800 },
     // { path: "/bc-assets/bracelet_models/BRACELET11.glb", name: "Wave Band", price: 3000 },
-     // Client: only Plain (Round) and Clip chains shown
+     // Same order as the necklace chains: round first, then the elongated (cable) links.
      { path: GENERATED_NAME_CHAIN_ROUND_PATH, name: "Round", price: 3400 },
      { path: GENERATED_NAME_CHAIN_PATH, name: "Clip", price: 3400 },
-     // Hidden for this client:
-     // { path: GENERATED_NAME_CHAIN_OVAL_PATH, name: "Oval", price: 3450 },
-     // { path: GENERATED_NAME_CHAIN_SQUARE_PATH, name: "Square", price: 3450 },
+     { path: GENERATED_NAME_CHAIN_OVAL_PATH, name: "Oval", price: 3450 },
+     { path: GENERATED_NAME_CHAIN_SQUARE_PATH, name: "Square", price: 3450 },
      // Removed: GLB chain models (BRACELET13/14) are no longer used.
      // { path: "/bc-assets/bracelet_models/BRACELET13.glb", name: "Knot Link", price: 3200 },
      // { path: "/bc-assets/bracelet_models/BRACELET14.glb", name: "clip chain", price: 3200 },
@@ -558,8 +555,8 @@ export const NAME_PENDANT_FONTS = [
 ];
 
 export const DEFAULT_NAME_PENDANT = {
-    enabled: false,
-    text: "",
+    enabled: true,
+    text: "Name",
     fontStyle: "dancing",
 };
 
@@ -622,10 +619,9 @@ export const BRACELET_STONE_COLOR_SWATCHES = [
 export const BRACELET_CHARM_METAL_SWATCHES = [
     { key: "SL", label: "Silver 925", hex: "#B8B8B8", color: "#CFCFCF", image: "white.png" },
     { key: "YG", label: "Yellow Gold", hex: "#FFD280", color: "#FFD280", image: "yellow.png" },
-    // Hidden for this client:
-    // { key: "RG", label: "Rose Gold", hex: "#FFBAA3", color: "#E6B08F", image: "rose.png" },
-    // { key: "PL", label: "Platinum", hex: "#e5e4e2", color: "#E5E4E2", image: "platinum.png" },
-    // { key: "WG", label: "White Gold", hex: "#DBDBDB", color: "#F1F1EF", image: "white.png" },
+    { key: "RG", label: "Rose Gold", hex: "#FFBAA3", color: "#E6B08F", image: "rose.png" },
+    { key: "PL", label: "Platinum", hex: "#e5e4e2", color: "#E5E4E2", image: "platinum.png" },
+    { key: "WG", label: "White Gold", hex: "#DBDBDB", color: "#F1F1EF", image: "white.png" },
 ];
 
 export const getCharmNumberFromPath = (path = "") => {

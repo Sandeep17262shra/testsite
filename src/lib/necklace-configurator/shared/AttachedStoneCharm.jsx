@@ -12,25 +12,48 @@
 import React, { useEffect, useMemo } from "react";
 import { useLoader } from "@react-three/fiber";
 import { MeshRefractionMaterial } from "@react-three/drei";
-import { GLTFLoader } from "three-stdlib";
+import { GLTFLoader, DRACOLoader } from "three-stdlib";
 import * as THREE from "three";
 import { ringMetalProps } from "./metalMaterial";
 import { GEM_REFRACTION_PARAMS, useGemEnvTexture } from "./gemMaterial";
+import StoneMaterial, { applyStoneUVs } from "./StoneMaterial";
+import { getStoneType } from "./stoneTypes";
 import {
   getAttachedCharmMatrix,
+  ATTACHED_CHARMS,
   isAttachedCharmStone,
   isAttachedCharmPearl,
   withAttachedCharmVersion,
   DEFAULT_ATTACHED_STONE_COLOR,
 } from "./attachedCharms";
 
+// The charm models may be Draco-compressed; a bare GLTFLoader throws "No
+// DRACOLoader instance provided" on those. One shared decoder (local files).
+let sharedDracoLoader = null;
+const withDraco = (loader) => {
+  if (!sharedDracoLoader) {
+    sharedDracoLoader = new DRACOLoader();
+    sharedDracoLoader.setDecoderPath("/draco/gltf/");
+  }
+  loader.setDRACOLoader(sharedDracoLoader);
+};
+
+// Fetch the chain-stone models up front so switching between Oval / Round /
+// Square never waits on a download (and the chain never blinks out for it).
+if (typeof window !== "undefined") {
+  ATTACHED_CHARMS.forEach((def) => {
+    useLoader.preload(GLTFLoader, withAttachedCharmVersion(def.path), withDraco);
+  });
+}
+
 const AttachedStoneCharm = ({
   charm,
   scale = 1,
   metalColor = "#DBDBDB",
   stoneColor = DEFAULT_ATTACHED_STONE_COLOR,
+  stoneType = null,   // id from stoneTypes.js; when set the stone is that gemstone, not a diamond
 }) => {
-  const gltf = useLoader(GLTFLoader, withAttachedCharmVersion(charm.path));
+  const gltf = useLoader(GLTFLoader, withAttachedCharmVersion(charm.path), withDraco);
   const envTexture = useGemEnvTexture();
 
   // Geometry is rebuilt in the charm's own frame once per model, never per
@@ -43,12 +66,27 @@ const AttachedStoneCharm = ({
     const stone = [];
     const pearl = [];
     const crystal = [];
+    const smoothStone = [];
     gltf.scene.traverse((child) => {
       if (!child.isMesh || !child.geometry) return;
       const geometry = child.geometry.clone();
       geometry.applyMatrix4(new THREE.Matrix4().multiplyMatrices(toScene, child.matrixWorld));
       const label = `${child.name} ${child.material?.name || ""}`;
-      if (charm.crystal && /prism|crystal/i.test(label)) {
+      const uvScale = getStoneType(stoneType)?.uvScale ?? 1;
+      if (stoneType && charm.crystal && /prism|crystal/i.test(label)) {
+        // Crystal point set with a chosen stone: faceted, textured like any stone.
+        const faceted = geometry.toNonIndexed();
+        geometry.dispose();
+        faceted.computeVertexNormals();
+        applyStoneUVs(faceted, uvScale);
+        stone.push(faceted);
+      } else if (stoneType && charm.pearl && isAttachedCharmPearl(label)) {
+        // Pearl-shaped charm set with a chosen stone: a smooth polished bead.
+        const smooth = geometry.toNonIndexed();
+        geometry.dispose();
+        applyStoneUVs(smooth, uvScale);
+        smoothStone.push(smooth);
+      } else if (charm.crystal && /prism|crystal/i.test(label)) {
         // The crystal point: flat facets, tinted and translucent.
         const faceted = geometry.toNonIndexed();
         geometry.dispose();
@@ -63,19 +101,21 @@ const AttachedStoneCharm = ({
         const faceted = geometry.toNonIndexed();
         geometry.dispose();
         faceted.computeVertexNormals();
+        applyStoneUVs(faceted, getStoneType(stoneType)?.uvScale ?? 1);
         stone.push(faceted);
       } else {
         metal.push(geometry);
       }
     });
-    return { metal, stone, pearl, crystal };
-  }, [gltf, charm]);
+    return { metal, stone, pearl, crystal, smoothStone };
+  }, [gltf, charm, stoneType]);
 
   useEffect(() => () => {
     parts.metal.forEach((g) => g.dispose());
     parts.stone.forEach((g) => g.dispose());
     parts.pearl.forEach((g) => g.dispose());
     parts.crystal.forEach((g) => g.dispose());
+    parts.smoothStone.forEach((g) => g.dispose());
   }, [parts]);
 
   const metalProps = useMemo(() => ringMetalProps(metalColor), [metalColor]);
@@ -119,9 +159,16 @@ const AttachedStoneCharm = ({
           />
         </mesh>
       ))}
+      {parts.smoothStone.map((geometry, i) => (
+        <mesh key={`smooth-stone-${charm.path}-${i}-${stoneType}`} geometry={geometry} castShadow>
+          <StoneMaterial stoneType={stoneType} fallbackColor={stoneColor} flat={false} />
+        </mesh>
+      ))}
       {parts.stone.map((geometry, i) => (
-        <mesh key={`stone-${i}-${stoneColor}`} geometry={geometry} castShadow>
-          {envTexture ? (
+        <mesh key={`stone-${charm.path}-${i}-${stoneType || stoneColor}`} geometry={geometry} castShadow>
+          {stoneType && getStoneType(stoneType) ? (
+            <StoneMaterial stoneType={stoneType} fallbackColor={stoneColor} />
+          ) : envTexture ? (
             <MeshRefractionMaterial
               envMap={envTexture}
               color={new THREE.Color(stoneColor)}

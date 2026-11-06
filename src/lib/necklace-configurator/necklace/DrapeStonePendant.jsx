@@ -100,18 +100,21 @@ const DrapeStonePendant = ({ items = NO_ITEMS, drapeCfg, onAnchorsChange }) => {
 
   if (!placed) return null;
   return (
-    <Suspense fallback={null}>
+    <>
       {placed.filter(Boolean).map((p, i) => (
         <group key={p.charm.id ?? i} position={[p.x, p.y, p.z]} rotation={[0, 0, p.theta]}>
-          <AttachedStoneCharm
-            charm={p.def}
-            scale={NECKLACE_ATTACHED_CHARM_SCALE}
-            metalColor={p.charm.bodyColor}
-            stoneColor={p.charm.gemstoneColor}
-          />
+          <Suspense fallback={null}>
+            <AttachedStoneCharm
+              charm={p.def}
+              scale={NECKLACE_ATTACHED_CHARM_SCALE}
+              metalColor={p.charm.bodyColor}
+              stoneColor={p.charm.gemstoneColor}
+              stoneType={p.charm.stoneType}
+            />
+          </Suspense>
         </group>
       ))}
-    </Suspense>
+    </>
   );
 };
 

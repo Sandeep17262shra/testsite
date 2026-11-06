@@ -116,6 +116,7 @@ function BeadPickerCard({
   onClick,
   showPrice = true,
   showSizeInLabel = false,
+  badge = null,
 }) {
   const cardLabel =
     showSizeInLabel && sizeLabel ? `${asset.name} · ${sizeLabel}` : asset.name;
@@ -127,6 +128,11 @@ function BeadPickerCard({
       onClick={onClick}
       disabled={disabled}
     >
+      {badge && (
+        <span className="demo-only-ribbon" aria-hidden="true">
+          <span>{badge}</span>
+        </span>
+      )}
       <span className="beads-grid-card__image-wrap">
         {asset.topViewLabel ? (
           <span className="beads-grid-card__model-token" aria-hidden="true">
@@ -574,15 +580,19 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
     setPendingCartPayload(null);
   }, [pendingCartPayload, resolveStorefrontUrl, shareUrl]);
 
+  // The footer button is "Add to cart" from the first render. The old "Choose Beads" step
+  // (scroll down to Customize) is only kept for stores that have switched Add to cart off.
+  const footerCtaIsAddToCart =
+    storefrontControls.addToCart || view360 || activeSection !== "jewelry";
   const footerCtaLabel = addedToCart
     ? t("beaded.cart.addingToCart")
-    : view360 || activeSection !== "jewelry"
+    : footerCtaIsAddToCart
       ? t("beaded.cart.addToCart")
       : t("beaded.cart.chooseBeads");
   const footerCtaDisabled = addedToCart;
 
   const handleFooterContinue = () => {
-    if (view360 || activeSection !== "jewelry") {
+    if (footerCtaIsAddToCart) {
       addToCart();
       return;
     }
@@ -1230,6 +1240,7 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
     beads: "beaded.summary.beadsQty",
     charms: "beaded.summary.charmsQty",
     spacers: "beaded.summary.spacersQty",
+    metalic: "beaded.summary.metalicQty",
   };
   const footerSummaryTaxLabel = getFooterSummaryTaxLabel();
   const lengthOptions = getBeadedVisibleLengths(isManualMode ? BEAD_LENGTH_OPTIONS : BEAD_LENGTHS);
@@ -1262,7 +1273,9 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
               </span>
               <span className="order-summary-price theme3-section-heading">${line.price.toLocaleString()}</span>
             </div>
-            {line.detail && <div className="order-summary-desc">{line.detail}</div>}
+            {(line.detailLines || (line.detail ? [line.detail] : [])).map((text, index) => (
+              <div key={`${line.key}-${index}`} className="order-summary-desc">{text}</div>
+            ))}
           </div>
         ))
       )}
@@ -1684,6 +1697,7 @@ const BeedsControls = forwardRef(function BeedsControls({ activeSection = "jewel
                             sizeLabel={entry.sizeLabel}
                             showSizeInLabel={false}
                             showPrice
+                            badge={t("beaded.badge.demoOnly")}
                             onClick={(event) => handleAssetSelect(entry.asset.key, event, entry.sizeId)}
                           />
                         ))

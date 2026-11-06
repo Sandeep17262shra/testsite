@@ -106,6 +106,8 @@ export const JEWELRY_UI_STRINGS = Object.freeze({
   "beaded.summary.beadsQty": "Beads (Qty {count})",
   "beaded.summary.charmsQty": "Charms (Qty {count})",
   "beaded.summary.spacersQty": "Spacers (Qty {count})",
+  "beaded.summary.metalicQty": "Metalic Beads (Qty {count})",
+  "beaded.badge.demoOnly": "Demo Only",
   "beaded.preview.bead": "Bead",
   "beaded.preview.spacer": "Spacer",
   "beaded.cart.chooseBeads": "Choose Beads",

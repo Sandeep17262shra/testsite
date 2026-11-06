@@ -12,6 +12,7 @@ import { CHAIN_DRAPE_CONFIG } from "../necklace/DrapeChain";
 import { getGemGlbCharm, DEFAULT_GEM_GLB_STONE_COLOR } from "../shared/glbGemCharms";
 import { getTempCategoryForParentUrl, getTempInitialParentCategory } from "../shared/tempParentCategory";
 import { JEWELRY_TYPE_SWITCH_MESSAGE } from "@/lib/jewelry-shell/jewelryCategoryBus";
+import { isPavitraCharmCategoryAllowed, getInitialCharmCategory, getDefaultMetalHex } from "@/lib/jewelry-shell/pavitraCustomization";
 
 export const BraceletContext = createContext({});
 
@@ -93,8 +94,9 @@ export const BraceletProvider = ({ children, initialType }) => {
   const NECKLACE_RESET_OBJ = { position: [0, 0.5, 6.5], near: 0.1, far: 100 };
   const BRACELET_RESET_OBJ = { position: [0.01, 2.9, 0.15], near: 0.1, far: 100 }; // near top-down, tiny XZ offset avoids OrbitControls gimbal lock
 
-  const NECKLACE_DEFAULT_METAL = "#ECC875";
-  const BRACELET_DEFAULT_METAL = "#FFD280";
+  // Pavitra starts on Silver 925 (see jewelry-shell/pavitraCustomization.js).
+  const NECKLACE_DEFAULT_METAL = getDefaultMetalHex("necklace", "#ECC875");
+  const BRACELET_DEFAULT_METAL = getDefaultMetalHex("bracelet", "#FFD280");
 
   // ── Jewelry category (Necklace / Bracelet) ────────────────────────────────
   const [jewelryType, setJewelryTypeState] = useState(initialJewelryType);
@@ -162,13 +164,19 @@ export const BraceletProvider = ({ children, initialType }) => {
     config?.chainLength != null ? String(config.chainLength) : DEFAULT_CHAIN_LENGTH
   );
   const [namePendant, setNamePendant] = useState(
-    // Name pendant / name bracelet disabled for this client
-    { ...DEFAULT_NAME_PENDANT, text: "", enabled: false }
+    // Bracelet also opens as a plain chain (no "Name" plate) — same as reset.
+    config?.namePendant ?? (initialJewelryType === "bracelet"
+      ? { ...DEFAULT_NAME_PENDANT, text: "", enabled: false }
+      : { text: "", fontStyle: "dancing", enabled: false })
   );
 
   // Shared UI states between necklace and bracelet
   const [customizeType, setCustomizeType] = useState(config?.customizeType ?? 'charms');
-  const [activeCharmCategory, setActiveCharmCategory] = useState(config?.activeCharmCategory ?? 'birthstones');
+  const [activeCharmCategory, setActiveCharmCategory] = useState(() => {
+    // Pavitra only offers Stone Charms, so open there instead of on Birthstones.
+    const wanted = config?.activeCharmCategory ?? 'birthstones';
+    return isPavitraCharmCategoryAllowed(wanted) ? wanted : getInitialCharmCategory(wanted);
+  });
   const [stoneColor, setStoneColor] = useState(config?.stoneColor ?? STONE_COLOR_SWATCHES[0].hex);
   const [selectedDiamondPath, setSelectedDiamondPath] = useState(
     config?.selectedDiamondPath ?? (CHARMS.find((c) => c.type === "diamond")?.path || "/bc-assets/gemstone/D1.glb")
@@ -199,8 +207,8 @@ export const BraceletProvider = ({ children, initialType }) => {
   const [braceletPurity, setBraceletPurity] = useState(initialPurity);
   const [currentMetalPrice, setCurrentMetalPrice] = useState(config?.currentMetalPrice ?? 100);
   const [currentPurityPrice, setCurrentPurityPrice] = useState(config?.currentPurityPrice ?? defaultPurityPrice);
-  const [braceletSize, setBraceletSize] = useState(config?.braceletSize ?? "5");
-  const [currentBraceletSizePrice, setCurrentBraceletSizePrice] = useState(config?.currentBraceletSizePrice ?? 30);
+  const [braceletSize, setBraceletSize] = useState(config?.braceletSize ?? "6");
+  const [currentBraceletSizePrice, setCurrentBraceletSizePrice] = useState(config?.currentBraceletSizePrice ?? 0);
   // Bracelet-only: GLB load spinner.
   const [loader, setLoader] = useState(true);
 
@@ -279,12 +287,12 @@ export const BraceletProvider = ({ children, initialType }) => {
       setCurrentPurityPrice(100);
     }
 
-    // 2. Sync Name Pendant / Name Bracelet (disabled for this client):
-    const hasNameText = false;
+    // 2. Sync Name Pendant / Name Bracelet:
+    const hasNameText = Boolean(namePendant?.text && namePendant.text.trim().length > 0);
     const syncedNamePendant = {
-      text: "",
-      fontStyle: "dancing",
-      enabled: false,
+      text: namePendant?.text || "",
+      fontStyle: namePendant?.fontStyle || "dancing",
+      enabled: hasNameText,
     };
     setNamePendant(syncedNamePendant);
 
@@ -307,7 +315,7 @@ export const BraceletProvider = ({ children, initialType }) => {
       setBraceletPathState(targetPath);
       // Ensure active category is valid for necklace
       if (activeCharmCategory !== "birthstones" && activeCharmCategory !== "diamonds" && activeCharmCategory !== "initial" && activeCharmCategory !== "attached") {
-        setActiveCharmCategory("birthstones");
+        setActiveCharmCategory(getInitialCharmCategory("birthstones"));
       }
     }
 

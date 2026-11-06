@@ -80,49 +80,98 @@ function groupPatternItems(items, getLabel, getPrice) {
   return Array.from(groups.values());
 }
 
-function formatGroupedDetail(groups) {
-  return groups
-    .map((group) => (group.count > 1 ? `${group.name}*${group.count}` : group.name))
-    .join(", ");
+const formatMoney = (amount) => `$${(Number(amount) || 0).toLocaleString()}`;
+
+/** "Lotus Charm" -> "Lotus" (the line title already says these are charms). */
+const stripCharmWord = (label) => {
+  const text = String(label || "");
+  return text.replace(/\s+charm$/i, "").trim() || text;
+};
+
+/** "3 × $10" */
+const formatTimes = (count, unitPrice) => `${count} \u00d7 ${formatMoney(unitPrice)}`;
+
+/** Spacers / charms: "Lotus ($4)", or "Lotus (2 × $4)" when the same piece repeats. */
+function formatGroupedDetailLines(groups) {
+  return groups.map((group) =>
+    `${group.name} (${group.count > 1 ? formatTimes(group.count, group.totalPrice / group.count) : formatMoney(group.totalPrice)})`
+  );
+}
+
+/**
+ * Beads and metalic beads: one line per type, broken down by size, because different mm sizes of
+ * the same piece are counted (and may be priced) separately:
+ *   Amethyst: 8mm (2 × $10), 10mm (3 × $10)
+ *   Ruby: 6mm (4 × $8)
+ */
+function buildSizedDetailLines(items, assetType, fallbackName, getPrice) {
+  const byName = new Map();
+  items.forEach((item) => {
+    const name = getBeadedAssetLabel(assetType, item.asset) || fallbackName;
+    const unit = getPrice(item);
+    const sizeLabel = item.sizeId || "";
+    if (!byName.has(name)) byName.set(name, new Map());
+    const sizes = byName.get(name);
+    const sizeKey = `${sizeLabel}|${unit}`;
+    const existing = sizes.get(sizeKey);
+    if (existing) existing.count += 1;
+    else sizes.set(sizeKey, { sizeLabel, unit, count: 1 });
+  });
+
+  return Array.from(byName.entries()).map(([name, sizes]) => {
+    const entries = Array.from(sizes.values());
+    // No size on the piece: "Heart Chakra ($4)" / "Heart Chakra (2 × $4)".
+    if (entries.length === 1 && !entries[0].sizeLabel) {
+      const [entry] = entries;
+      return `${name} (${entry.count > 1 ? formatTimes(entry.count, entry.unit) : formatMoney(entry.unit)})`;
+    }
+    const parts = entries.map((entry) =>
+      `${entry.sizeLabel ? `${entry.sizeLabel} ` : ""}(${formatTimes(entry.count, entry.unit)})`
+    );
+    return `${name}: ${parts.join(", ")}`;
+  });
 }
 
 /**
  * Build customize summary rows for only the bead/spacer/charm types present in the pattern.
+ * Each row has `detailLines` (one string per line to render) and `detail` (the same, joined).
  */
 export function buildPatternCustomizeSummaryLines(pattern = []) {
   const lines = [];
   const beads = pattern.filter((item) => item.type === "bead");
-  const spacers = pattern.filter((item) => item.type === "spacer");
+  // Classic spacers have keys like "legacy-s1"; the new metalic spacers (Heart Chakra, Lotus …)
+  // are what the "Metalic Beads" tab places, so they get their own summary line.
+  const isClassicSpacer = (item) => String(item.asset?.key || "").startsWith("legacy-");
+  const spacers = pattern.filter((item) => item.type === "spacer" && isClassicSpacer(item));
+  const metalicBeads = pattern.filter((item) => item.type === "spacer" && !isClassicSpacer(item));
   const charms = pattern.filter((item) => item.type === "charm");
 
   if (beads.length) {
-    const groups = groupPatternItems(
-      beads,
-      (item) => getBeadedAssetLabel("bead", item.asset) || "Bead",
-      (item) => getBeadItemPrice(item.asset, item.sizeId)
-    );
-
+    const detailLines = buildSizedDetailLines(beads, "bead", "Bead", (item) => getBeadItemPrice(item.asset, item.sizeId));
     lines.push({
       key: "beads",
       count: beads.length,
       title: `Beads (Qty ${beads.length})`,
-      detail: formatGroupedDetail(groups),
-      price: groups.reduce((total, group) => total + group.totalPrice, 0),
+      detailLines,
+      detail: detailLines.join(", "),
+      price: beads.reduce((total, item) => total + getBeadItemPrice(item.asset, item.sizeId), 0),
     });
   }
 
   if (charms.length) {
     const groups = groupPatternItems(
       charms,
-      (item) => getBeadedAssetLabel("charm", item.asset) || "Charm",
+      (item) => stripCharmWord(getBeadedAssetLabel("charm", item.asset)) || "Charm",
       (item) => getCharmItemPrice(item.asset)
     );
+    const detailLines = formatGroupedDetailLines(groups);
 
     lines.push({
       key: "charms",
       count: charms.length,
       title: `Charms (Qty ${charms.length})`,
-      detail: formatGroupedDetail(groups),
+      detailLines,
+      detail: detailLines.join(", "),
       price: groups.reduce((total, group) => total + group.totalPrice, 0),
     });
   }
@@ -133,13 +182,27 @@ export function buildPatternCustomizeSummaryLines(pattern = []) {
       (item) => getBeadedAssetLabel("spacer", item.asset) || "Spacer",
       (item) => getSpacerItemPrice(item.asset)
     );
+    const detailLines = formatGroupedDetailLines(groups);
 
     lines.push({
       key: "spacers",
       count: spacers.length,
       title: `Spacers (Qty ${spacers.length})`,
-      detail: formatGroupedDetail(groups),
+      detailLines,
+      detail: detailLines.join(", "),
       price: groups.reduce((total, group) => total + group.totalPrice, 0),
+    });
+  }
+
+  if (metalicBeads.length) {
+    const detailLines = buildSizedDetailLines(metalicBeads, "spacer", "Metalic Bead", (item) => getSpacerItemPrice(item.asset));
+    lines.push({
+      key: "metalic",
+      count: metalicBeads.length,
+      title: `Metalic Beads (Qty ${metalicBeads.length})`,
+      detailLines,
+      detail: detailLines.join(", "),
+      price: metalicBeads.reduce((total, item) => total + getSpacerItemPrice(item.asset), 0),
     });
   }
 
@@ -152,6 +215,20 @@ function pieceCountLabel(count, singular, plural) {
 }
 
 /** Preview title from what is actually on the string, same shape as the other configurators. */
+/** Same pieces as buildBeadPreviewLabel, one entry per chip in the 3D preview. */
+export function buildBeadPreviewChips(pattern = [], { styleLabel = "", displayLengthLabel = "", pieceLabels = {} } = {}) {
+  const beadCount = pattern.filter((item) => item.type === "bead").length;
+  const spacerCount = pattern.filter((item) => item.type === "spacer").length;
+  const charmCount = pattern.filter((item) => item.type === "charm").length;
+  return [
+    styleLabel,
+    displayLengthLabel,
+    pieceCountLabel(beadCount, pieceLabels.bead || "Bead", pieceLabels.beads || "Beads"),
+    pieceCountLabel(spacerCount, pieceLabels.spacer || "Spacer", pieceLabels.spacers || "Spacers"),
+    pieceCountLabel(charmCount, pieceLabels.charm || "Charm", pieceLabels.charms || "Charms"),
+  ].filter(Boolean);
+}
+
 export function buildBeadPreviewLabel(pattern = [], { styleLabel = "", displayLengthLabel = "", pieceLabels = {} } = {}) {
   const beadCount = pattern.filter((item) => item.type === "bead").length;
   const spacerCount = pattern.filter((item) => item.type === "spacer").length;
